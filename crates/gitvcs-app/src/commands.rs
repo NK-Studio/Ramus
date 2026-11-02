@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use gitvcs_core::conflict::Side;
 use gitvcs_core::refs::ResetMode;
 use gitvcs_core::repo::{DiffTarget, LineAction, PullMode, Result};
 use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, ssl};
@@ -190,6 +191,24 @@ impl AppState {
             }
             "lastFetch" => Ok(json!(self.repo()?.last_fetch().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()))),
             "refs" => to_json(self.repo()?.refs()?),
+            "conflict" => to_json(self.repo()?.conflict(Args(&args).s("path")?)?),
+            "continueBlocker" => Ok(json!(self.repo()?.continue_blocker()?)),
+            "resolve" | "saveResolution" | "continueOperation" | "skipOperation" | "abortOperation" => {
+                let repo = self.repo()?;
+                let _guard = self.write_lock.lock().unwrap();
+                let a = Args(&args);
+                match cmd {
+                    "resolve" => {
+                        let side: Side = serde_json::from_value(args.get("side").cloned().unwrap_or_default())
+                            .map_err(|_| GitError::new("고를 쪽이 잘못되었습니다."))?;
+                        repo.resolve(a.s("path")?, side).map(|_| Value::Null)
+                    }
+                    "saveResolution" => repo.save_resolution(a.s("path")?, a.s("text")?).map(|_| Value::Null),
+                    "continueOperation" => repo.continue_operation().map(|t| json!(t.trim())),
+                    "skipOperation" => repo.skip_operation().map(|t| json!(t.trim())),
+                    _ => repo.abort_operation().map(|_| Value::Null),
+                }
+            }
             "openTerminal" => open_terminal(self.repo()?.root()).map(|_| Value::Null),
             "checkout" | "checkoutDetached" | "createBranch" | "renameBranch" | "deleteBranch" | "deleteRemoteBranch" | "merge" | "rebase"
             | "cherryPick" | "revert" | "reset" | "createTag" | "deleteTag" | "pushTag" | "stashPush" | "stashApply" | "stashDrop" => {

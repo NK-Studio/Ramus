@@ -33,12 +33,14 @@ export const diffKey = (mode, path) => `${mode}:${path}`;
 export function renderStaging(container, status, draft, api) {
   const unstagedSection = section('Unstaged Files', status.unstaged.length,
     el('button', { class: 'btn small success', disabled: status.unstaged.length === 0, onclick: () => api.stageAll(), text: 'Stage All Changes' }),
-    status.unstaged.map((e) => fileRow(e, e.state, [
+    status.unstaged.map((e) => fileRow(e, e.state, e.state === 'conflicted' ? [
+      el('button', { class: 'row-action conflict', title: '병합 편집기에서 충돌 풀기', onclick: () => api.openDiff(e, 'unstaged'), text: '해결…' }),
+    ] : [
       el('button', { class: 'row-action plain', title: '변경 버리기', onclick: () => api.discard(e), text: '버리기' }),
       el('button', { class: 'row-action success', title: 'Stage', onclick: () => api.stage([e.path]), text: 'Stage' }),
     ], {
       onOpen: () => api.openDiff(e, 'unstaged'),
-      onActivate: () => api.stage([e.path]),
+      onActivate: () => (e.state === 'conflicted' ? api.openDiff(e, 'unstaged') : api.stage([e.path])),
       onMenu: (event) => api.fileMenu(event, e, 'unstaged'),
       key: diffKey('unstaged', e.path),
       activeKey: api.activeDiffKey(),
@@ -111,7 +113,21 @@ export function renderStaging(container, status, draft, api) {
     : el('div', { class: 'warning small' }, 'git 사용자 이름(user.name)·이메일이 없어 커밋할 수 없습니다. 터미널에서 git config --global user.name "이름" 으로 정해 주세요.');
 
   const conflictNote = status.conflicted > 0
-    ? el('div', { class: 'warning small' }, `충돌한 파일 ${status.conflicted}개가 있습니다. 충돌 해결은 다음 단계에서 지원합니다.`)
+    ? el('div', { class: 'warning small' }, `충돌한 파일 ${status.conflicted}개가 있습니다. 파일을 눌러 병합 편집기에서 풀어 주세요.`)
+    : null;
+
+  // 병합·rebase 등이 멈춰 있으면 커밋 상자 대신 "이어가기" 를 둔다(그 작업이 커밋을 만든다).
+  const OP_NAME = { merge: '병합', rebase: 'Rebase', cherryPick: 'Cherry-pick', revert: 'Revert' };
+  const operationBox = status.operation
+    ? el('div', { class: 'commit-box' },
+      el('div', { class: 'commit-box-title' }, el('span', { text: `${OP_NAME[status.operation]} 진행 중` })),
+      el('div', { class: 'muted small', text: status.operation === 'rebase' ? '충돌을 모두 풀고 Stage 한 뒤 이어가면 다음 커밋으로 넘어갑니다.' : '충돌을 모두 풀면 git 이 준비한 메시지로 커밋하며 끝납니다.' }),
+      el('button', {
+        class: 'btn primary wide', disabled: status.conflicted > 0,
+        text: status.operation === 'rebase' ? 'Rebase 이어가기' : `커밋하고 ${OP_NAME[status.operation]} 마치기`,
+        onclick: () => api.continueOperation(),
+      }),
+      el('button', { class: 'btn wide', text: `${OP_NAME[status.operation]} 중단`, onclick: () => api.abortOperation() }))
     : null;
 
   container.replaceChildren(...[
@@ -119,7 +135,7 @@ export function renderStaging(container, status, draft, api) {
       el('span', { class: 'muted small', text: status.branch.name ? `on ${status.branch.name}` : '' })),
     conflictNote,
     el('div', { class: 'staging-lists' }, unstagedSection, stagedSection),
-    el('div', { class: 'commit-box' },
+    operationBox ?? el('div', { class: 'commit-box' },
       el('div', { class: 'commit-box-title' }, el('span', { text: '커밋' }),
         el('label', { class: 'check' }, amend, 'Amend')),
       el('div', { class: 'summary-wrap' }, summary, counter),

@@ -24,7 +24,7 @@ scripts/bundle-macos.sh release   # target/release/GitVcs.app
 1. ✅ 저장소 열기·최근 목록, 커밋 그래프, 변경 목록(파일 단위 Stage·Unstage), 커밋(Amend·커밋 후 푸시), 푸시, 다크·라이트 테마
 2. ✅ diff 보기, 줄·hunk 단위 Stage, 버리기, 풀·페치·자동 페치, 파일 감시
 3. ✅ 브랜치·태그·stash 작업, 커밋 우클릭 메뉴
-4. 병합 충돌 해결
+4. ✅ 병합 충돌 해결
 5. clone·저장소 전환, 설정 화면(SSL), GitHub 가 아닌 서버 로그인
 6. 배포(macOS .app, Windows .exe)
 

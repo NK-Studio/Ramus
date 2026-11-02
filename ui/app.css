@@ -480,3 +480,36 @@ select.field { height: 30px; }
 .side-track .behind { color: var(--git-warning); }
 .side-track .gone { color: var(--git-danger); }
 .side-empty { padding: 2px 24px; }
+
+/* ── 4단계: 병합 충돌 ─────────────────────────────────── */
+
+.op-banner { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--git-warning-soft); border-bottom: 1px solid var(--git-border); }
+.op-text { flex: 1; min-width: 0; }
+.op-text strong { color: var(--git-warning); margin-right: 4px; }
+.row-action.conflict { background: var(--git-state-conflicted); color: #fff; opacity: 1; }
+.mode-conflict { color: var(--git-state-conflicted); }
+.merge-view { display: flex; flex-direction: column; }
+.merge-top { flex: 1.2; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--git-border); }
+.merge-bottom { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.mpane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.pane-a { border-right: 1px solid var(--git-border); }
+.mpane-title { flex: none; padding: 4px 10px; font-size: 11.5px; font-weight: 600; color: var(--git-text-secondary); background: var(--git-header-bg); border-bottom: 1px solid var(--git-divider); }
+.pane-a .mpane-title { color: var(--git-accent-fg); }
+.pane-b .mpane-title { color: var(--git-success); }
+.mpane-body { flex: 1; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 20px; }
+.mrow { display: flex; min-height: 20px; white-space: pre; min-width: max-content; }
+.mrow.common { color: var(--git-text-muted); padding-left: 22px; }
+.mrow.mhead { position: sticky; left: 0; gap: 10px; align-items: center; padding: 1px 8px; font-family: var(--font); font-size: 11.5px; background: var(--git-diff-hunk); color: var(--git-diff-hunk-text); border-top: 1px solid var(--git-border); }
+.mrow.mhead.current { box-shadow: inset 3px 0 0 var(--git-warning); }
+.morder { color: var(--git-warning); }
+.mrow.mline { cursor: pointer; }
+.mrow.mline:hover { filter: brightness(1.2); }
+.side-a.mline { background: color-mix(in srgb, var(--git-accent) 10%, transparent); }
+.side-b.mline { background: color-mix(in srgb, var(--git-success) 10%, transparent); }
+.side-a.mline.on { background: color-mix(in srgb, var(--git-accent) 30%, transparent); }
+.side-b.mline.on { background: color-mix(in srgb, var(--git-success) 30%, transparent); }
+.mrow.pad { background: var(--git-diff-empty); }
+.mmark { width: 22px; flex: none; text-align: center; color: var(--git-text-strong); }
+.moutput { flex: 1; width: 100%; resize: none; border: 0; outline: none; padding: 6px 10px; background: var(--git-diff-bg); color: var(--git-diff-text); font-family: var(--mono); font-size: 12.5px; line-height: 20px; white-space: pre; tab-size: 4; }
+.merge-simple { padding: 32px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.merge-simple-actions { display: flex; gap: 8px; margin-top: 8px; }

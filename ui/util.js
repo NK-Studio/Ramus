@@ -52,6 +52,16 @@ export function initials(name) {
   return letters.toUpperCase();
 }
 
+/**
+ * 받침에 맞는 조사(을/를, 이/가 등). 한글은 받침으로, 영문은 끝 글자가 모음인지로 고른다("Rebase를", "Revert을").
+ */
+export function josa(word, withBatchim, without) {
+  const last = word.trim().slice(-1);
+  const code = last.charCodeAt(0);
+  const batchim = code >= 0xac00 && code <= 0xd7a3 ? (code - 0xac00) % 28 !== 0 : !/[aeiouyAEIOUY]/.test(last);
+  return word + (batchim ? withBatchim : without);
+}
+
 /** 경로를 폴더와 파일 이름으로 나눈다. */
 export function splitPath(path) {
   const at = path.lastIndexOf('/');

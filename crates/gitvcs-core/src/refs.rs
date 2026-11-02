@@ -234,20 +234,33 @@ impl Repository {
         self.git_run(&["push", remote, "--delete", branch]).map(|_| ())
     }
 
+    /// 작업이 충돌로 멈췄으면 git 원문 대신 무엇을 하면 되는지 알린다.
+    fn explain_conflict(&self, what: &str, result: Result<String>) -> Result<String> {
+        result.map_err(|e| match self.status() {
+            Ok(st) if st.operation.is_some() && st.conflicted > 0 => GitError::new(format!(
+                "{what} 중 충돌이 났습니다. 충돌 파일 {}개를 변경 목록에서 눌러 풀고 '이어가기' 를 눌러 주세요. 그만두려면 '중단' 을 누르면 됩니다.",
+                st.conflicted
+            )),
+            _ => e,
+        })
+    }
+
     pub fn merge(&self, revision: &str) -> Result<String> {
-        self.git_run(&["merge", "--no-edit", revision])
+        self.explain_conflict("병합", self.git_run(&["merge", "--no-edit", revision]))
     }
 
     pub fn rebase(&self, revision: &str) -> Result<String> {
-        self.git_run(&["rebase", "--autostash", revision])
+        self.explain_conflict("Rebase", self.git_run(&["rebase", "--autostash", revision]))
     }
 
     pub fn cherry_pick(&self, hash: &str, is_merge: bool) -> Result<String> {
-        if is_merge { self.git_run(&["cherry-pick", "-m", "1", hash]) } else { self.git_run(&["cherry-pick", hash]) }
+        let out = if is_merge { self.git_run(&["cherry-pick", "-m", "1", hash]) } else { self.git_run(&["cherry-pick", hash]) };
+        self.explain_conflict("Cherry-pick", out)
     }
 
     pub fn revert(&self, hash: &str, is_merge: bool) -> Result<String> {
-        if is_merge { self.git_run(&["revert", "--no-edit", "-m", "1", hash]) } else { self.git_run(&["revert", "--no-edit", hash]) }
+        let out = if is_merge { self.git_run(&["revert", "--no-edit", "-m", "1", hash]) } else { self.git_run(&["revert", "--no-edit", hash]) };
+        self.explain_conflict("Revert", out)
     }
 
     pub fn reset(&self, hash: &str, mode: ResetMode) -> Result<()> {

@@ -58,6 +58,8 @@ pub struct RepoStatus {
     pub staged: Vec<StatusEntry>,
     pub unstaged: Vec<StatusEntry>,
     pub conflicted: usize,
+    /// 충돌 등으로 멈춘 채 진행 중인 작업(터미널에서 시작한 것도).
+    pub operation: Option<crate::conflict::Operation>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -249,7 +251,7 @@ impl Repository {
         let conflicted = entries.iter().filter(|e| e.state == status::FileState::Conflicted).count();
         let staged = entries.iter().filter(|e| e.is_staged()).cloned().collect();
         let unstaged = entries.into_iter().filter(|e| e.is_unstaged()).collect();
-        Ok(RepoStatus { branch, staged, unstaged, conflicted })
+        Ok(RepoStatus { branch, staged, unstaged, conflicted, operation: crate::conflict::detect(&self.git_dir) })
     }
 
     pub fn remotes(&self) -> Result<Vec<String>> {

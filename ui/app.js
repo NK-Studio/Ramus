@@ -1,12 +1,13 @@
 // 앱 전체의 흐름: 시작 화면 ↔ 저장소 화면, 새로고침, 작업(Stage·커밋·푸시) 뒤 다시 읽기.
 
 import { call, on } from './bridge.js';
-import { el, relativeTime } from './util.js';
+import { el, relativeTime, josa } from './util.js';
 import { createGraph, laneColor } from './graph.js';
 import { renderStaging, renderCommit, diffKey } from './changes.js';
 import { createDiffView } from './diff.js';
 import { confirmDialog, showMenu } from './dialogs.js';
 import { createRefs } from './refs.js';
+import { createMergeView } from './merge.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,6 +25,7 @@ const state = {
 };
 
 const diffView = createDiffView($('diff-view'));
+const mergeView = createMergeView($('merge-view'));
 
 const graph = createGraph({
   scroll: $('graph-scroll'),
@@ -188,6 +190,8 @@ async function refreshOnce() {
     const [status, history, refs] = await Promise.all([call('status'), call('history'), call('refs')]);
     // 파일을 더 고쳐도 상태(M)는 그대로일 수 있으니, 열린 diff 는 늘 다시 읽는다(같으면 다시 그리지 않는다).
     // 그 파일이 목록에서 사라졌으면(모두 Stage·커밋·버림) diff 를 닫는다.
+    // 충돌을 다 풀어(또는 작업을 중단해) 그 파일이 더는 충돌이 아니면 병합 편집기를 닫는다.
+    if (mergeView.isOpen && !status.unstaged.some((e) => e.path === mergeView.path && e.state === 'conflicted')) closeMerge();
     const target = diffView.target;
     if (target && target.kind !== 'commit') {
       const list = target.kind === 'staged' ? status.staged : status.unstaged;
@@ -199,14 +203,18 @@ async function refreshOnce() {
     const fingerprint = JSON.stringify([status, refs, history.head, history.commits.length, history.commits.map((c) => c.hash + c.refs.map((r) => r.name).join())]);
     if (fingerprint === state.fingerprint) return;
     state.fingerprint = fingerprint;
+    // 충돌로 멈춘 작업이 새로 시작되면 변경 목록(WIP)을 보인다 — 거기서 충돌을 푼다.
+    const operationStarted = status.operation && !state.status?.operation;
     state.status = status;
     state.history = history;
     state.refs = refs;
     renderToolbar();
+    renderBanner();
     renderSidebar();
     graph.setData(history, status);
     $('graph-empty').hidden = history.commits.length > 0;
-    if (graph.selected === 'wip' || graph.selected == null) showDetail(graph.selected ?? (graph.hasWip ? 'wip' : null), false);
+    if (operationStarted && graph.hasWip) graph.select('wip');
+    else if (graph.selected === 'wip' || graph.selected == null) showDetail(graph.selected ?? (graph.hasWip ? 'wip' : null), false);
   } catch (error) {
     showError(error);
   } finally {
@@ -322,8 +330,76 @@ function closeDiff() {
   showDetail(graph.selected, false);
 }
 
+// ── 병합 충돌 ─────────────────────────────────────────
+
+const OP_NAME = { merge: '병합', rebase: 'Rebase', cherryPick: 'Cherry-pick', revert: 'Revert' };
+
+const mergeApi = {
+  load: (path) => call('conflict', { path }),
+  async save(path, text) {
+    return (await act('해결을 저장하는 중…', () => call('saveResolution', { path, text }).then(() => true), { success: () => `${path} 의 충돌을 풀었습니다.` })) === true;
+  },
+  async resolve(path, side) {
+    const label = side === 'ours' ? 'A(지금)' : 'B(들어오는)';
+    if (!(await confirmDialog({ title: '한쪽으로 풀기', message: `${path} 를 ${label} 쪽 내용으로 통째로 바꾸고 해결로 표시합니다.`, ok: '바꾸기' }))) return;
+    if ((await act('충돌을 푸는 중…', () => call('resolve', { path, side }).then(() => true))) === true) closeMerge();
+  },
+  close: () => closeMerge(),
+  error: (e) => showError(e),
+};
+
+function openMerge(path) {
+  closeDiff();
+  state.diffKey = diffKey('unstaged', path);
+  $('merge-view').hidden = false;
+  mergeView.open(path, mergeApi);
+  showDetail(graph.selected, false);
+}
+
+function closeMerge() {
+  if (!mergeView.isOpen) return;
+  mergeView.close();
+  state.diffKey = null;
+  $('merge-view').hidden = true;
+  showDetail(graph.selected, false);
+}
+
+/** 맨 위 띠: 멈춘 병합·rebase 와 남은 충돌, 이어가기·건너뛰기·중단. */
+function renderBanner() {
+  const banner = $('op-banner');
+  const op = state.status?.operation;
+  banner.hidden = !op;
+  if (!op) return;
+  const conflicts = state.status.conflicted;
+  banner.replaceChildren(...[
+    el('span', { class: 'op-text' }, el('strong', { text: `${OP_NAME[op]} 진행 중` }),
+      conflicts ? ` — 충돌 파일 ${conflicts}개가 남았습니다. 오른쪽 목록에서 파일을 눌러 풀어 주세요.` : ' — 충돌을 모두 풀었습니다. 이어가면 끝납니다.'),
+    el('button', { class: 'btn small primary', disabled: conflicts > 0, text: op === 'rebase' ? '이어가기' : '커밋하고 마치기', onclick: () => actions.continueOperation() }),
+    op === 'rebase' ? el('button', { class: 'btn small', text: '이 커밋 건너뛰기', onclick: () => actions.skipOperation() }) : null,
+    el('button', { class: 'btn small danger', text: '중단', onclick: () => actions.abortOperation() }),
+  ].filter(Boolean));
+}
+
 const actions = {
+  async continueOperation() {
+    const op = state.status?.operation;
+    await act(`${OP_NAME[op] ?? ''} 이어가는 중…`, () => call('continueOperation'), { success: () => `${josa(OP_NAME[op] ?? '작업', '을', '를')} 이어갔습니다.` });
+  },
+  async skipOperation() {
+    if (!(await confirmDialog({ title: '커밋 건너뛰기', message: 'Rebase 에서 지금 멈춘 커밋을 빼고 다음으로 갑니다. 그 커밋의 변경은 사라집니다.', ok: '건너뛰기', danger: true }))) return;
+    await act('건너뛰는 중…', () => call('skipOperation'));
+  },
+  async abortOperation() {
+    const op = state.status?.operation;
+    if (!(await confirmDialog({ title: `${OP_NAME[op]} 중단`, message: `${josa(OP_NAME[op], '을', '를')} 취소하고 시작하기 전 상태로 되돌립니다. 지금까지 푼 충돌도 사라집니다.`, ok: '중단', danger: true }))) return;
+    closeMerge();
+    await act('중단하는 중…', () => call('abortOperation'), { success: () => `${josa(OP_NAME[op], '을', '를')} 중단했습니다.` });
+  },
   openDiff(entry, mode) {
+    if (entry.state === 'conflicted') {
+      openMerge(entry.path);
+      return;
+    }
     const target = mode === 'staged'
       ? { kind: 'staged', path: entry.path, originalPath: entry.originalPath ?? null }
       : { kind: 'unstaged', path: entry.path, untracked: entry.state === 'untracked' };
@@ -445,8 +521,9 @@ $('act-terminal').addEventListener('click', () => call('openTerminal').catch(sho
 $('act-refresh').addEventListener('click', refresh);
 window.addEventListener('focus', refresh);
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && diffView.isOpen && !document.querySelector('.modal-backdrop, .menu')) {
+  if (event.key === 'Escape' && (diffView.isOpen || mergeView.isOpen) && !document.querySelector('.modal-backdrop, .menu')) {
     closeDiff();
+    closeMerge();
     return;
   }
   if (event.key === 'F5' || ((event.metaKey || event.ctrlKey) && event.key === 'r')) {
