@@ -35,8 +35,14 @@
       </div>
       <div class="tb-center">
         <button id="act-refresh" class="tb-btn" title="새로고침 (F5)"><span class="ico">⟳</span><span>새로고침</span></button>
-        <button id="act-pull" class="tb-btn" disabled title="다음 단계에서 지원"><span class="ico">↓</span><span>풀</span></button>
+        <button id="act-fetch" class="tb-btn" title="원격에서 새 커밋 받아 오기 (작업 트리는 그대로)"><span class="ico">⇣</span><span>페치</span></button>
+        <div class="tb-split">
+          <button id="act-pull" class="tb-btn" title="풀"><span class="ico">↓</span><span>풀</span><span id="pull-badge" class="tb-badge" hidden></span></button>
+          <button id="act-pull-mode" class="tb-caret" title="풀 방식 고르기">▾</button>
+        </div>
         <button id="act-push" class="tb-btn" title="푸시"><span class="ico">↑</span><span>푸시</span><span id="push-badge" class="tb-badge" hidden></span></button>
+        <div class="tb-sep"></div>
+        <span id="fetch-info" class="tb-info muted small"></span>
       </div>
       <div class="tb-right">
         <button id="act-theme" class="tb-btn" title="다크·라이트 테마 바꾸기"><span class="ico">◐</span><span>테마</span></button>
@@ -63,6 +69,7 @@
           </div>
         </div>
         <div class="graph-empty" id="graph-empty" hidden>아직 커밋이 없습니다. 오른쪽에서 첫 커밋을 만들어 보세요.</div>
+        <div class="diff-view" id="diff-view" hidden></div>
       </section>
 
       <div class="splitter" data-split="detail"></div>

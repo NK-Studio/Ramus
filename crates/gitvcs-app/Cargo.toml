@@ -15,3 +15,7 @@ serde_json.workspace = true
 tao = "0.37"
 wry = "0.57"
 rfd = "0.17"
+notify = "8"
+
+[dev-dependencies]
+tempfile = "3"

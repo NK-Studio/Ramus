@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::repo::PullMode;
 use crate::ssl::SslSettings;
 
 /// 최근 저장소를 몇 개까지 기억하는가.
@@ -30,11 +31,25 @@ pub struct Settings {
     /// 비우면 PATH 의 git.
     pub git_path: String,
     pub ssl: SslSettings,
+    pub pull_mode: PullMode,
+    /// 자동 페치 간격(분). 0 이면 끈다.
+    pub auto_fetch_minutes: u32,
+    /// diff 배치: "inline" 또는 "split".
+    pub diff_layout: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { theme: "dark".into(), recent: Vec::new(), last_repo: None, git_path: String::new(), ssl: SslSettings::default() }
+        Settings {
+            theme: "dark".into(),
+            recent: Vec::new(),
+            last_repo: None,
+             git_path: String::new(),
+            ssl: SslSettings::default(),
+            pull_mode: PullMode::FfOnly,
+            auto_fetch_minutes: 10,
+            diff_layout: "inline".into(),
+        }
     }
 }
 

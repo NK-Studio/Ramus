@@ -9,9 +9,13 @@
 
 mod assets;
 mod commands;
+#[cfg(debug_assertions)]
+mod devtools;
+mod watcher;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use commands::{AppState, SideEffect};
 use serde::Deserialize;
@@ -30,6 +34,11 @@ enum UserEvent {
     /// 폴더 고르기 창을 띄우고 고른 저장소를 연다.
     PickRepo(u64),
     Title(String),
+    /// 요청 없이 화면에 알릴 일(파일 변경·자동 페치).
+    Emit(String),
+    /// 개발 빌드 점검 통로: 이 JS 를 실행한다.
+    #[allow(dead_code)]
+    Eval(String),
 }
 
 #[derive(Deserialize)]
@@ -70,9 +79,25 @@ fn dispatch(state: Arc<AppState>, proxy: EventLoopProxy<UserEvent>, request: Ipc
 }
 
 fn main() -> wry::Result<()> {
-    let state = Arc::new(AppState::load());
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
+    let emit_proxy = Mutex::new(proxy.clone());
+    let state = Arc::new(AppState::load(Box::new(move |name, data| {
+        let body = json!({ "event": name, "data": data }).to_string();
+        let _ = emit_proxy.lock().unwrap().send_event(UserEvent::Emit(body));
+    })));
+
+    // 자동 페치: 30초마다 때가 됐는지 본다(간격은 설정, 기본 10분).
+    let fetch_state = Arc::downgrade(&state);
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(30));
+            match fetch_state.upgrade() {
+                Some(state) => state.auto_fetch_tick(),
+                None => break,
+            }
+        }
+    });
 
     let dark = state.settings.lock().unwrap().theme != "light";
     let window = WindowBuilder::new()
@@ -81,6 +106,16 @@ fn main() -> wry::Result<()> {
         .with_min_inner_size(LogicalSize::new(900.0, 560.0))
         .build(&event_loop)
         .expect("창을 만들지 못했습니다");
+
+    #[cfg(debug_assertions)]
+    let dev_pending = devtools::Pending::default();
+    #[cfg(debug_assertions)]
+    if let Some(port) = std::env::var("GITVCS_DEV_PORT").ok().and_then(|p| p.parse().ok()) {
+        let eval_proxy = Mutex::new(proxy.clone());
+        devtools::start(port, dev_pending.clone(), move |id, js| {
+            let _ = eval_proxy.lock().unwrap().send_event(UserEvent::Eval(devtools::wrap(id, &js)));
+        });
+    }
 
     let ipc_state = state.clone();
     let ipc_proxy = proxy.clone();
@@ -100,6 +135,12 @@ fn main() -> wry::Result<()> {
                     return;
                 }
             };
+            #[cfg(debug_assertions)]
+            if request.cmd == "__devResult" {
+                let text = request.args.get("text").and_then(Value::as_str).unwrap_or("null").to_string();
+                dev_pending.resolve(request.id, text);
+                return;
+            }
             if request.cmd == "pickRepo" {
                 let _ = ipc_proxy.send_event(UserEvent::PickRepo(request.id));
             } else {
@@ -116,6 +157,12 @@ fn main() -> wry::Result<()> {
                 let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.reply({body})"));
             }
             Event::UserEvent(UserEvent::Title(title)) => window.set_title(&title),
+            Event::UserEvent(UserEvent::Eval(js)) => {
+                let _ = webview.evaluate_script(&js);
+            }
+            Event::UserEvent(UserEvent::Emit(body)) => {
+                let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.event({body})"));
+            }
             Event::UserEvent(UserEvent::PickRepo(id)) => match rfd::FileDialog::new().set_title("Git 저장소 폴더 열기").pick_folder() {
                 Some(folder) => dispatch(
                     state.clone(),

@@ -6,34 +6,55 @@ const STATE_LETTER = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', un
 const STATE_LABEL = { modified: '수정', added: '추가', deleted: '삭제', renamed: '이름 바뀜', untracked: '새 파일', conflicted: '충돌' };
 const CHANGE_STATE = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'renamed', T: 'modified' };
 
-/** 파일 한 줄. `onActivate` 가 있으면 더블클릭으로도 그 작업(Stage·Unstage)을 한다. */
-function fileRow(entry, state, action, onActivate) {
+/**
+ * 파일 한 줄. 누르면 `onOpen`(diff 보기), 더블클릭하면 `onActivate`(Stage·Unstage), 우클릭하면 `onMenu`.
+ * `key` 가 지금 열린 diff 와 같으면 고른 줄로 표시한다.
+ */
+function fileRow(entry, state, actions, { onOpen, onActivate, onMenu, key, activeKey } = {}) {
   const { dir, name } = splitPath(entry.path);
+  const notButton = (fn) => fn && ((event) => { if (!event.target.closest('button')) fn(event); });
   return el('div', {
-    class: 'file-row',
+    class: `file-row${key && key === activeKey ? ' active' : ''}`,
     title: entry.originalPath ? `${entry.originalPath} → ${entry.path}` : entry.path,
-    ondblclick: onActivate && ((event) => { if (!event.target.closest('button')) onActivate(); }),
+    onclick: notButton(onOpen),
+    ondblclick: notButton(onActivate),
+    oncontextmenu: onMenu && ((event) => { event.preventDefault(); onMenu(event); }),
   },
     el('span', { class: `state-badge state-${state}`, title: STATE_LABEL[state], text: STATE_LETTER[state] }),
     el('span', { class: 'file-name', text: name }),
     el('span', { class: 'file-dir', text: dir }),
-    action);
+    actions);
 }
+
+/** diff 를 연 파일을 알아보는 키. */
+export const diffKey = (mode, path) => `${mode}:${path}`;
 
 /** 스테이징 화면. `api` 는 app.js 가 주는 작업 함수들. */
 export function renderStaging(container, status, draft, api) {
   const unstagedSection = section('Unstaged Files', status.unstaged.length,
     el('button', { class: 'btn small success', disabled: status.unstaged.length === 0, onclick: () => api.stageAll(), text: 'Stage All Changes' }),
-    status.unstaged.map((e) => fileRow(e, e.state,
+    status.unstaged.map((e) => fileRow(e, e.state, [
+      el('button', { class: 'row-action plain', title: '변경 버리기', onclick: () => api.discard(e), text: '버리기' }),
       el('button', { class: 'row-action success', title: 'Stage', onclick: () => api.stage([e.path]), text: 'Stage' }),
-      () => api.stage([e.path]))),
+    ], {
+      onOpen: () => api.openDiff(e, 'unstaged'),
+      onActivate: () => api.stage([e.path]),
+      onMenu: (event) => api.fileMenu(event, e, 'unstaged'),
+      key: diffKey('unstaged', e.path),
+      activeKey: api.activeDiffKey(),
+    })),
     '바뀐 파일이 없습니다.');
 
   const stagedSection = section('Staged Files', status.staged.length,
     el('button', { class: 'btn small danger', disabled: status.staged.length === 0, onclick: () => api.unstageAll(), text: 'Unstage All' }),
     status.staged.map((e) => fileRow(e, e.state,
-      el('button', { class: 'row-action danger', title: 'Unstage', onclick: () => api.unstage([e.path]), text: 'Unstage' }),
-      () => api.unstage([e.path]))),
+      el('button', { class: 'row-action danger', title: 'Unstage', onclick: () => api.unstage([e.path]), text: 'Unstage' }), {
+        onOpen: () => api.openDiff(e, 'staged'),
+        onActivate: () => api.unstage([e.path]),
+        onMenu: (event) => api.fileMenu(event, e, 'staged'),
+        key: diffKey('staged', e.path),
+        activeKey: api.activeDiffKey(),
+      })),
     'Stage 한 파일이 없습니다.');
 
   const summary = el('input', { class: 'field', id: 'commit-summary', placeholder: '커밋 요약', maxlength: 200 });
@@ -118,7 +139,7 @@ function section(title, count, headerButton, rows, emptyText) {
 }
 
 /** 커밋 하나의 정보. */
-export function renderCommit(container, detail) {
+export function renderCommit(container, detail, api) {
   const [subject, ...body] = detail.message.split('\n');
   container.replaceChildren(
     el('div', { class: 'commit-detail' }, // el() 은 null 자식을 건너뛴다.
@@ -135,5 +156,9 @@ export function renderCommit(container, detail) {
         ? el('div', { class: 'muted small' }, `부모: ${detail.parents.map((p) => p.slice(0, 7)).join(', ')}`)
         : el('div', { class: 'muted small', text: '최초 커밋' }),
       el('div', { class: 'stage-header' }, el('span', { class: 'stage-title' }, '바뀐 파일', el('span', { class: 'count', text: detail.files.length }))),
-      el('div', { class: 'stage-files' }, detail.files.map((f) => fileRow(f, CHANGE_STATE[f.status] || 'modified', null)))));
+      el('div', { class: 'stage-files' }, detail.files.map((f) => fileRow(f, CHANGE_STATE[f.status] || 'modified', null, {
+        onOpen: () => api.openCommitDiff(detail.hash, f),
+        key: diffKey(`commit-${detail.hash}`, f.path),
+        activeKey: api.activeDiffKey(),
+      })))));
 }

@@ -22,8 +22,16 @@ scripts/bundle-macos.sh release   # target/release/GitVcs.app
 ## 단계
 
 1. ✅ 저장소 열기·최근 목록, 커밋 그래프, 변경 목록(파일 단위 Stage·Unstage), 커밋(Amend·커밋 후 푸시), 푸시, 다크·라이트 테마
-2. diff 보기, 줄·hunk 단위 Stage, 버리기, 풀·페치·자동 페치, 파일 감시
+2. ✅ diff 보기, 줄·hunk 단위 Stage, 버리기, 풀·페치·자동 페치, 파일 감시
 3. 브랜치·태그·stash 작업, 커밋 우클릭 메뉴
 4. 병합 충돌 해결
 5. clone·저장소 전환, 설정 화면(SSL), GitHub 가 아닌 서버 로그인
 6. 배포(macOS .app, Windows .exe)
+
+## 개발 빌드 점검 통로
+
+디버그 빌드를 `GITVCS_DEV_PORT=7777` 으로 띄우면 127.0.0.1:7777 에서 JS(async 함수 본문)를 받아 웹뷰에서 실행하고 결과를 돌려줍니다.
+
+```bash
+echo 'return document.title' | nc 127.0.0.1 7777
+```
