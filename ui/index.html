@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GitVcs</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- 시작 화면: 저장소가 열려 있지 않을 때 -->
+  <section id="start" class="start" hidden>
+    <div class="start-card">
+      <h1>GitVcs</h1>
+      <p class="muted">PC 에 설치된 git 으로 동작하는 Git 클라이언트</p>
+      <div class="start-actions">
+        <button id="start-open" class="btn primary">저장소 열기…</button>
+      </div>
+      <h2>최근 저장소</h2>
+      <ul id="recent-list" class="recent-list"></ul>
+      <p id="recent-empty" class="muted small" hidden>아직 연 저장소가 없습니다.</p>
+    </div>
+  </section>
+
+  <!-- 저장소 화면 -->
+  <section id="main" class="main" hidden>
+    <header class="toolbar">
+      <button id="repo-button" class="tb-repo" title="다른 저장소 열기">
+        <span class="tb-label">저장소</span>
+        <span id="repo-name" class="tb-value"></span>
+      </button>
+      <div class="tb-sep"></div>
+      <div class="tb-branch" title="지금 브랜치">
+        <span class="tb-label">브랜치</span>
+        <span id="branch-name" class="tb-value"></span>
+      </div>
+      <div class="tb-center">
+        <button id="act-refresh" class="tb-btn" title="새로고침 (F5)"><span class="ico">⟳</span><span>새로고침</span></button>
+        <button id="act-pull" class="tb-btn" disabled title="다음 단계에서 지원"><span class="ico">↓</span><span>풀</span></button>
+        <button id="act-push" class="tb-btn" title="푸시"><span class="ico">↑</span><span>푸시</span><span id="push-badge" class="tb-badge" hidden></span></button>
+      </div>
+      <div class="tb-right">
+        <button id="act-theme" class="tb-btn" title="다크·라이트 테마 바꾸기"><span class="ico">◐</span><span>테마</span></button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" id="sidebar"></aside>
+      <div class="splitter" data-split="sidebar"></div>
+
+      <section class="graph-pane">
+        <div class="graph-header">
+          <div class="col col-refs">브랜치 / 태그</div>
+          <div class="col col-graph" id="graph-header-graph">그래프</div>
+          <div class="col col-msg">커밋 메시지</div>
+          <div class="col col-author">작성자</div>
+          <div class="col col-date">날짜</div>
+          <div class="col col-sha">SHA</div>
+        </div>
+        <div class="graph-scroll" id="graph-scroll">
+          <div class="graph-sizer" id="graph-sizer">
+            <canvas id="graph-canvas"></canvas>
+            <div class="graph-rows" id="graph-rows"></div>
+          </div>
+        </div>
+        <div class="graph-empty" id="graph-empty" hidden>아직 커밋이 없습니다. 오른쪽에서 첫 커밋을 만들어 보세요.</div>
+      </section>
+
+      <div class="splitter" data-split="detail"></div>
+      <aside class="detail" id="detail"></aside>
+    </div>
+  </section>
+
+  <div id="toasts" class="toasts"></div>
+  <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busy-text"></span></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+[package]
+name = "gitvcs-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gitvcs"
+path = "src/main.rs"
+
+[dependencies]
+gitvcs-core = { path = "../gitvcs-core" }
+serde.workspace = true
+serde_json.workspace = true
+tao = "0.37"
+wry = "0.57"
+rfd = "0.17"
