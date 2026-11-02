@@ -36,6 +36,10 @@ pub struct Settings {
     pub auto_fetch_minutes: u32,
     /// diff 배치: "inline" 또는 "split".
     pub diff_layout: String,
+    /// 탭으로 열어 둔 저장소들(차례대로). 앱을 다시 켜면 되살린다.
+    pub open_tabs: Vec<String>,
+    /// clone 할 때 처음 보여 줄 폴더.
+    pub clone_dir: String,
 }
 
 impl Default for Settings {
@@ -49,6 +53,8 @@ impl Default for Settings {
             pull_mode: PullMode::FfOnly,
             auto_fetch_minutes: 10,
             diff_layout: "inline".into(),
+            open_tabs: Vec::new(),
+            clone_dir: String::new(),
         }
     }
 }
@@ -80,6 +86,17 @@ impl Settings {
         self.recent.insert(0, RecentRepo { path: path.to_string(), name: name.to_string(), opened_at: now });
         self.recent.truncate(MAX_RECENT);
         self.last_repo = Some(path.to_string());
+    }
+
+    /// 탭을 연다(이미 있으면 그대로).
+    pub fn open_tab(&mut self, path: &str) {
+        if !self.open_tabs.iter().any(|t| same_path(t, path)) {
+            self.open_tabs.push(path.to_string());
+        }
+    }
+
+    pub fn close_tab(&mut self, path: &str) {
+        self.open_tabs.retain(|t| !same_path(t, path));
     }
 
     pub fn remove_recent(&mut self, path: &str) {

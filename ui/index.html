@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
+  <nav id="tabs" class="tabs"></nav>
   <!-- 시작 화면: 저장소가 열려 있지 않을 때 -->
   <section id="start" class="start" hidden>
     <div class="start-card">
@@ -14,6 +15,8 @@
       <p class="muted">PC 에 설치된 git 으로 동작하는 Git 클라이언트</p>
       <div class="start-actions">
         <button id="start-open" class="btn primary">저장소 열기…</button>
+        <button id="start-clone" class="btn">Clone…</button>
+        <button id="start-settings" class="btn">설정</button>
       </div>
       <h2>최근 저장소</h2>
       <ul id="recent-list" class="recent-list"></ul>
@@ -50,6 +53,7 @@
         <span id="fetch-info" class="tb-info muted small"></span>
       </div>
       <div class="tb-right">
+        <button id="act-settings" class="tb-btn" title="설정 (SSL 인증서·풀 방식·자동 페치…)"><span class="ico">⚙</span><span>설정</span></button>
         <button id="act-theme" class="tb-btn" title="다크·라이트 테마 바꾸기"><span class="ico">◐</span><span>테마</span></button>
       </div>
     </header>

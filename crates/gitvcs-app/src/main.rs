@@ -13,6 +13,7 @@ mod commands;
 mod devtools;
 mod watcher;
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -33,6 +34,8 @@ enum UserEvent {
     Reply(String),
     /// 폴더 고르기 창을 띄우고 고른 저장소를 연다.
     PickRepo(u64),
+    /// 폴더·파일 고르기 창을 띄우고 고른 경로를 돌려준다. (요청 번호, 파일인가, 처음 폴더)
+    Pick(u64, bool, Option<String>),
     Title(String),
     /// 요청 없이 화면에 알릴 일(파일 변경·자동 페치).
     Emit(String),
@@ -143,6 +146,9 @@ fn main() -> wry::Result<()> {
             }
             if request.cmd == "pickRepo" {
                 let _ = ipc_proxy.send_event(UserEvent::PickRepo(request.id));
+            } else if request.cmd == "pickFolder" || request.cmd == "pickFile" {
+                let start = request.args.get("start").and_then(Value::as_str).map(str::to_string);
+                let _ = ipc_proxy.send_event(UserEvent::Pick(request.id, request.cmd == "pickFile", start));
             } else {
                 dispatch(ipc_state.clone(), ipc_proxy.clone(), request);
             }
@@ -162,6 +168,19 @@ fn main() -> wry::Result<()> {
             }
             Event::UserEvent(UserEvent::Emit(body)) => {
                 let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.event({body})"));
+            }
+            Event::UserEvent(UserEvent::Pick(id, file, start)) => {
+                let mut dialog = rfd::FileDialog::new();
+                if let Some(start) = start.filter(|s| Path::new(s).is_dir()) {
+                    dialog = dialog.set_directory(start);
+                }
+                let picked = if file {
+                    dialog.set_title("인증서 파일 고르기").add_filter("인증서", &["pem", "crt", "cer"]).add_filter("모든 파일", &["*"]).pick_file()
+                } else {
+                    dialog.set_title("폴더 고르기").pick_folder()
+                };
+                let value = picked.map(|p| json!(p.display().to_string())).unwrap_or(Value::Null);
+                let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(value))));
             }
             Event::UserEvent(UserEvent::PickRepo(id)) => match rfd::FileDialog::new().set_title("Git 저장소 폴더 열기").pick_folder() {
                 Some(folder) => dispatch(

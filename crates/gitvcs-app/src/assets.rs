@@ -22,6 +22,7 @@ const EMBEDDED: &[(&str, &[u8])] = &[
     asset!("dialogs.js"),
     asset!("refs.js"),
     asset!("merge.js"),
+    asset!("screens.js"),
     asset!("util.js"),
 ];
 

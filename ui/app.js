@@ -8,6 +8,7 @@ import { createDiffView } from './diff.js';
 import { confirmDialog, showMenu } from './dialogs.js';
 import { createRefs } from './refs.js';
 import { createMergeView } from './merge.js';
+import { cloneDialog, loginDialog, settingsDialog, renderTabs } from './screens.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,8 +70,8 @@ function toast(message, kind = 'info', hint) {
 function showError(error) {
   const message = error?.message ?? String(error);
   let hint;
-  if (error?.ssl) hint = 'SSL 인증서 문제입니다. 회사망이라면 설정의 SSL 인증서(다음 단계)에서 회사 루트 인증서를 지정하거나 schannel 을 켜 주세요.';
-  else if (error?.auth) hint = '서버가 로그인을 거절했습니다. 터미널에서 한 번 git push 로 로그인해 두면 다음부터 됩니다(로그인 창은 다음 단계).';
+  if (error?.ssl) hint = 'SSL 인증서 문제입니다. 회사망이라면 설정 > SSL 인증서에서 회사 루트 인증서 파일을 고르거나(Windows 는 schannel) 연결 테스트를 해 보세요.';
+  else if (error?.auth) hint = '서버가 로그인을 거절했습니다. 비밀번호·토큰을 확인하거나, SSH 키만 받는 서버라면 키를 등록해 주세요.';
   toast(message, 'error', hint);
 }
 
@@ -98,12 +99,87 @@ $('act-theme').addEventListener('click', async () => {
   await call('setSettings', { theme: next }).catch(showError);
 });
 
-// ── 시작 화면 ─────────────────────────────────────────
+// ── 탭·시작 화면 ──────────────────────────────────────
+
+function drawTabs() {
+  renderTabs($('tabs'), {
+    tabs: state.settings.openTabs ?? [],
+    active: state.repo?.path ?? null,
+    onOpen: (path) => openRepo(path),
+    onClose: (path) => closeTab(path),
+    onNew: () => newTab(),
+  });
+}
+
+async function newTab() {
+  await call('closeRepo').catch(showError);
+  state.settings = await call('getSettings').catch(() => state.settings);
+  showStart();
+}
+
+async function closeTab(path) {
+  state.settings = await call('closeTab', { path });
+  if (state.repo?.path !== path) {
+    drawTabs();
+    return;
+  }
+  const next = state.settings.openTabs[0];
+  if (next) await openRepo(next.path);
+  else await newTab();
+}
+
+/**
+ * GitHub 가 아닌 서버가 로그인을 요구하면 로그인 창을 띄우고, 넣었으면 같은 작업을 한 번 더 한다.
+ * 오류 글에 서버가 없으면(처음 접속하는 SSH 서버) 원격 주소에서 찾는다.
+ */
+async function withLogin(work) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await work();
+    } catch (error) {
+      if (!error?.login || attempt >= 2) throw error;
+      let target = error.login;
+      if (!target.host) {
+        const fromRemote = await call('loginTarget').catch(() => null);
+        target = fromRemote ? { ...fromRemote, kind: target.kind } : target;
+      }
+      if (!target.host) throw error;
+      const reason = attempt === 0
+        ? `${target.host} 서버가 로그인을 요구합니다.`
+        : `${target.host} 서버가 로그인을 다시 거절했습니다. 비밀번호를 확인해 주세요.`;
+      if (!(await loginDialog({ call, target, reason }))) throw error;
+    }
+  }
+}
+
+async function openSettings() {
+  const before = state.settings.theme;
+  const saved = await settingsDialog({ call, settings: state.settings, onTheme: applyTheme, showError, toast });
+  if (saved) {
+    state.settings = saved;
+    toast('설정을 저장했습니다.', 'success');
+    if (state.repo) {
+      renderToolbar();
+      updateFetchInfo();
+    }
+  } else {
+    applyTheme(before);
+  }
+}
+
+async function startClone() {
+  const repo = await cloneDialog({ call, cloneDir: state.settings.cloneDir, withLogin, showError });
+  if (repo) {
+    toast(`${repo.name} 를 받았습니다.`, 'success');
+    await enterRepo(repo);
+  }
+}
 
 function showStart() {
   state.repo = null;
   $('main').hidden = true;
   $('start').hidden = false;
+  drawTabs();
   const list = $('recent-list');
   const recent = state.settings.recent || [];
   $('recent-empty').hidden = recent.length > 0;
@@ -139,17 +215,18 @@ async function openRepo(path) {
 }
 
 $('start-open').addEventListener('click', pickRepo);
-$('repo-button').addEventListener('click', async () => {
-  await call('closeRepo').catch(showError);
-  const init = await call('init').catch(() => null);
-  if (init) state.settings = init.settings;
-  showStart();
-});
+$('start-clone').addEventListener('click', startClone);
+$('start-settings').addEventListener('click', openSettings);
+$('act-settings').addEventListener('click', openSettings);
+$('repo-button').addEventListener('click', newTab);
 
 // ── 저장소 화면 ───────────────────────────────────────
 
 async function enterRepo(repo) {
   state.repo = repo;
+  // 여는 동안 설정(탭 목록)이 바뀌었다.
+  state.settings = await call('getSettings').catch(() => state.settings);
+  drawTabs();
   state.fingerprint = null;
   state.draft = { summary: '', description: '', amend: false, pushAfter: false };
   $('start').hidden = true;
@@ -273,7 +350,7 @@ async function showDetail(key, fetch = true) {
 // 작업 뒤에는 항상 다시 읽는다 — 터미널에서 한 일도 함께 보인다.
 async function act(label, work, { success, done } = {}) {
   try {
-    const result = await busy(label, work);
+    const result = await busy(label, () => withLogin(work));
     if (done) done(result);
     if (success) toast(success(result), 'success');
     return result;

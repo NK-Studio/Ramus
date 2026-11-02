@@ -131,3 +131,33 @@ fn global_config_args_reach_git() {
     let plain = GitRunner::default().run(dir.path(), &["config", "--get", "http.sslVerify"]);
     assert!(plain.stdout.trim().is_empty());
 }
+
+#[test]
+fn clone_and_test_connection() {
+    let tmp = tempfile::tempdir().unwrap();
+    let remote = tmp.path().join("remote.git");
+    git(tmp.path(), &["init", "-q", "--bare", "-b", "main", remote.to_str().unwrap()]);
+    let work = tmp.path().join("work");
+    std::fs::create_dir(&work).unwrap();
+    init(&work);
+    std::fs::write(work.join("a"), "a").unwrap();
+    git(&work, &["add", "-A"]);
+    git(&work, &["commit", "-qm", "a"]);
+    git(&work, &["push", "-q", remote.to_str().unwrap(), "main"]);
+
+    let runner = GitRunner::default();
+    let url = remote.to_str().unwrap();
+    assert_eq!(gitvcs_core::remote::test_connection(&runner, tmp.path(), url).unwrap(), 1);
+    assert!(gitvcs_core::remote::test_connection(&runner, tmp.path(), "/없는/곳.git").is_err());
+
+    let dest = tmp.path().join("받은 저장소");
+    let repo = gitvcs_core::remote::clone(&runner, url, &dest).unwrap();
+    assert!(dest.join("a").exists());
+    assert_eq!(repo.default_remote_url().as_deref(), Some(url));
+    // 이미 파일이 있는 폴더에는 받지 않는다.
+    assert!(gitvcs_core::remote::clone(&runner, url, &dest).is_err());
+    // 실패하면 만들다 만 폴더를 남기지 않는다.
+    let bad = tmp.path().join("bad");
+    assert!(gitvcs_core::remote::clone(&runner, "/없는/곳.git", &bad).is_err());
+    assert!(!bad.exists());
+}

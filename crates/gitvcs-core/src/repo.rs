@@ -22,13 +22,15 @@ pub struct GitError {
     pub ssl: bool,
     /// 로그인이 필요하거나 거절됨.
     pub auth: bool,
+    /// 앱에서 로그인하면 풀리는 실패(GitHub 가 아닌 서버). 화면이 로그인 창을 띄우고 그 작업을 다시 한다.
+    pub login: Option<crate::login::LoginTarget>,
 }
 
 impl GitError {
     pub fn new(message: impl Into<String>) -> Self {
         // git 의 "hint:" 줄은 터미널 사용자용 설명이라 길기만 하다 — 뺀다.
         let message: String = message.into().lines().filter(|l| !l.starts_with("hint:")).collect::<Vec<_>>().join("\n").trim().to_string();
-        GitError { ssl: ssl::is_ssl_failure(&message), auth: is_auth_failure(&message), message }
+        GitError { ssl: ssl::is_ssl_failure(&message), auth: is_auth_failure(&message), login: crate::login::parse_failure(&message), message }
     }
 }
 

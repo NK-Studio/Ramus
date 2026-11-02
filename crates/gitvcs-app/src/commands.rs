@@ -7,7 +7,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use gitvcs_core::conflict::Side;
 use gitvcs_core::refs::ResetMode;
 use gitvcs_core::repo::{DiffTarget, LineAction, PullMode, Result};
-use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, ssl};
+use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, remote, ssl};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -29,6 +29,8 @@ pub struct AppState {
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
     /// 마지막 자동 페치 시도(실패해도). 실패한 페치를 30초마다 되풀이하지 않게.
     last_auto_fetch: Mutex<Option<Instant>>,
+    /// 앱에서 로그인한 SSH 서버와 비밀번호. 앱을 끌 때까지만 기억한다(파일에 쓰지 않는다).
+    ssh_login: Mutex<Option<(String, String)>>,
     emit: Emit,
 }
 
@@ -50,6 +52,7 @@ impl AppState {
             write_lock: Mutex::new(()),
             watcher: Mutex::new(None),
             last_auto_fetch: Mutex::new(None),
+            ssh_login: Mutex::new(None),
             emit,
         }
     }
@@ -62,6 +65,18 @@ impl AppState {
         }
     }
 
+    /// 설정·SSH 로그인이 바뀌면 모든 git 호출에 붙는 것을 다시 만든다.
+    fn apply_globals(&self) {
+        let mut globals = globals_for(&self.settings.lock().unwrap());
+        if let Some((host, password)) = self.ssh_login.lock().unwrap().clone() {
+            match login::write_askpass(&std::env::temp_dir().join(format!("GitVcs-{}", whoami()))) {
+                Ok(askpass) => globals.env = login::ssh_environment(&askpass, &host, &password),
+                Err(e) => eprintln!("SSH 비밀번호 도우미를 만들지 못했습니다: {e}"),
+            }
+        }
+        self.runner.set_globals(globals);
+    }
+
     fn repo(&self) -> Result<Repository> {
         self.repo.lock().unwrap().clone().ok_or_else(|| GitError::new("열린 저장소가 없습니다."))
     }
@@ -72,6 +87,7 @@ impl AppState {
         {
             let mut settings = self.settings.lock().unwrap();
             settings.touch_recent(&root, &repo.name(), now());
+            settings.open_tab(&root);
             self.save_settings(&settings);
         }
         let info = repo_info(&repo);
@@ -138,6 +154,74 @@ impl AppState {
                 let a: PathArg = parse(args)?;
                 self.open_repo(Path::new(&a.path), effects)
             }
+            "getSettings" => Ok(self.settings_json()),
+            "closeTab" => {
+                let a: PathArg = parse(args)?;
+                let mut settings = self.settings.lock().unwrap();
+                settings.close_tab(&a.path);
+                self.save_settings(&settings);
+                drop(settings);
+                Ok(self.settings_json())
+            }
+            "clone" => {
+                let a = Args(&args);
+                let dest = PathBuf::from(a.s("dest")?);
+                let repo = remote::clone(&self.runner, a.s("url")?, &dest)?;
+                if let Some(parent) = dest.parent() {
+                    let mut settings = self.settings.lock().unwrap();
+                    settings.clone_dir = parent.display().to_string();
+                    self.save_settings(&settings);
+                }
+                self.open_repo(repo.root(), effects)
+            }
+            "cloneName" => Ok(json!(remote::default_clone_name(Args(&args).s("url")?))),
+            "testConnection" => {
+                let url = match Args(&args).s("url").ok().filter(|u| !u.trim().is_empty()) {
+                    Some(url) => url.to_string(),
+                    None => self.repo()?.default_remote_url().ok_or_else(|| GitError::new("열린 저장소에 원격이 없습니다. 시험할 주소를 적어 주세요."))?,
+                };
+                let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| dirs::home_dir().unwrap_or_else(std::env::temp_dir));
+                remote::test_connection(&self.runner, &dir, &url).map(|count| json!({ "url": url, "branches": count }))
+            }
+            "exportKeychain" => {
+                let dir = Settings::default_path().and_then(|p| p.parent().map(Path::to_path_buf)).unwrap_or_else(std::env::temp_dir);
+                remote::export_mac_keychain(&dir).map(|p| json!(p.display().to_string()))
+            }
+            "loginTarget" => {
+                let url = self.repo()?.default_remote_url();
+                Ok(json!(url.as_deref().and_then(login::parse_url)))
+            }
+            "remoteLogin" => {
+                let a = Args(&args);
+                let host = a.s("host")?.trim().to_string();
+                let password = a.s("password")?.to_string();
+                if host.is_empty() || password.is_empty() {
+                    return Err(GitError::new("서버와 비밀번호를 적어 주세요."));
+                }
+                if a.s("kind")? == "ssh" {
+                    *self.ssh_login.lock().unwrap() = Some((host, password));
+                    self.apply_globals();
+                    Ok(Value::Null)
+                } else {
+                    let user = a.s("user")?.trim();
+                    if user.is_empty() {
+                        return Err(GitError::new("사용자 이름을 적어 주세요."));
+                    }
+                    let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| std::env::temp_dir());
+                    let protocol = a.s("protocol").unwrap_or("https");
+                    login::save_https(&self.runner, &dir, protocol, &host, user, &password).map(|_| Value::Null).map_err(GitError::new)
+                }
+            }
+            "forgetSshLogin" => {
+                *self.ssh_login.lock().unwrap() = None;
+                self.apply_globals();
+                Ok(Value::Null)
+            }
+            "gitVersion" => {
+                let dir = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+                let out = self.runner.run(&dir, &["--version"]);
+                if out.success() { Ok(json!(out.stdout.trim())) } else { Err(GitError::new(out.message())) }
+            }
             "closeRepo" => {
                 *self.repo.lock().unwrap() = None;
                 *self.watcher.lock().unwrap() = None;
@@ -170,8 +254,15 @@ impl AppState {
                 if let Some(minutes) = a.auto_fetch_minutes {
                     settings.auto_fetch_minutes = minutes.min(24 * 60);
                 }
+                if let Some(ssl) = a.ssl {
+                    settings.ssl = ssl;
+                }
+                if let Some(git_path) = a.git_path {
+                    settings.git_path = git_path.trim().to_string();
+                }
                 self.save_settings(&settings);
                 drop(settings);
+                self.apply_globals();
                 Ok(self.settings_json())
             }
             "status" => to_json(self.repo()?.status()?),
@@ -272,12 +363,25 @@ impl AppState {
 
     fn settings_json(&self) -> Value {
         let s = self.settings.lock().unwrap();
+        let ssh = self.ssh_login.lock().unwrap().as_ref().map(|(host, _)| host.clone());
+        let tabs: Vec<Value> = s
+            .open_tabs
+            .iter()
+            .filter(|p| Path::new(p).is_dir())
+            .map(|p| json!({ "path": p, "name": Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.clone()) }))
+            .collect();
         json!({
             "theme": s.theme,
             "recent": s.recent,
             "pullMode": s.pull_mode,
             "diffLayout": s.diff_layout,
             "autoFetchMinutes": s.auto_fetch_minutes,
+            "ssl": s.ssl,
+            "gitPath": s.git_path,
+            "cloneDir": if s.clone_dir.is_empty() { dirs::home_dir().map(|h| h.display().to_string()).unwrap_or_default() } else { s.clone_dir.clone() },
+            "openTabs": tabs,
+            "sshLogin": ssh,
+            "platform": std::env::consts::OS,
         })
     }
 }
@@ -348,6 +452,11 @@ impl Args<'_> {
     }
 }
 
+/// 임시 폴더 이름을 사용자마다 나누려고 쓴다.
+fn whoami() -> String {
+    std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_else(|_| "user".into())
+}
+
 fn now() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
@@ -382,6 +491,8 @@ struct SettingsArg {
     pull_mode: Option<PullMode>,
     diff_layout: Option<String>,
     auto_fetch_minutes: Option<u32>,
+    ssl: Option<gitvcs_core::ssl::SslSettings>,
+    git_path: Option<String>,
 }
 
 #[derive(Deserialize)]

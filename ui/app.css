@@ -513,3 +513,29 @@ select.field { height: 30px; }
 .moutput { flex: 1; width: 100%; resize: none; border: 0; outline: none; padding: 6px 10px; background: var(--git-diff-bg); color: var(--git-diff-text); font-family: var(--mono); font-size: 12.5px; line-height: 20px; white-space: pre; tab-size: 4; }
 .merge-simple { padding: 32px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .merge-simple-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* ── 5단계: 탭·설정·clone·로그인 ─────────────────────── */
+
+body { display: flex; flex-direction: column; }
+.start, .main { flex: 1; min-height: 0; height: auto; }
+.tabs { flex: none; display: flex; align-items: flex-end; gap: 2px; height: 34px; padding: 4px 8px 0; background: var(--git-sidebar-bg); border-bottom: 1px solid var(--git-border); overflow-x: auto; }
+.tabs:empty { display: none; }
+.tab { display: flex; align-items: center; gap: 6px; max-width: 220px; height: 30px; padding: 0 6px 0 12px; border-radius: 6px 6px 0 0; color: var(--git-text-secondary); cursor: default; }
+.tab:hover { background: var(--git-hover); }
+.tab.active { background: var(--git-bg); color: var(--git-text-strong); font-weight: 600; box-shadow: inset 0 2px 0 var(--git-accent); }
+.tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-close { width: 18px; height: 18px; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; visibility: hidden; }
+.tab:hover .tab-close, .tab.active .tab-close { visibility: visible; }
+.tab-close:hover { background: var(--git-pressed); color: var(--git-text); }
+.tab-new { width: 30px; height: 30px; border: 0; border-radius: 6px 6px 0 0; background: none; color: var(--git-text-muted); cursor: pointer; font-size: 16px; }
+.tab-new:hover { background: var(--git-hover); }
+.tab-new.active { background: var(--git-bg); color: var(--git-text-strong); box-shadow: inset 0 2px 0 var(--git-accent); }
+.row { display: flex; gap: 6px; align-items: center; }
+.row > .field { flex: 1; min-width: 0; }
+.modal.wide { width: 560px; }
+.modal.settings { width: 640px; max-height: calc(100% - 48px); }
+.settings-body { overflow: auto; display: flex; flex-direction: column; gap: 18px; padding-right: 4px; }
+.settings-section { display: flex; flex-direction: column; gap: 8px; }
+.settings-section h3 { margin: 0; font-size: 13px; color: var(--git-text-strong); border-bottom: 1px solid var(--git-divider); padding-bottom: 4px; }
+.success-text { color: var(--git-success); }
+input.field[readonly] { color: var(--git-text-secondary); background: var(--git-badge-bg); }
