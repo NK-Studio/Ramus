@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use gitvcs_core::refs::ResetMode;
 use gitvcs_core::repo::{DiffTarget, LineAction, PullMode, Result};
 use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, ssl};
 use serde::Deserialize;
@@ -188,6 +189,39 @@ impl AppState {
                 reveal(&self.repo()?, &a.path).map(|_| Value::Null)
             }
             "lastFetch" => Ok(json!(self.repo()?.last_fetch().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()))),
+            "refs" => to_json(self.repo()?.refs()?),
+            "openTerminal" => open_terminal(self.repo()?.root()).map(|_| Value::Null),
+            "checkout" | "checkoutDetached" | "createBranch" | "renameBranch" | "deleteBranch" | "deleteRemoteBranch" | "merge" | "rebase"
+            | "cherryPick" | "revert" | "reset" | "createTag" | "deleteTag" | "pushTag" | "stashPush" | "stashApply" | "stashDrop" => {
+                let repo = self.repo()?;
+                let _guard = self.write_lock.lock().unwrap();
+                let a = Args(&args);
+                let done = |r: Result<()>| r.map(|_| Value::Null);
+                let text = |r: Result<String>| r.map(|t| json!(t.trim()));
+                match cmd {
+                    "checkout" => done(repo.checkout(a.s("name")?, a.b("remote"))),
+                    "checkoutDetached" => done(repo.checkout_detached(a.s("hash")?)),
+                    "createBranch" => done(repo.create_branch(a.s("name")?, a.s("start")?, a.b("checkout"))),
+                    "renameBranch" => done(repo.rename_branch(a.s("old")?, a.s("new")?)),
+                    "deleteBranch" => done(repo.delete_branch(a.s("name")?, a.b("force"))),
+                    "deleteRemoteBranch" => done(repo.delete_remote_branch(a.s("remote")?, a.s("branch")?)),
+                    "merge" => text(repo.merge(a.s("revision")?)),
+                    "rebase" => text(repo.rebase(a.s("revision")?)),
+                    "cherryPick" => text(repo.cherry_pick(a.s("hash")?, a.b("merge"))),
+                    "revert" => text(repo.revert(a.s("hash")?, a.b("merge"))),
+                    "reset" => {
+                        let mode: ResetMode = serde_json::from_value(args.get("mode").cloned().unwrap_or_default())
+                            .map_err(|_| GitError::new("reset 방식이 잘못되었습니다."))?;
+                        done(repo.reset(a.s("hash")?, mode))
+                    }
+                    "createTag" => done(repo.create_tag(a.s("name")?, a.s("hash")?, a.s("message").unwrap_or(""))),
+                    "deleteTag" => done(repo.delete_tag(a.s("name")?)),
+                    "pushTag" => done(repo.push_tag(a.s("remote")?, a.s("name")?)),
+                    "stashPush" => done(repo.stash_push(a.s("message").unwrap_or(""))),
+                    "stashApply" => text(repo.stash_apply(a.s("name")?, a.b("pop"))),
+                    _ => done(repo.stash_drop(a.s("name")?)),
+                }
+            }
             "stage" | "unstage" | "stageAll" | "unstageAll" | "commit" | "push" | "applyLines" | "discard" | "fetch" | "pull" => {
                 let repo = self.repo()?;
                 let _guard = self.write_lock.lock().unwrap();
@@ -263,6 +297,36 @@ fn reveal(repo: &Repository, path: &str) -> Result<()> {
     #[cfg(not(any(target_os = "macos", windows)))]
     let spawned = std::process::Command::new("xdg-open").arg(target.parent().unwrap_or(&target)).spawn();
     spawned.map(|_| ()).map_err(|e| GitError::new(format!("파일 관리자를 열지 못했습니다: {e}")))
+}
+
+/// 저장소 폴더에서 터미널을 연다.
+fn open_terminal(root: &Path) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("/usr/bin/open").args(["-a", "Terminal"]).arg(root).spawn();
+    #[cfg(windows)]
+    let spawned = {
+        use std::os::windows::process::CommandExt;
+        // Windows Terminal 이 있으면 그것, 없으면 cmd.
+        std::process::Command::new("wt").arg("-d").arg(root).spawn().or_else(|_| {
+            std::process::Command::new("cmd").args(["/C", "start", "cmd", "/K"]).arg(format!("cd /d \"{}\"", root.display())).creation_flags(0x0800_0000).spawn()
+        })
+    };
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let spawned = std::process::Command::new("x-terminal-emulator").current_dir(root).spawn();
+    spawned.map(|_| ()).map_err(|e| GitError::new(format!("터미널을 열지 못했습니다: {e}")))
+}
+
+/// 요청 인자 읽기.
+struct Args<'a>(&'a Value);
+
+impl Args<'_> {
+    fn s(&self, key: &str) -> Result<&str> {
+        self.0.get(key).and_then(Value::as_str).ok_or_else(|| GitError::new(format!("요청 인자 '{key}' 가 없습니다.")))
+    }
+
+    fn b(&self, key: &str) -> bool {
+        self.0.get(key).and_then(Value::as_bool).unwrap_or(false)
+    }
 }
 
 fn now() -> i64 {

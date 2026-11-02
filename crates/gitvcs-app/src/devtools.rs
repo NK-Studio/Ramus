@@ -73,7 +73,7 @@ pub fn start(port: u16, pending: Pending, eval: impl Fn(u64, String) + Send + Sy
 pub fn wrap(id: u64, js: &str) -> String {
     let code = serde_json::to_string(js).unwrap();
     format!(
-        "(async () => {{ let r; try {{ const AsyncFunction = Object.getPrototypeOf(async function () {{}}).constructor; r = await new AsyncFunction({code})(); }} catch (e) {{ r = 'ERROR: ' + (e && e.stack || e); }} \
+        "(async () => {{ let r; try {{ const AsyncFunction = Object.getPrototypeOf(async function () {{}}).constructor; r = await new AsyncFunction({code})(); }} catch (e) {{ r = 'ERROR: ' + (e && e.message) + ' ' + (e && e.stack || e); }} \
          let text; try {{ text = JSON.stringify(r === undefined ? null : r); }} catch (e) {{ text = JSON.stringify(String(r)); }} \
          window.ipc.postMessage(JSON.stringify({{ id: {id}, cmd: '__devResult', args: {{ text }} }})); }})()"
     )

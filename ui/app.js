@@ -6,6 +6,7 @@ import { createGraph, laneColor } from './graph.js';
 import { renderStaging, renderCommit, diffKey } from './changes.js';
 import { createDiffView } from './diff.js';
 import { confirmDialog, showMenu } from './dialogs.js';
+import { createRefs } from './refs.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -30,6 +31,25 @@ const graph = createGraph({
   canvas: $('graph-canvas'),
   rows: $('graph-rows'),
   onSelect: showDetail,
+  onContextMenu: (key, event, commit) => {
+    if (commit) refsUi.commitMenu(event, commit);
+  },
+  onRefActivate: (ref) => {
+    if (ref.kind === 'local') refsUi.checkout(ref.name);
+    else if (ref.kind === 'remote') refsUi.checkout(ref.name, true);
+  },
+});
+
+const refsUi = createRefs({
+  call,
+  act: (...a) => act(...a),
+  state,
+  sidebar: $('sidebar'),
+  reveal: (hash) => revealCommit(hash),
+  laneColorOf: (hash) => {
+    const index = state.history?.commits.findIndex((c) => c.hash === hash) ?? -1;
+    return index >= 0 ? laneColor(state.history.graph.nodes[index].color) : 'var(--git-text-muted)';
+  },
 });
 
 // ── 알림 ─────────────────────────────────────────────
@@ -165,7 +185,7 @@ function refresh() {
 async function refreshOnce() {
   state.refreshing = true;
   try {
-    const [status, history] = await Promise.all([call('status'), call('history')]);
+    const [status, history, refs] = await Promise.all([call('status'), call('history'), call('refs')]);
     // 파일을 더 고쳐도 상태(M)는 그대로일 수 있으니, 열린 diff 는 늘 다시 읽는다(같으면 다시 그리지 않는다).
     // 그 파일이 목록에서 사라졌으면(모두 Stage·커밋·버림) diff 를 닫는다.
     const target = diffView.target;
@@ -176,11 +196,12 @@ async function refreshOnce() {
     }
     // 바뀐 것이 없으면 다시 그리지 않는다. 창에 포커스가 올 때도 새로고침하므로, 다시 그리면 그 클릭으로 누르던 버튼이 사라지고
     // 입력란 포커스도 잃는다.
-    const fingerprint = JSON.stringify([status, history.head, history.commits.length, history.commits.map((c) => c.hash + c.refs.map((r) => r.name).join())]);
+    const fingerprint = JSON.stringify([status, refs, history.head, history.commits.length, history.commits.map((c) => c.hash + c.refs.map((r) => r.name).join())]);
     if (fingerprint === state.fingerprint) return;
     state.fingerprint = fingerprint;
     state.status = status;
     state.history = history;
+    state.refs = refs;
     renderToolbar();
     renderSidebar();
     graph.setData(history, status);
@@ -206,32 +227,13 @@ function renderToolbar() {
   $('act-pull').title = `풀 (${PULL_MODES[state.settings.pullMode] ?? ''})${branch.upstream ? ` ← ${branch.upstream}` : ''}`;
   const noRemote = (state.repo?.remotes ?? []).length === 0;
   for (const id of ['act-fetch', 'act-pull', 'act-pull-mode']) $(id).disabled = noRemote;
+  $('act-pop').disabled = !(state.refs?.stashes.length);
+  $('act-stash').disabled = state.status.staged.length + state.status.unstaged.length === 0;
+  $('act-branch').disabled = !state.status.branch.hasCommits;
 }
 
-/** 왼쪽 목록: 그래프에 보이는 브랜치·태그(브랜치 작업은 다음 단계). */
 function renderSidebar() {
-  const groups = { local: [], remote: [], tag: [] };
-  const seen = new Set();
-  state.history.commits.forEach((commit, index) => {
-    for (const ref of commit.refs) {
-      const kind = ref.kind === 'head' ? 'local' : ref.kind;
-      if (!groups[kind] || seen.has(kind + ref.name)) continue;
-      seen.add(kind + ref.name);
-      groups[kind].push({ ...ref, hash: commit.hash, color: laneColor(state.history.graph.nodes[index].color) });
-    }
-  });
-  if (!state.status.branch.hasCommits) groups.local.push({ kind: 'head', name: state.status.branch.name, hash: null, color: laneColor(0) });
-  const group = (title, items) => el('div', { class: 'side-group' },
-    el('div', { class: 'side-title' }, title, el('span', { class: 'count', text: items.length })),
-    items.map((ref) => el('div', {
-      class: `side-item${ref.kind === 'head' ? ' current' : ''}`, title: ref.name,
-      onclick: () => ref.hash && revealCommit(ref.hash),
-    }, el('span', { class: 'side-dot', style: { background: ref.color } }), el('span', { class: 'side-name', text: ref.name }),
-    ref.kind === 'head' ? el('span', { class: 'side-check', text: '✓' }) : null)));
-  $('sidebar').replaceChildren(
-    group('로컬', groups.local),
-    group('원격', groups.remote),
-    group('태그', groups.tag));
+  refsUi.renderSidebar($('sidebar'));
 }
 
 function revealCommit(hash) {
@@ -436,6 +438,10 @@ on('fetched', (result) => {
 });
 
 $('act-push').addEventListener('click', push);
+$('act-branch').addEventListener('click', () => refsUi.createBranch());
+$('act-stash').addEventListener('click', () => refsUi.stashPush());
+$('act-pop').addEventListener('click', () => refsUi.stashPop());
+$('act-terminal').addEventListener('click', () => call('openTerminal').catch(showError));
 $('act-refresh').addEventListener('click', refresh);
 window.addEventListener('focus', refresh);
 window.addEventListener('keydown', (event) => {

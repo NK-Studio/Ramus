@@ -4,6 +4,7 @@ pub mod graph;
 pub mod diff;
 pub mod log;
 pub mod patch;
+pub mod refs;
 pub mod repo;
 pub mod runner;
 pub mod settings;

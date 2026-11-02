@@ -228,6 +228,17 @@ impl Repository {
         check(self.git.run(&self.root, args))
     }
 
+    /// 다른 모듈(refs 등)이 쓰는 git 실행. 성공하면 stdout.
+    pub(crate) fn git_run<S: AsRef<str>>(&self, args: &[S]) -> Result<String> {
+        self.run(args).map(|o| o.stdout)
+    }
+
+    /// 환경 변수를 더해 실행한다. 성공하면 stdout 과 stderr 를 이어 붙인 것.
+    pub(crate) fn git_run_with_env<S: AsRef<str>>(&self, args: &[S], env: &[(&str, &str)]) -> Result<String> {
+        let env: HashMap<String, String> = env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        check(self.git.run_with(&self.root, args, None, &env)).map(|o| format!("{}{}", o.stdout, o.stderr))
+    }
+
     fn run_input<S: AsRef<str>>(&self, args: &[S], input: &str) -> Result<GitOutput> {
         check(self.git.run_with(&self.root, args, Some(input), &HashMap::new()))
     }

@@ -15,7 +15,7 @@ const OVERSCAN = 6;
 const LANE_COLORS = ['#599eff', '#59cc73', '#ff9e40', '#b885ff', '#ff73a6', '#4dcccc', '#f2cc4d', '#f26659'];
 export const laneColor = (index) => LANE_COLORS[index % LANE_COLORS.length];
 
-export function createGraph({ scroll, sizer, canvas, rows, header, onSelect }) {
+export function createGraph({ scroll, sizer, canvas, rows, onSelect, onContextMenu, onRefActivate }) {
   let commits = [];
   let nodes = [];
   let edges = [];
@@ -217,6 +217,17 @@ export function createGraph({ scroll, sizer, canvas, rows, header, onSelect }) {
 
   scroll.addEventListener('scroll', onScroll);
   window.addEventListener('resize', onScroll);
+  rows.addEventListener('contextmenu', (event) => {
+    const row = event.target.closest('.grow');
+    if (!row || !onContextMenu) return;
+    event.preventDefault();
+    select(row.dataset.key);
+    onContextMenu(row.dataset.key, event, commits.find((c) => c.hash === row.dataset.key));
+  });
+  rows.addEventListener('dblclick', (event) => {
+    const pill = event.target.closest('.ref-pill');
+    if (pill && onRefActivate) onRefActivate({ kind: pill.dataset.kind, name: pill.dataset.name });
+  });
   rows.addEventListener('click', (event) => {
     const row = event.target.closest('.grow');
     if (row) select(row.dataset.key);
@@ -244,7 +255,7 @@ export function createGraph({ scroll, sizer, canvas, rows, header, onSelect }) {
 
 function refPill(ref, color) {
   const icon = { head: '✓ ', local: '', remote: '☁ ', tag: '◆ ', detachedHead: '' }[ref.kind] ?? '';
-  const pill = el('span', { class: `ref-pill ref-${ref.kind}`, title: ref.name, text: icon + ref.name });
+  const pill = el('span', { class: `ref-pill ref-${ref.kind}`, title: `${ref.name}\n더블클릭: 체크아웃`, text: icon + ref.name, 'data-kind': ref.kind, 'data-name': ref.name });
   if (ref.kind !== 'tag') pill.style.setProperty('--pill', color);
   return pill;
 }

@@ -465,3 +465,18 @@ select.field { height: 30px; }
 .menu-item:disabled { opacity: 0.4; cursor: default; }
 .menu-item.danger { color: var(--git-danger); }
 .menu-sep { height: 1px; margin: 4px 6px; background: var(--git-menu-border); }
+
+/* ── 3단계: 사이드바 ─────────────────────────────────── */
+
+.side-title { cursor: pointer; user-select: none; }
+.side-title:hover { color: var(--git-text); }
+.chev { width: 10px; display: inline-block; font-size: 9px; }
+.side-add { margin-left: auto; width: 18px; height: 18px; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; font-size: 14px; line-height: 16px; }
+.side-add:hover { background: var(--git-hover); color: var(--git-text); }
+.side-group .side-group { margin: 0; }
+.side-group .side-group .side-title { padding-left: 24px; text-transform: none; letter-spacing: 0; }
+.side-track { display: flex; gap: 4px; font-size: 11px; }
+.side-track .ahead { color: var(--git-success); }
+.side-track .behind { color: var(--git-warning); }
+.side-track .gone { color: var(--git-danger); }
+.side-empty { padding: 2px 24px; }
