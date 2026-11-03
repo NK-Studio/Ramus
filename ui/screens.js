@@ -61,7 +61,7 @@ export function cloneDialog({ call, cloneDir, withLogin, showError }) {
     const browse = el('button', {
       class: 'btn', text: '찾아보기…',
       onclick: async () => {
-        const picked = await call('pickFolder', { start: parent.value });
+        const picked = await call('pick', { kind: 'folder', start: parent.value, title: '받을 폴더 고르기' });
         if (picked) parent.value = picked;
       },
     });
@@ -143,33 +143,74 @@ const PULL_MODES = [
   { value: 'rebase', label: 'Rebase' },
 ];
 
-/** 설정 화면. 바꾼 설정을 돌려준다(닫으면 null). */
-export function settingsDialog({ call, settings, onTheme, showError, toast }) {
+function select(options, value) {
+  const node = el('select', { class: 'field' }, options.map((o) => el('option', { value: o.value, text: o.label })));
+  node.value = value;
+  return node;
+}
+
+/**
+ * 설정 화면. 바꾼 설정을 돌려준다(닫으면 null). 왼쪽 구역: 일반 · 동기화 · diff · 그래프 · 오류 표시 · SSL 인증서 · git · 로그인.
+ * Rust 가 쓰는 값(테마·풀 방식·자동 페치·SSL·git 경로)은 setSettings, 화면만 쓰는 값은 prefs(설정 파일의 ui).
+ */
+export function settingsDialog({ call, settings, onTheme, showError, toast, section, prefs, graph, onPrefs }) {
   return modal('settings', async (dialog, close) => {
     const s = structuredClone(settings);
+    const p = (key, fallback) => prefs?.get(key) ?? fallback;
     const windows = s.platform === 'windows';
     const mac = s.platform === 'macos';
     const gitVersion = el('span', { class: 'muted small', text: '확인 중…' });
     call('gitVersion').then((v) => { gitVersion.textContent = v; }).catch((e) => { gitVersion.textContent = `git 을 찾지 못했습니다: ${e.message}`; gitVersion.classList.add('error-text'); });
 
     // ── 일반
-    const theme = el('select', { class: 'field' }, el('option', { value: 'dark', text: 'JetBrains 다크' }), el('option', { value: 'light', text: 'JetBrains 라이트' }));
-    theme.value = s.theme;
+    const theme = select([{ value: 'dark', label: 'JetBrains 다크' }, { value: 'light', label: 'JetBrains 라이트' }, { value: 'system', label: '시스템 따르기' }], s.theme);
     theme.addEventListener('change', () => onTheme(theme.value));
-    const pullMode = el('select', { class: 'field' }, PULL_MODES.map((m) => el('option', { value: m.value, text: m.label })));
-    pullMode.value = s.pullMode;
-    const diffLayout = el('select', { class: 'field' }, el('option', { value: 'inline', text: 'Inline (한 칸)' }), el('option', { value: 'split', text: 'Split (나란히)' }));
-    diffLayout.value = s.diffLayout;
-    const autoFetch = input(String(s.autoFetchMinutes), { type: 'number', min: 0, max: 1440 });
-    const gitPath = input(s.gitPath, { placeholder: '비우면 PATH 의 git' });
+    const layout = select([{ value: 'gitkraken', label: 'GitKraken' }, { value: 'fork', label: 'Fork' }, { value: 'unity', label: 'Unity VCS' }], p('layout', 'gitkraken'));
+    const explorer = select([{ value: 'fork', label: 'Fork' }, { value: 'unity', label: 'Unity VCS' }], p('explorer', 'fork'));
+    const language = select([{ value: 'ko', label: '한국어' }, { value: 'en', label: 'English (준비 중)' }], p('language', 'ko'));
+    language.querySelector('option[value="en"]').disabled = true;
+    const scale = select([60, 70, 80, 90, 100, 110, 125, 150, 175, 200].map((n) => ({ value: String(n / 100), label: `${n}%` })), String(p('ui.scale', 1)));
+    const fontSize = select([12, 13, 14, 15, 16].map((n) => ({ value: String(n), label: `${n}px` })), String(p('ui.fontSize', 13)));
+
+    // ── 동기화
+    const autoFetchOn = checkbox(s.autoFetchMinutes > 0, '자동 페치');
+    const autoFetch = input(String(s.autoFetchMinutes || 10), { type: 'number', min: 1, max: 1440 });
+    autoFetchOn.box.addEventListener('change', () => { autoFetch.disabled = !autoFetchOn.box.checked; });
+    autoFetch.disabled = !autoFetchOn.box.checked;
+    const pullMode = select(PULL_MODES, s.pullMode);
+    const focusRefresh = checkbox(p('sync.focusRefresh', true), '창에 포커스가 오면 새로고침');
+    const watch = checkbox(p('sync.watch', true), '파일 감시 (편집기 저장·터미널 git 을 바로 반영)');
+
+    // ── diff
+    const diffView = select([{ value: 'hunk', label: 'Hunk — 바뀐 곳과 앞뒤 몇 줄' }, { value: 'inline', label: 'Inline — 파일 전체' }, { value: 'split', label: 'Split — 파일 전체를 나란히' }], p('diff.view', 'hunk'));
+    const context = input(String(p('diff.context', 3)), { type: 'number', min: 0, max: 50 });
+    const ignoreWs = checkbox(p('diff.ignoreWhitespace', false), '공백 바뀜 무시', '(켜면 줄 단위 Stage 를 끕니다)');
+    const algorithm = select([{ value: '', label: 'git 기본값' }, { value: 'myers', label: 'Myers' }, { value: 'minimal', label: 'Minimal' }, { value: 'patience', label: 'Patience' }, { value: 'histogram', label: 'Histogram' }], p('diff.algorithm', ''));
+    const editor = input(p('editor', ''), { placeholder: 'code -g {file}:{line}  (비우면 VS Code, 없으면 기본 프로그램)' });
+    const difftool = input(p('difftool', ''), { placeholder: '비우면 git 설정의 diff.tool (예: opendiff, bc, meld)' });
+
+    // ── 그래프
+    const avatars = checkbox(p('graph.avatars', true), '작성자 사진(아바타)', '— GitHub·Gravatar 에서 받아 디스크에 7일 둡니다');
+    const count = input(String(p('graph.count', 5000)), { type: 'number', min: 500, max: 100000, step: 500 });
+    const stopRebase = checkbox(p('rebase.stop', true), 'Rebase 충돌 때 멈추기', '— 끄면 충돌 시 시작 전으로 되돌립니다');
+
+    // ── 오류 표시
+    const errorMode = select([{ value: 'friendly', label: '설명 (원인·해결)' }, { value: 'raw', label: 'git 원문' }], p('error.mode', 'friendly'));
 
     // ── SSL
     const verify = checkbox(s.ssl.verify, '인증서 확인', '(끄면 회사 프록시 인증서 문제는 사라지지만 안전하지 않습니다)');
+    verify.box.addEventListener('change', async () => {
+      if (verify.box.checked) return updateSsl();
+      // 끄기 전에 한 번 더 확인한다.
+      const { confirmDialog } = await import('./dialogs.js');
+      if (!(await confirmDialog({ title: '인증서 확인 끄기', danger: true, message: '서버 인증서를 확인하지 않으면 중간에서 가로챈 연결도 받아들입니다. 회사 루트 인증서 파일을 지정하는 쪽을 먼저 권합니다. 그래도 끌까요?', ok: '끄기' }))) verify.box.checked = true;
+      updateSsl();
+    });
     const caFile = input(s.ssl.caFile, { placeholder: '회사 루트 인증서 PEM 파일 (비우면 git 기본값)' });
     const browseCa = el('button', {
       class: 'btn', text: '찾아보기…',
       onclick: async () => {
-        const picked = await call('pickFile', {});
+        const picked = await call('pick', { kind: 'file', title: '인증서 파일 고르기', filters: [{ name: '인증서', ext: ['pem', 'crt', 'cer'] }, { name: '모든 파일', ext: ['*'] }] });
         if (picked) caFile.value = picked;
       },
     });
@@ -189,14 +230,13 @@ export function settingsDialog({ call, settings, onTheme, showError, toast }) {
     const testUrl = input('', { placeholder: '비우면 열린 저장소의 원격' });
     const testResult = el('div', { class: 'small' });
     const sslState = () => ({ verify: verify.box.checked, caFile: caFile.value.trim(), useSystemStore: systemStore.box.checked, skipRevocationCheck: skipRevoke.box.checked });
-    const updateSsl = () => {
+    function updateSsl() {
       const off = !verify.box.checked;
       for (const node of [caFile, browseCa, systemStore.box, skipRevoke.box]) node.disabled = off;
       skipRevoke.box.disabled = off || !systemStore.box.checked;
       caFile.disabled = off || (windows && systemStore.box.checked);
       browseCa.disabled = caFile.disabled;
-    };
-    verify.box.addEventListener('change', updateSsl);
+    }
     systemStore.box.addEventListener('change', updateSsl);
     updateSsl();
     const testButton = el('button', {
@@ -217,58 +257,88 @@ export function settingsDialog({ call, settings, onTheme, showError, toast }) {
       },
     });
 
+    // ── git
+    const gitPath = input(s.gitPath, { placeholder: '비우면 PATH 의 git' });
+    const browseGit = el('button', { class: 'btn', text: '찾아보기…', onclick: async () => { const picked = await call('pick', { kind: 'file', title: 'git 실행 파일' }); if (picked) gitPath.value = picked; } });
+
     // ── 로그인
     const sshInfo = el('div', { class: 'row' });
     const renderSsh = () => {
       sshInfo.replaceChildren(...[s.sshLogin
         ? el('span', { text: `SSH: ${s.sshLogin} 의 비밀번호를 기억하는 중 (앱을 끄면 잊습니다)` })
         : el('span', { class: 'muted', text: '기억한 SSH 로그인이 없습니다. 비밀번호를 받는 서버에 접속하면 로그인 창이 뜹니다.' }),
-      s.sshLogin ? el('button', {
-        class: 'btn small', text: '잊기',
-        onclick: async () => {
-          await call('forgetSshLogin');
-          s.sshLogin = null;
-          renderSsh();
-        },
-      }) : null].filter(Boolean));
+      s.sshLogin ? el('button', { class: 'btn small', text: '잊기', onclick: async () => { await call('forgetSshLogin'); s.sshLogin = null; renderSsh(); } }) : null].filter(Boolean));
     };
     renderSsh();
+    const githubAccounts = el('div', { class: 'gh-accounts' });
+    const renderGithub = async () => {
+      const accounts = await call('githubAccounts').catch(() => null);
+      if (!accounts) {
+        githubAccounts.replaceChildren(el('span', { class: 'muted small', text: 'GitHub 계정 정보를 읽지 못했습니다.' }));
+        return;
+      }
+      githubAccounts.replaceChildren(...(accounts.length ? accounts.map((a) => el('div', { class: 'row' },
+        el('span', { text: `${a.login}${a.source === 'app' ? '' : ` (${a.source})`}` }),
+        a.source === 'app' ? el('button', { class: 'btn small', text: '로그아웃', onclick: async () => { await call('githubLogout', { login: a.login }); renderGithub(); } }) : null))
+        : [el('span', { class: 'muted small', text: '로그인한 GitHub 계정이 없습니다. ⋮ 메뉴 > GitHub 로그인 으로 연결하세요.' })]));
+    };
+    renderGithub();
 
     const save = async () => {
-      const minutes = Math.max(0, Math.min(1440, parseInt(autoFetch.value, 10) || 0));
+      const minutes = autoFetchOn.box.checked ? Math.max(1, Math.min(1440, parseInt(autoFetch.value, 10) || 10)) : 0;
       try {
         const saved = await call('setSettings', {
-          theme: theme.value, pullMode: pullMode.value, diffLayout: diffLayout.value, autoFetchMinutes: minutes, gitPath: gitPath.value, ssl: sslState(),
+          theme: theme.value, pullMode: pullMode.value, diffLayout: diffView.value === 'split' ? 'split' : 'inline', autoFetchMinutes: minutes, gitPath: gitPath.value, ssl: sslState(),
         });
+        const values = {
+          layout: layout.value, explorer: explorer.value, language: language.value, 'ui.scale': Number(scale.value), 'ui.fontSize': Number(fontSize.value),
+          'sync.focusRefresh': focusRefresh.box.checked, 'sync.watch': watch.box.checked,
+          'diff.view': diffView.value, 'diff.context': Math.max(0, Math.min(50, parseInt(context.value, 10) || 3)), 'diff.ignoreWhitespace': ignoreWs.box.checked,
+          'diff.algorithm': algorithm.value, editor: editor.value.trim(), difftool: difftool.value.trim(),
+          'graph.avatars': avatars.box.checked, 'graph.count': Math.max(500, parseInt(count.value, 10) || 5000), 'rebase.stop': stopRebase.box.checked, 'error.mode': errorMode.value,
+        };
+        for (const [key, value] of Object.entries(values)) prefs?.set(key, value);
+        saved.ui = { ...(saved.ui ?? {}), ...values };
+        onPrefs?.(values);
         close(saved);
       } catch (e) {
         showError(e);
       }
     };
 
-    const section = (title, ...children) => el('section', { class: 'settings-section' }, el('h3', { text: title }), children);
+    const sectionEl = (id, title, ...children) => el('section', { class: 'settings-section', 'data-section': id }, el('h3', { text: title }), children);
+    const sections = [
+      sectionEl('general', '일반', field('테마', theme), field('배치', layout), field('탐색기 모양', explorer), field('언어', language), el('div', { class: 'row' }, field('UI 배율', scale), field('글꼴 크기', fontSize))),
+      sectionEl('sync', '동기화', autoFetchOn.row, field('자동 페치 간격 (분)', autoFetch, '다른 곳에서 푸시한 커밋을 미리 받아 와 ↓ 로 보여 줍니다.'), field('풀 방식', pullMode), focusRefresh.row, watch.row),
+      sectionEl('diff', 'diff', field('기본 보기', diffView), field('Hunk 보기의 문맥 줄 수', context), ignoreWs.row, field('diff 알고리즘', algorithm), field('외부 편집기', editor, '{file} 과 {line} 은 파일 경로와 줄 번호로 바뀝니다.'), field('외부 diff 도구', difftool)),
+      sectionEl('graph', '그래프', avatars.row, field('처음 읽는 커밋 수', count, '끝에 닿으면 더 읽습니다.'), stopRebase.row),
+      sectionEl('errors', '오류 표시', field('오류 대화상자 기본값', errorMode)),
+      sectionEl('ssl', 'SSL 인증서 (회사망)',
+        el('div', { class: 'muted small', text: '회사 보안 프록시가 SSL 을 가로채면 git 이 "SSL certificate problem" 으로 실패합니다. 여기 설정은 앱이 부르는 git 에만 붙고(-c), 사용자 .gitconfig 는 바꾸지 않습니다.' }),
+        verify.row, windows ? systemStore.row : null, windows ? skipRevoke.row : null,
+        el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'CA 인증서 파일' }), el('div', { class: 'row' }, caFile, browseCa)),
+        keychain, el('div', { class: 'row' }, testUrl, testButton), testResult),
+      sectionEl('git', 'git', el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'git 실행 파일' }), el('div', { class: 'row' }, gitPath, browseGit)), gitVersion),
+      sectionEl('login', '로그인', el('div', { class: 'modal-label', text: 'GitHub' }), githubAccounts, el('div', { class: 'modal-label', text: 'GitHub 가 아닌 서버' }), sshInfo,
+        el('div', { class: 'muted small', text: 'https 서버(사내 GitLab 등)의 계정은 이 PC 의 자격 증명 저장소에 들어갑니다. 지우려면 키체인 접근·자격 증명 관리자에서 지워 주세요.' })),
+    ];
+    const body = el('div', { class: 'settings-body' }, sections);
+    const nav = el('nav', { class: 'settings-nav' }, sections.map((sec) => el('button', {
+      class: 'settings-tab', text: sec.querySelector('h3').textContent,
+      onclick: () => sec.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+    })));
+    body.addEventListener('scroll', () => {
+      const top = body.scrollTop;
+      let active = 0;
+      sections.forEach((sec, i) => { if (sec.offsetTop - body.offsetTop - 20 <= top) active = i; });
+      nav.querySelectorAll('.settings-tab').forEach((b, i) => b.classList.toggle('on', i === active));
+    });
     dialog.append(
       el('div', { class: 'modal-title', text: '설정' }),
-      el('div', { class: 'settings-body' },
-        section('일반',
-          field('테마', theme),
-          field('풀 방식', pullMode),
-          field('diff 배치', diffLayout),
-          field('자동 페치 간격 (분)', autoFetch, '0 이면 끕니다. 다른 곳에서 푸시한 커밋을 미리 받아 와 ↓ 로 보여 줍니다.'),
-          field('git 실행 파일', gitPath),
-          gitVersion),
-        section('SSL 인증서 (회사망)',
-          el('div', { class: 'muted small', text: '회사 보안 프록시가 SSL 을 가로채면 git 이 "SSL certificate problem" 으로 실패합니다. 여기 설정은 앱이 부르는 git 에만 붙고(-c), 사용자 .gitconfig 는 바꾸지 않습니다.' }),
-          verify.row,
-          windows ? systemStore.row : null,
-          windows ? skipRevoke.row : null,
-          el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'CA 인증서 파일' }), el('div', { class: 'row' }, caFile, browseCa)),
-          keychain,
-          el('div', { class: 'row' }, testUrl, testButton),
-          testResult),
-        section('로그인 (GitHub 가 아닌 서버)', sshInfo,
-          el('div', { class: 'muted small', text: 'https 서버(사내 GitLab 등)의 계정은 이 PC 의 자격 증명 저장소에 들어갑니다. 지우려면 키체인 접근·자격 증명 관리자에서 지워 주세요.' }))),
+      el('div', { class: 'settings-layout' }, nav, body),
       el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '취소', onclick: () => close(null) }), el('button', { class: 'btn primary', text: '저장', onclick: save })));
+    if (section) requestAnimationFrame(() => body.querySelector(`[data-section="${section}"]`)?.scrollIntoView({ block: 'start' }));
+    body.dispatchEvent(new Event('scroll'));
   });
 }
 

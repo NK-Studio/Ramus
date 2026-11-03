@@ -8,7 +8,12 @@ export function el(tag, attrs = {}, ...children) {
     if (key === 'class') node.className = value;
     else if (key === 'text') node.textContent = value;
     else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
-    else if (key === 'style' && typeof value === 'object') Object.assign(node.style, value);
+    else if (key === 'style' && typeof value === 'object') {
+      for (const [name, v] of Object.entries(value)) {
+        if (name.startsWith('--')) node.style.setProperty(name, v);
+        else node.style[name] = v;
+      }
+    }
     else node.setAttribute(key, value === true ? '' : value);
   }
   for (const child of children.flat()) {
@@ -66,4 +71,9 @@ export function josa(word, withBatchim, without) {
 export function splitPath(path) {
   const at = path.lastIndexOf('/');
   return at < 0 ? { dir: '', name: path } : { dir: path.slice(0, at + 1), name: path.slice(at + 1) };
+}
+
+/** 한글 IME 조합 중인 키인가(조합 중 Enter 를 확인으로 처리하지 않으려고). */
+export function isComposing(event) {
+  return event.isComposing || event.keyCode === 229;
 }

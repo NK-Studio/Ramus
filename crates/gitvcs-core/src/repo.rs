@@ -24,13 +24,21 @@ pub struct GitError {
     pub auth: bool,
     /// 앱에서 로그인하면 풀리는 실패(GitHub 가 아닌 서버). 화면이 로그인 창을 띄우고 그 작업을 다시 한다.
     pub login: Option<crate::login::LoginTarget>,
+    /// 원인·해결 한 줄씩(오류 대화상자의 "설명").
+    pub advice: crate::advice::Advice,
 }
 
 impl GitError {
     pub fn new(message: impl Into<String>) -> Self {
         // git 의 "hint:" 줄은 터미널 사용자용 설명이라 길기만 하다 — 뺀다.
         let message: String = message.into().lines().filter(|l| !l.starts_with("hint:")).collect::<Vec<_>>().join("\n").trim().to_string();
-        GitError { ssl: ssl::is_ssl_failure(&message), auth: is_auth_failure(&message), login: crate::login::parse_failure(&message), message }
+        GitError {
+            ssl: ssl::is_ssl_failure(&message),
+            auth: is_auth_failure(&message),
+            login: crate::login::parse_failure(&message),
+            advice: crate::advice::explain(&message, None),
+            message,
+        }
     }
 }
 
@@ -62,6 +70,8 @@ pub struct RepoStatus {
     pub conflicted: usize,
     /// 충돌 등으로 멈춘 채 진행 중인 작업(터미널에서 시작한 것도).
     pub operation: Option<crate::conflict::Operation>,
+    /// 멈춘 병합에서 합쳐 오는 커밋(MERGE_HEAD). 그래프가 작업 중 줄에서 그 커밋까지 점선을 긋는다.
+    pub merge_head: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -73,6 +83,17 @@ pub struct History {
     pub head: Option<String>,
     /// 더 읽을 커밋이 남았을 수 있다(`max_count` 만큼 꽉 찼다).
     pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    pub status: RepoStatus,
+    pub refs: crate::refs::Refs,
+    pub history: History,
+    pub remotes: Vec<crate::ops::Remote>,
+    pub worktrees: Vec<crate::ops::Worktree>,
+    pub submodules: Vec<crate::ops::Submodule>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -114,6 +135,9 @@ pub enum DiffTarget {
     /// 커밋이 첫 부모 대비 바꾼 것. 최초 커밋은 빈 트리 대비.
     #[serde(rename_all = "camelCase")]
     Commit { hash: String, path: String, #[serde(default)] original_path: Option<String> },
+    /// 두 판 사이(비교 창). `to` 가 없으면 작업 트리, `range` 면 공통 조상부터.
+    #[serde(rename_all = "camelCase")]
+    Range { from: String, #[serde(default)] to: Option<String>, #[serde(default)] range: bool, path: String, #[serde(default)] original_path: Option<String> },
 }
 
 /// 고른 줄로 무엇을 하는가.
@@ -149,18 +173,50 @@ impl PullMode {
     }
 }
 
-fn diff_options(args: &mut Vec<String>) {
+/// diff 를 어떻게 볼 것인가.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DiffOptions {
+    /// 앞뒤 문맥 줄 수. `FULL_CONTEXT` 면 파일 전체(Inline·Split·파일 보기).
+    pub context: u32,
+    /// 공백 바뀜을 무시한다(이때는 줄 단위 Stage 를 하지 않는다 — 패치가 맞지 않는다).
+    pub ignore_whitespace: bool,
+    /// diff 알고리즘(myers·minimal·patience·histogram). 비우면 git 기본값.
+    pub algorithm: Option<String>,
+}
+
+impl Default for DiffOptions {
+    fn default() -> Self {
+        DiffOptions { context: 3, ignore_whitespace: false, algorithm: None }
+    }
+}
+
+/// 파일 전체를 문맥으로 보인다.
+pub const FULL_CONTEXT: u32 = 1_000_000;
+
+fn diff_options(args: &mut Vec<String>, options: DiffOptions) {
     // 사용자의 외부 diff 설정(diff.external, textconv)은 끄고, 색을 빼서 읽을 수 있는 출력을 받는다.
-    args.extend(["--no-color", "--no-ext-diff", "--no-textconv", "-U3"].map(String::from));
+    args.extend(["--no-color", "--no-ext-diff", "--no-textconv"].map(String::from));
+    args.push(format!("-U{}", options.context.min(FULL_CONTEXT)));
+    if options.ignore_whitespace {
+        args.push("-w".into());
+    }
+    if let Some(algorithm) = options.algorithm.as_deref().filter(|a| ["myers", "minimal", "patience", "histogram"].contains(a)) {
+        args.push(format!("--diff-algorithm={algorithm}"));
+    }
 }
 
 /// diff 를 보여 줄 git 인자. 순수 함수라 테스트로 확인한다.
 pub fn diff_args(target: &DiffTarget) -> Vec<String> {
+    diff_args_with(target, DiffOptions::default())
+}
+
+pub fn diff_args_with(target: &DiffTarget, options: DiffOptions) -> Vec<String> {
     let mut args: Vec<String>;
     let (path, original) = match target {
         DiffTarget::Unstaged { path, untracked: true } => {
             args = vec!["diff".into(), "--no-index".into()];
-            diff_options(&mut args);
+            diff_options(&mut args, options);
             // --no-index 의 /dev/null 은 Windows git 도 특별히 읽는다.
             args.extend(["--".into(), "/dev/null".into(), path.clone()]);
             return args;
@@ -173,9 +229,22 @@ pub fn diff_args(target: &DiffTarget) -> Vec<String> {
             args = vec!["diff".into(), "--cached".into(), "-M".into()];
             (path, original_path.as_ref())
         }
+        DiffTarget::Range { from, to, range, path, original_path } => {
+            args = vec!["diff".into(), "-M".into()];
+            diff_options(&mut args, options);
+            match (to, range) {
+                (Some(to), true) => args.push(format!("{from}...{to}")),
+                (Some(to), false) => args.extend([from.clone(), to.clone()]),
+                (None, _) => args.push(from.clone()),
+            }
+            args.push("--".into());
+            args.extend(original_path.iter().cloned());
+            args.push(path.clone());
+            return args;
+        }
         DiffTarget::Commit { hash, path, original_path } => {
             args = vec!["diff-tree".into(), "-p".into(), "-M".into(), "--root".into(), "--diff-merges=first-parent".into()];
-            diff_options(&mut args);
+            diff_options(&mut args, options);
             args.push(hash.clone());
             args.push("--".into());
             args.extend(original_path.iter().cloned());
@@ -183,7 +252,7 @@ pub fn diff_args(target: &DiffTarget) -> Vec<String> {
             return args;
         }
     };
-    diff_options(&mut args);
+    diff_options(&mut args, options);
     args.push("--".into());
     args.extend(original.cloned());
     args.push(path.clone());
@@ -224,6 +293,11 @@ impl Repository {
         std::fs::metadata(self.git_dir.join("FETCH_HEAD")).and_then(|m| m.modified()).ok()
     }
 
+    /// 서브모듈이면 상위 저장소 폴더.
+    pub fn superproject(&self) -> Option<String> {
+        self.git_run(&["rev-parse", "--show-superproject-working-tree"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    }
+
     pub fn name(&self) -> String {
         self.root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| self.root.display().to_string())
     }
@@ -243,6 +317,12 @@ impl Repository {
         check(self.git.run_with(&self.root, args, None, &env)).map(|o| format!("{}{}", o.stdout, o.stderr))
     }
 
+    /// 표준 입력과 환경 변수를 함께 넘긴다. 성공하면 stdout.
+    pub(crate) fn git_run_full<S: AsRef<str>>(&self, args: &[S], input: Option<&str>, env: &[(&str, &str)]) -> Result<String> {
+        let env: HashMap<String, String> = env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        check(self.git.run_with(&self.root, args, input, &env)).map(|o| o.stdout)
+    }
+
     fn run_input<S: AsRef<str>>(&self, args: &[S], input: &str) -> Result<GitOutput> {
         check(self.git.run_with(&self.root, args, Some(input), &HashMap::new()))
     }
@@ -253,7 +333,8 @@ impl Repository {
         let conflicted = entries.iter().filter(|e| e.state == status::FileState::Conflicted).count();
         let staged = entries.iter().filter(|e| e.is_staged()).cloned().collect();
         let unstaged = entries.into_iter().filter(|e| e.is_unstaged()).collect();
-        Ok(RepoStatus { branch, staged, unstaged, conflicted, operation: crate::conflict::detect(&self.git_dir) })
+        let merge_head = std::fs::read_to_string(self.git_dir.join("MERGE_HEAD")).ok().and_then(|t| t.split_whitespace().next().map(str::to_string));
+        Ok(RepoStatus { branch, staged, unstaged, conflicted, operation: crate::conflict::detect(&self.git_dir), merge_head })
     }
 
     pub fn remotes(&self) -> Result<Vec<String>> {
@@ -271,19 +352,40 @@ impl Repository {
         out.success().then(|| out.stdout.trim().to_string())
     }
 
-    /// 모든 브랜치의 커밋(stash 는 빼고). 커밋이 하나도 없으면 빈 히스토리.
-    pub fn history(&self, max_count: usize) -> Result<History> {
+    /// 모든 브랜치의 커밋(stash 는 빼고)과 그 그래프. 커밋이 하나도 없으면 빈 히스토리.
+    /// `head_first` 면 지금 브랜치가 맨 왼쪽 열을 갖는다 — 그래프 맨 위 작업 중 줄(WIP)이 지금 브랜치에 이어질 때.
+    pub fn history(&self, max_count: usize, refs: &crate::refs::Refs, head_first: bool) -> Result<History> {
         let head = self.head();
         if head.is_none() {
             return Ok(History { commits: Vec::new(), graph: GraphLayout { lane_count: 1, ..Default::default() }, head, truncated: false });
         }
-        let remotes = self.remotes()?;
         let max = format!("--max-count={max_count}");
         let out = self.run(&["log", log::LOG_FORMAT, "--date-order", "--exclude=refs/stash", "--all", "HEAD", &max])?;
-        let commits = log::parse_commits(&out.stdout, &remotes);
-        let graph = graph::layout(&commits);
+        let commits = log::parse_commits(&out.stdout, &refs.remotes);
+        let tips: Vec<graph::BranchTip> = refs
+            .local
+            .iter()
+            .chain(refs.remote.iter())
+            .map(|b| graph::BranchTip { name: b.name.clone(), hash: b.hash.clone(), remote: b.remote.is_some(), current: b.current, time: b.time })
+            .collect();
+        let graph = graph::build(&commits, &tips, graph::ANONYMOUS_LANE, graph::Options { top_down: true, head_first });
         let truncated = commits.len() >= max_count;
         Ok(History { commits, graph, head, truncated })
+    }
+
+    /// 화면을 새로 그릴 때 필요한 것을 한 번에 읽는다: 상태·참조·히스토리. 상태와 참조는 함께 읽고, 그래프는 작업 중 변경이 있는지에 따라 배치한다.
+    pub fn snapshot(&self, max_count: usize) -> Result<Snapshot> {
+        let (status, refs, extra) = std::thread::scope(|scope| {
+            let status = scope.spawn(|| self.status());
+            let extra = scope.spawn(|| (self.remote_list().unwrap_or_default(), self.worktrees().unwrap_or_default(), self.submodules().unwrap_or_default()));
+            let refs = self.refs();
+            (status.join().unwrap_or_else(|_| Err(GitError::new("상태를 읽지 못했습니다."))), refs, extra.join().unwrap_or_default())
+        });
+        let (status, refs) = (status?, refs?);
+        let wip = !status.staged.is_empty() || !status.unstaged.is_empty();
+        let history = self.history(max_count, &refs, wip)?;
+        let (remotes, worktrees, submodules) = extra;
+        Ok(Snapshot { status, refs, history, remotes, worktrees, submodules })
     }
 
     pub fn commit_detail(&self, hash: &str) -> Result<CommitDetail> {
@@ -360,6 +462,11 @@ impl Repository {
 
     /// 지금 브랜치를 푸시한다. upstream 이 없으면 원격(origin 이 있으면 origin)에 같은 이름으로 올리고 추적을 건다.
     pub fn push(&self) -> Result<String> {
+        self.push_to(None)
+    }
+
+    /// `remote` 를 주면 upstream 이 없을 때 그 원격에 올린다(원격이 여럿일 때 화면이 고르게 한다).
+    pub fn push_to(&self, remote: Option<&str>) -> Result<String> {
         let st = self.status()?;
         if st.branch.detached {
             return Err(GitError::new("브랜치가 아닌 커밋을 보고 있어 푸시할 수 없습니다. 브랜치를 체크아웃해 주세요."));
@@ -368,7 +475,7 @@ impl Repository {
             self.run(&["push"])?
         } else {
             let remotes = self.remotes()?;
-            let remote = remotes.iter().find(|r| *r == "origin").or(remotes.first()).cloned();
+            let remote = remote.map(str::to_string).filter(|r| remotes.contains(r)).or_else(|| remotes.iter().find(|r| *r == "origin").or(remotes.first()).cloned());
             let Some(remote) = remote else {
                 return Err(GitError::new("원격 저장소가 없습니다. 먼저 원격을 추가해 주세요."));
             };
@@ -381,7 +488,11 @@ impl Repository {
 /// diff·줄 단위 작업·버리기·동기화.
 impl Repository {
     pub fn diff(&self, target: &DiffTarget) -> Result<DiffDocument> {
-        let out = self.git.run(&self.root, &diff_args(target));
+        self.diff_with(target, DiffOptions::default())
+    }
+
+    pub fn diff_with(&self, target: &DiffTarget, options: DiffOptions) -> Result<DiffDocument> {
+        let out = self.git.run(&self.root, &diff_args_with(target, options));
         // --no-index 는 차이가 있으면 종료 코드 1 이다.
         let no_index = matches!(target, DiffTarget::Unstaged { untracked: true, .. });
         if out.success() || (no_index && out.code == 1) {
@@ -394,11 +505,17 @@ impl Repository {
     /// 고른 줄만 Stage·Unstage·버린다. `fingerprint` 는 화면이 본 diff 의 지문 — 그 사이 파일이 바뀌었으면 하지 않는다
     /// (다른 줄을 건드리게 되므로).
     pub fn apply_lines(&self, action: LineAction, path: &str, untracked: bool, fingerprint: &str, selected: &[usize]) -> Result<()> {
+        self.apply_lines_with(action, path, untracked, fingerprint, selected, 3)
+    }
+
+    /// `context` 는 화면이 본 diff 의 문맥 줄 수(같은 diff 를 다시 만들어 지문을 맞춘다).
+    pub fn apply_lines_with(&self, action: LineAction, path: &str, untracked: bool, fingerprint: &str, selected: &[usize], context: u32) -> Result<()> {
+        let options = DiffOptions { context, ..DiffOptions::default() };
         let target = match action {
             LineAction::Unstage => DiffTarget::Staged { path: path.to_string(), original_path: None },
             _ => DiffTarget::Unstaged { path: path.to_string(), untracked },
         };
-        let doc = self.diff(&target)?;
+        let doc = self.diff_with(&target, options.clone())?;
         if doc.fingerprint != fingerprint {
             return Err(GitError::new("그 사이 파일이 바뀌었습니다. diff 를 다시 읽었으니 다시 골라 주세요."));
         }
@@ -409,7 +526,7 @@ impl Repository {
             }
             // 새 파일은 인덱스에 없어 패치를 댈 곳이 없다. 빈 내용으로 먼저 올리면(intent-to-add) 보통 diff 와 같아진다.
             self.run(&["add", "-N", "--", path])?;
-            doc = self.diff(&DiffTarget::Unstaged { path: path.to_string(), untracked: false })?;
+            doc = self.diff_with(&DiffTarget::Unstaged { path: path.to_string(), untracked: false }, options)?;
             if doc.fingerprint != fingerprint {
                 let _ = self.unstage(&[path.to_string()]);
                 return Err(GitError::new("새 파일의 diff 가 예상과 달라 Stage 하지 않았습니다."));
@@ -466,6 +583,14 @@ impl Repository {
             self.run(&args)?;
         }
         Ok(())
+    }
+
+    pub(crate) fn runner(&self) -> &GitRunner {
+        &self.git
+    }
+
+    pub(crate) fn safe_path(&self, path: &str) -> Result<PathBuf> {
+        self.safe_join(path)
     }
 
     /// 저장소 안의 경로만 받는다(`..` 로 밖을 가리키면 거절).

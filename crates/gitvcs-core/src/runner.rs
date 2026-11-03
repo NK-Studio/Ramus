@@ -65,6 +65,22 @@ impl GitRunner {
         self.run_with(dir, args, None, &HashMap::new())
     }
 
+    /// 바이트 그대로 받는다(그림 등). (종료 코드, stdout)
+    pub fn run_bytes<S: AsRef<str>>(&self, dir: &Path, args: &[S]) -> (i32, Vec<u8>) {
+        let globals = self.globals();
+        let git = globals.git_path.clone().unwrap_or_else(|| PathBuf::from("git"));
+        let mut cmd = Command::new(&git);
+        cmd.current_dir(dir).args(&globals.config_args).args(args.iter().map(|a| a.as_ref()));
+        apply_environment(&mut cmd);
+        cmd.envs(&globals.env);
+        hide_console(&mut cmd);
+        cmd.stdin(Stdio::null()).stderr(Stdio::null());
+        match cmd.output() {
+            Ok(out) => (out.status.code().unwrap_or(-1), out.stdout),
+            Err(_) => (-1, Vec::new()),
+        }
+    }
+
     /// `input` 은 표준 입력으로 흘려 넣는다(`git apply --cached` 의 패치 등).
     pub fn run_with<S: AsRef<str>>(&self, dir: &Path, args: &[S], input: Option<&str>, extra_env: &HashMap<String, String>) -> GitOutput {
         let globals = self.globals();

@@ -250,7 +250,20 @@ impl Repository {
     }
 
     pub fn rebase(&self, revision: &str) -> Result<String> {
-        self.explain_conflict("Rebase", self.git_run(&["rebase", "--autostash", revision]))
+        self.rebase_with(revision, true)
+    }
+
+    /// `stop_on_conflict` 가 아니면 충돌이 났을 때 시작 전으로 되돌린다(autostash 한 변경도 돌아온다).
+    pub fn rebase_with(&self, revision: &str, stop_on_conflict: bool) -> Result<String> {
+        let out = self.git_run(&["rebase", "--autostash", revision]);
+        if out.is_err() && !stop_on_conflict && self.git_dir().join("rebase-merge").exists() {
+            let _ = self.git_run(&["rebase", "--abort"]);
+            return Err(GitError::new(format!(
+                "Rebase 하다 충돌이 나서 시작하기 전으로 되돌렸습니다. 충돌을 직접 풀려면 설정 > 그래프 의 'Rebase 충돌 때 멈추기' 를 켜세요.\n\n{}",
+                out.err().map(|e| e.message).unwrap_or_default()
+            )));
+        }
+        self.explain_conflict("Rebase", out)
     }
 
     pub fn cherry_pick(&self, hash: &str, is_merge: bool) -> Result<String> {

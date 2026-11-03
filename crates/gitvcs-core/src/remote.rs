@@ -63,6 +63,34 @@ pub fn export_mac_keychain(dest_dir: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// `.gitignore` 틀.
+pub fn gitignore_template(name: &str) -> &'static str {
+    match name {
+        "unity" => "/[Ll]ibrary/\n/[Tt]emp/\n/[Oo]bj/\n/[Bb]uild/\n/[Bb]uilds/\n/[Ll]ogs/\n/[Uu]ser[Ss]ettings/\n/[Mm]emoryCaptures/\n*.csproj\n*.sln\n*.suo\n*.user\n*.pidb\n*.booproj\n*.svd\n*.pdb\n*.mdb\n*.opendb\n*.VC.db\n.vs/\n.idea/\n.DS_Store\n",
+        "node" => "node_modules/\ndist/\nbuild/\n.env\n*.log\n.DS_Store\n",
+        "rust" => "/target/\n**/*.rs.bk\n.DS_Store\n",
+        "basic" => ".DS_Store\nThumbs.db\n*.log\n.idea/\n.vscode/\n",
+        _ => "",
+    }
+}
+
+/// 폴더를 git 저장소로 만든다. `gitignore` 틀을 고르면 .gitignore 도 만든다(이미 있으면 그대로 둔다).
+pub fn init(git: &GitRunner, path: &Path, gitignore: &str) -> Result<()> {
+    if !path.is_dir() {
+        return Err(GitError::new(format!("폴더가 없습니다: {}", path.display())));
+    }
+    let out = git.run(path, &["init"]);
+    if !out.success() {
+        return Err(GitError::new(out.message()));
+    }
+    let template = gitignore_template(gitignore);
+    let ignore = path.join(".gitignore");
+    if !template.is_empty() && !ignore.exists() {
+        std::fs::write(&ignore, template).map_err(|e| GitError::new(format!(".gitignore 를 쓰지 못했습니다: {e}")))?;
+    }
+    Ok(())
+}
+
 impl Repository {
     /// 원격 주소. 없으면 None.
     pub fn remote_url(&self, name: &str) -> Option<String> {

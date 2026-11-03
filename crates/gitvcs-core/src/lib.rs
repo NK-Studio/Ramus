@@ -1,18 +1,26 @@
 //! gitvcs 의 git 로직. 화면(웹뷰)과 상관없이 PC 에 설치된 `git` CLI 를 실행하고 그 출력을 읽는다.
 
-pub mod graph;
+pub mod advice;
+pub mod avatar;
 pub mod conflict;
+pub mod github;
+pub mod graph;
+pub mod history;
 pub mod diff;
+pub mod files;
 pub mod log;
 pub mod login;
+pub mod ops;
 pub mod patch;
 pub mod refs;
 pub mod remote;
+pub mod rewrite;
 pub mod repo;
 pub mod runner;
 pub mod settings;
 pub mod ssl;
 pub mod status;
+pub mod undo;
 
 pub use repo::{GitError, Repository};
 pub use runner::{GitGlobals, GitRunner};

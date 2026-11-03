@@ -23,7 +23,7 @@ pub struct RecentRepo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
-    /// "dark" 또는 "light".
+    /// "dark", "light" 또는 "system"(OS 밝기를 따른다).
     pub theme: String,
     pub recent: Vec<RecentRepo>,
     /// 마지막에 열었던 저장소. 앱을 다시 켜면 연다.
@@ -40,6 +40,8 @@ pub struct Settings {
     pub open_tabs: Vec<String>,
     /// clone 할 때 처음 보여 줄 폴더.
     pub clone_dir: String,
+    /// 화면만 쓰는 설정(배치·칸 폭·순서·배율·접힘 등). Rust 는 읽지 않고 그대로 보관한다.
+    pub ui: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for Settings {
@@ -48,13 +50,14 @@ impl Default for Settings {
             theme: "dark".into(),
             recent: Vec::new(),
             last_repo: None,
-             git_path: String::new(),
+            git_path: String::new(),
             ssl: SslSettings::default(),
             pull_mode: PullMode::FfOnly,
             auto_fetch_minutes: 10,
             diff_layout: "inline".into(),
             open_tabs: Vec::new(),
             clone_dir: String::new(),
+            ui: serde_json::Map::new(),
         }
     }
 }

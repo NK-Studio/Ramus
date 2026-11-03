@@ -28,20 +28,42 @@ use tao::window::WindowBuilder;
 use wry::WebViewBuilder;
 
 const PROTOCOL: &str = "gitvcs";
+const MIN_WIDTH: f64 = 900.0;
+const MIN_HEIGHT: f64 = 560.0;
 
 enum UserEvent {
     /// 요청 `id` 에 대한 응답(이미 JSON 글자로 만든 것).
     Reply(String),
     /// 폴더 고르기 창을 띄우고 고른 저장소를 연다.
     PickRepo(u64),
-    /// 폴더·파일 고르기 창을 띄우고 고른 경로를 돌려준다. (요청 번호, 파일인가, 처음 폴더)
-    Pick(u64, bool, Option<String>),
+    /// 폴더·파일 고르기(저장 포함) 창을 띄우고 고른 경로를 돌려준다.
+    Pick(u64, PickRequest),
     Title(String),
     /// 요청 없이 화면에 알릴 일(파일 변경·자동 페치).
     Emit(String),
+    /// UI 배율: 웹뷰 확대와 최소 창 크기.
+    Zoom(f64),
     /// 개발 빌드 점검 통로: 이 JS 를 실행한다.
     #[allow(dead_code)]
     Eval(String),
+}
+
+/// 고르기 창 하나. kind: folder | file | save.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct PickRequest {
+    kind: String,
+    start: Option<String>,
+    title: Option<String>,
+    name: Option<String>,
+    filters: Vec<PickFilter>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct PickFilter {
+    name: String,
+    ext: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -106,7 +128,7 @@ fn main() -> wry::Result<()> {
     let window = WindowBuilder::new()
         .with_title("GitVcs")
         .with_inner_size(LogicalSize::new(1440.0, 900.0))
-        .with_min_inner_size(LogicalSize::new(900.0, 560.0))
+        .with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT))
         .build(&event_loop)
         .expect("창을 만들지 못했습니다");
 
@@ -144,11 +166,15 @@ fn main() -> wry::Result<()> {
                 dev_pending.resolve(request.id, text);
                 return;
             }
-            if request.cmd == "pickRepo" {
+            if request.cmd == "setZoom" {
+                let scale = request.args.get("scale").and_then(Value::as_f64).unwrap_or(1.0).clamp(0.6, 2.0);
+                let _ = ipc_proxy.send_event(UserEvent::Zoom(scale));
+                let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "pickRepo" {
                 let _ = ipc_proxy.send_event(UserEvent::PickRepo(request.id));
-            } else if request.cmd == "pickFolder" || request.cmd == "pickFile" {
-                let start = request.args.get("start").and_then(Value::as_str).map(str::to_string);
-                let _ = ipc_proxy.send_event(UserEvent::Pick(request.id, request.cmd == "pickFile", start));
+            } else if request.cmd == "pick" {
+                let pick: PickRequest = serde_json::from_value(request.args).unwrap_or_default();
+                let _ = ipc_proxy.send_event(UserEvent::Pick(request.id, pick));
             } else {
                 dispatch(ipc_state.clone(), ipc_proxy.clone(), request);
             }
@@ -163,21 +189,32 @@ fn main() -> wry::Result<()> {
                 let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.reply({body})"));
             }
             Event::UserEvent(UserEvent::Title(title)) => window.set_title(&title),
+            Event::UserEvent(UserEvent::Zoom(scale)) => {
+                let _ = webview.zoom(scale);
+                window.set_min_inner_size(Some(LogicalSize::new(MIN_WIDTH * scale, MIN_HEIGHT * scale)));
+            }
             Event::UserEvent(UserEvent::Eval(js)) => {
                 let _ = webview.evaluate_script(&js);
             }
             Event::UserEvent(UserEvent::Emit(body)) => {
                 let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.event({body})"));
             }
-            Event::UserEvent(UserEvent::Pick(id, file, start)) => {
+            Event::UserEvent(UserEvent::Pick(id, pick)) => {
                 let mut dialog = rfd::FileDialog::new();
-                if let Some(start) = start.filter(|s| Path::new(s).is_dir()) {
+                if let Some(start) = pick.start.as_deref().filter(|s| Path::new(s).is_dir()) {
                     dialog = dialog.set_directory(start);
                 }
-                let picked = if file {
-                    dialog.set_title("인증서 파일 고르기").add_filter("인증서", &["pem", "crt", "cer"]).add_filter("모든 파일", &["*"]).pick_file()
-                } else {
-                    dialog.set_title("폴더 고르기").pick_folder()
+                if let Some(title) = &pick.title {
+                    dialog = dialog.set_title(title);
+                }
+                for filter in &pick.filters {
+                    let ext: Vec<&str> = filter.ext.iter().map(String::as_str).collect();
+                    dialog = dialog.add_filter(&filter.name, &ext);
+                }
+                let picked = match pick.kind.as_str() {
+                    "file" => dialog.pick_file(),
+                    "save" => dialog.set_file_name(pick.name.as_deref().unwrap_or("")).save_file(),
+                    _ => dialog.pick_folder(),
                 };
                 let value = picked.map(|p| json!(p.display().to_string())).unwrap_or(Value::Null);
                 let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(value))));

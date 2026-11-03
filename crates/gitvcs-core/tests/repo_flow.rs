@@ -45,7 +45,7 @@ fn stage_commit_push_flow() {
 
     let repo = Repository::open(GitRunner::default(), &work).unwrap();
     // 커밋 전: 빈 히스토리, 새 파일은 Untracked.
-    assert!(repo.history(100).unwrap().commits.is_empty());
+    assert!(repo.snapshot(100).unwrap().history.commits.is_empty());
     std::fs::write(work.join("한글 [1].txt"), "안녕\n").unwrap();
     std::fs::write(work.join("b.txt"), "b\n").unwrap();
     let st = repo.status().unwrap();
@@ -86,11 +86,14 @@ fn stage_commit_push_flow() {
     repo.push().unwrap();
     assert_eq!(repo.status().unwrap().branch.ahead, 0);
 
-    let h = repo.history(100).unwrap();
+    let h = repo.snapshot(100).unwrap().history;
     assert_eq!(h.commits.len(), 2);
     assert_eq!(h.commits[0].subject, "둘째");
     assert!(h.commits[0].refs.iter().any(|r| r.name == "origin/main"));
     assert_eq!(h.graph.nodes.len(), 2);
+    // 지금 브랜치가 끝인 커밋에 이름표 하나(로컬+원격 합침).
+    assert_eq!(h.graph.nodes[0].refs.len(), 1);
+    assert!(h.graph.nodes[0].refs[0].has_remote);
 
     let detail = repo.commit_detail(&h.commits[1].hash).unwrap();
     assert_eq!(detail.files.len(), 2);
@@ -98,9 +101,17 @@ fn stage_commit_push_flow() {
 
     // Amend 는 HEAD 를 바꿔 끼운다. 이미 올린 옛 커밋은 origin/main 이 가리키므로 그래프에 가지로 남는다.
     repo.commit("둘째 (고침)", true).unwrap();
-    let h = repo.history(100).unwrap();
+    let h = repo.snapshot(100).unwrap().history;
     assert_eq!(h.commits.len(), 3);
     assert_eq!(h.commits.iter().find(|c| Some(&c.hash) == h.head.as_ref()).unwrap().subject, "둘째 (고침)");
+    // 지금 브랜치(main)가 맨 왼쪽 열, 원격에만 남은 옛 커밋은 그 오른쪽.
+    let lane = |i: usize| &h.graph.lanes[h.graph.nodes[i].lane];
+    let head_row = h.commits.iter().position(|c| Some(&c.hash) == h.head.as_ref()).unwrap();
+    assert_eq!(lane(head_row).name, "main");
+    assert_eq!(lane(head_row).column, 0);
+    let old_row = h.commits.iter().position(|c| c.subject == "둘째").unwrap();
+    assert_eq!(lane(old_row).name, "origin/main");
+    assert_eq!(lane(old_row).column, 1);
     assert_eq!(repo.status().unwrap().branch.ahead, 1);
     assert_eq!(repo.status().unwrap().branch.behind, 1);
 }

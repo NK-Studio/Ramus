@@ -7,14 +7,19 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use gitvcs_core::conflict::Side;
 use gitvcs_core::refs::ResetMode;
 use gitvcs_core::repo::{DiffTarget, LineAction, PullMode, Result};
+use gitvcs_core::avatar::{self, Avatar, AvatarCache};
+use gitvcs_core::github;
+use gitvcs_core::ops::MergeMode;
+use gitvcs_core::rewrite::RewriteKind;
+use gitvcs_core::undo::{self, Journal, UndoEntry, UndoKind};
 use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, remote, ssl};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::watcher;
 
-/// 한 번에 읽는 커밋 수.
-const HISTORY_PAGE: usize = 2000;
+/// 처음 읽는 커밋 수. 그래프 끝에 닿으면 화면이 더 달라고 한다.
+const HISTORY_PAGE: usize = 5000;
 
 /// 화면에 요청 없이 알리는 함수(이벤트 이름, 내용).
 pub type Emit = Box<dyn Fn(&str, Value) + Send + Sync>;
@@ -31,6 +36,13 @@ pub struct AppState {
     last_auto_fetch: Mutex<Option<Instant>>,
     /// 앱에서 로그인한 SSH 서버와 비밀번호. 앱을 끌 때까지만 기억한다(파일에 쓰지 않는다).
     ssh_login: Mutex<Option<(String, String)>>,
+    avatars: AvatarCache,
+    /// 열린 저장소의 원격이 GitHub 면 (소유자, 저장소). 작성자 사진을 GitHub 에 묻는다.
+    github_remote: Mutex<Option<(String, String)>>,
+    /// 저장소마다 실행 취소 기록(앱을 끌 때까지).
+    journals: Mutex<std::collections::HashMap<String, Journal>>,
+    /// 앱으로 로그인한 GitHub 계정 (login, token). None 이면 아직 저장소에서 읽지 않았다, Some(None) 이면 없다.
+    github_login: Mutex<Option<Option<(String, String)>>>,
     emit: Emit,
 }
 
@@ -53,6 +65,10 @@ impl AppState {
             watcher: Mutex::new(None),
             last_auto_fetch: Mutex::new(None),
             ssh_login: Mutex::new(None),
+            avatars: AvatarCache::new(AvatarCache::default_dir()),
+            github_remote: Mutex::new(None),
+            journals: Mutex::new(Default::default()),
+            github_login: Mutex::new(None),
             emit,
         }
     }
@@ -74,7 +90,51 @@ impl AppState {
                 Err(e) => eprintln!("SSH 비밀번호 도우미를 만들지 못했습니다: {e}"),
             }
         }
+        if let Some(token) = self.github_git_token() {
+            globals.env.extend(github::token_environment(&token));
+        }
         self.runner.set_globals(globals);
+    }
+
+    /// 앱 로그인 계정 (login, token). 처음 한 번 자격 증명 저장소에서 읽는다.
+    fn app_login(&self) -> Option<(String, String)> {
+        let mut cached = self.github_login.lock().unwrap();
+        if cached.is_none() {
+            let dir = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+            *cached = Some(github::load_app_token(&GitRunner::new(globals_for(&self.settings.lock().unwrap())), &dir));
+        }
+        cached.clone().flatten()
+    }
+
+    /// 이 저장소에 고른 GitHub 계정 {source, login}.
+    fn github_choice(&self) -> Option<(String, String)> {
+        let root = self.repo.lock().unwrap().as_ref().map(|r| r.root().display().to_string())?;
+        let settings = self.settings.lock().unwrap();
+        let v = settings.ui.get(&format!("github.account:{root}"))?;
+        Some((v.get("source")?.as_str()?.to_string(), v.get("login")?.as_str()?.to_string()))
+    }
+
+    /// git 이 github.com 에 쓸 토큰: 이 저장소에 앱·gh 계정을 골랐을 때만(아니면 사용자의 자격 증명 도우미 그대로).
+    fn github_git_token(&self) -> Option<String> {
+        match self.github_choice()? {
+            (source, _) if source == "app" => self.app_login().map(|(_, t)| t),
+            (source, login) if source == "gh" => github::gh_token(&login),
+            _ => None,
+        }
+    }
+
+    /// API 에 쓸 토큰: 고른 계정 → 앱 로그인 → gh → 자격 증명 도우미.
+    fn github_api_token(&self) -> Option<(String, String)> {
+        let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| std::env::temp_dir());
+        match self.github_choice() {
+            Some((source, _)) if source == "app" => return self.app_login(),
+            Some((source, login)) if source == "gh" => return github::gh_token(&login).map(|t| (login, t)),
+            Some((_, login)) => return github::credential_account(&self.runner, &dir, Some(&login)),
+            None => {}
+        }
+        self.app_login()
+            .or_else(|| github::gh_accounts().into_iter().find_map(|l| github::gh_token(&l).map(|t| (l, t))))
+            .or_else(|| github::credential_account(&self.runner, &dir, None))
     }
 
     fn repo(&self) -> Result<Repository> {
@@ -91,10 +151,12 @@ impl AppState {
             self.save_settings(&settings);
         }
         let info = repo_info(&repo);
+        *self.github_remote.lock().unwrap() = repo.default_remote_url().as_deref().and_then(avatar::parse_github_remote);
         effects.push(SideEffect::Title(format!("{} — GitVcs", repo.name())));
         self.start_watching(&repo);
         *self.repo.lock().unwrap() = Some(repo);
         *self.last_auto_fetch.lock().unwrap() = None;
+        self.apply_globals();
         Ok(info)
     }
 
@@ -148,13 +210,42 @@ impl AppState {
                 let last = self.settings.lock().unwrap().last_repo.clone();
                 // 마지막 저장소를 다시 연다. 지워졌으면 시작 화면.
                 let repo = last.and_then(|p| self.open_repo(Path::new(&p), effects).ok());
-                Ok(json!({ "settings": self.settings_json(), "repo": repo, "platform": std::env::consts::OS }))
+                Ok(json!({ "settings": self.settings_json(), "repo": repo, "platform": std::env::consts::OS, "version": env!("CARGO_PKG_VERSION") }))
             }
             "openRepo" => {
                 let a: PathArg = parse(args)?;
                 self.open_repo(Path::new(&a.path), effects)
             }
+            "initRepo" => {
+                let a = Args(&args);
+                let path = PathBuf::from(a.s("path")?);
+                remote::init(&self.runner, &path, a.s("gitignore").unwrap_or(""))?;
+                self.open_repo(&path, effects)
+            }
             "getSettings" => Ok(self.settings_json()),
+            "setUi" => {
+                let a = Args(&args);
+                let key = a.s("key")?.to_string();
+                let value = args.get("value").cloned().unwrap_or(Value::Null);
+                let mut settings = self.settings.lock().unwrap();
+                if value.is_null() {
+                    settings.ui.remove(&key);
+                } else {
+                    settings.ui.insert(key, value);
+                }
+                self.save_settings(&settings);
+                Ok(Value::Null)
+            }
+            "avatar" => {
+                let a = Args(&args);
+                let github = self.github_remote.lock().unwrap().clone();
+                let token = github.as_ref().and_then(|_| self.app_login()).map(|(_, t)| t);
+                Ok(match self.avatars.get(a.s("email")?, a.s("hash").unwrap_or(""), github.as_ref(), token.as_deref()) {
+                    Avatar::Image(bytes) => json!({ "url": format!("data:{};base64,{}", image_mime(&bytes), base64(&bytes)) }),
+                    Avatar::Ai(ai) => json!({ "ai": ai.key() }),
+                    Avatar::None => Value::Null,
+                })
+            }
             "closeTab" => {
                 let a: PathArg = parse(args)?;
                 let mut settings = self.settings.lock().unwrap();
@@ -222,6 +313,14 @@ impl AppState {
                 let out = self.runner.run(&dir, &["--version"]);
                 if out.success() { Ok(json!(out.stdout.trim())) } else { Err(GitError::new(out.message())) }
             }
+            "setWatch" => {
+                let on = Args(&args).b("on");
+                match (on, self.repo()) {
+                    (true, Ok(repo)) => self.start_watching(&repo),
+                    _ => *self.watcher.lock().unwrap() = None,
+                }
+                Ok(Value::Null)
+            }
             "closeRepo" => {
                 *self.repo.lock().unwrap() = None;
                 *self.watcher.lock().unwrap() = None;
@@ -243,7 +342,10 @@ impl AppState {
                 let a: SettingsArg = parse(args)?;
                 let mut settings = self.settings.lock().unwrap();
                 if let Some(theme) = a.theme {
-                    settings.theme = if theme == "light" { "light".into() } else { "dark".into() };
+                    settings.theme = match theme.as_str() {
+                        "light" | "system" => theme,
+                        _ => "dark".into(),
+                    };
                 }
                 if let Some(mode) = a.pull_mode {
                     settings.pull_mode = mode;
@@ -266,7 +368,15 @@ impl AppState {
                 Ok(self.settings_json())
             }
             "status" => to_json(self.repo()?.status()?),
-            "history" => to_json(self.repo()?.history(HISTORY_PAGE)?),
+            "snapshot" => {
+                let max = args.get("maxCount").and_then(Value::as_u64).map(|n| n as usize).unwrap_or(HISTORY_PAGE).clamp(1, 1_000_000);
+                let repo = self.repo()?;
+                let mut value = to_json(repo.snapshot(max)?)?;
+                value["undo"] = self.undo_titles(&repo);
+                value["template"] = json!(repo.commit_template());
+                value["mergeMessage"] = json!(repo.merge_message());
+                Ok(value)
+            }
             "commitDetail" => {
                 let a: HashArg = parse(args)?;
                 to_json(self.repo()?.commit_detail(&a.hash)?)
@@ -274,7 +384,175 @@ impl AppState {
             "lastMessage" => Ok(json!(self.repo()?.last_message()?)),
             "diff" => {
                 let a: DiffArg = parse(args)?;
-                to_json(self.repo()?.diff(&a.target)?)
+                let repo = self.repo()?;
+                let doc = repo.diff_with(&a.target, a.options.clone())?;
+                let mut value = to_json(&doc)?;
+                if doc.binary {
+                    value["sizes"] = to_json(repo.blob_sizes(&a.target))?;
+                }
+                // 받지 않은 LFS 파일: 포인터 글만 바뀌었다.
+                value["lfsPointer"] = json!(doc.lines.iter().any(|l| gitvcs_core::files::is_lfs_pointer(&l.text)));
+                Ok(value)
+            }
+            "fileBytes" => {
+                let a = Args(&args);
+                let bytes = self.repo()?.file_bytes(a.s("revision").unwrap_or(""), a.s("path")?)?;
+                if bytes.len() > 64 * 1024 * 1024 {
+                    return Err(GitError::new("파일이 너무 커서 열지 않습니다(64MB 넘음)."));
+                }
+                Ok(json!({ "base64": base64(&bytes), "mime": image_mime(&bytes), "size": bytes.len() }))
+            }
+            "externalDiff" => {
+                let a = Args(&args);
+                self.repo()?.external_diff(a.s("from")?, a.s("to").ok(), a.s("path")?, a.s("tool").ok()).map(|_| Value::Null)
+            }
+            "fileLog" => {
+                let a = Args(&args);
+                let max = args.get("maxCount").and_then(Value::as_u64).unwrap_or(300) as usize;
+                to_json(self.repo()?.file_log(a.s("path")?, max)?)
+            }
+            "blame" => {
+                let a = Args(&args);
+                to_json(self.repo()?.blame(a.s("path")?, a.s("revision").ok())?)
+            }
+            "compareFiles" => {
+                let a = Args(&args);
+                to_json(self.repo()?.compare_files(a.s("from")?, a.s("to").ok(), a.b("range"))?)
+            }
+            "githubDeviceStart" => github::device_start(),
+            "githubDevicePoll" => match github::device_poll(Args(&args).s("deviceCode")?)? {
+                github::Poll::Pending => Ok(json!({ "status": "pending" })),
+                github::Poll::SlowDown => Ok(json!({ "status": "slowDown" })),
+                github::Poll::Token(token) => {
+                    let user = github::api("GET", "/user", None, Some(&token))?;
+                    let login = user.get("login").and_then(Value::as_str).unwrap_or_default().to_string();
+                    let dir = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+                    github::store_app_token(&self.runner, &dir, &login, &token);
+                    *self.github_login.lock().unwrap() = Some(Some((login.clone(), token)));
+                    self.apply_globals();
+                    Ok(json!({ "status": "done", "login": login, "avatarUrl": user.get("avatar_url") }))
+                }
+            },
+            "githubLogout" => {
+                if let Some((login, _)) = self.app_login() {
+                    github::forget_app_token(&self.runner, &dirs::home_dir().unwrap_or_else(std::env::temp_dir), &login);
+                }
+                *self.github_login.lock().unwrap() = Some(None);
+                self.apply_globals();
+                Ok(Value::Null)
+            }
+            "githubAccounts" => {
+                let repo_ids = self.github_remote.lock().unwrap().clone();
+                let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| std::env::temp_dir());
+                let choice = self.github_choice();
+                let mut list: Vec<(String, String, Option<String>)> = Vec::new();
+                if let Some((login, token)) = self.app_login() {
+                    list.push((login, "app".into(), Some(token)));
+                }
+                for login in github::gh_accounts() {
+                    let token = github::gh_token(&login);
+                    list.push((login, "gh".into(), token));
+                }
+                if let Some((login, token)) = github::credential_account(&self.runner, &dir, None)
+                    && !list.iter().any(|(l, s, _)| l.eq_ignore_ascii_case(&login) && s != "app")
+                    && login != "x-access-token"
+                {
+                    list.push((login, "credential".into(), Some(token)));
+                }
+                let accounts: Vec<github::Account> = list
+                    .into_iter()
+                    .map(|(login, source, token)| github::Account {
+                        current: choice.as_ref().is_some_and(|(s, l)| *s == source && (source == "app" || l.eq_ignore_ascii_case(&login))),
+                        can_access: match (&repo_ids, token) {
+                            (Some((o, r)), Some(t)) => Some(github::can_access(o, r, &t)),
+                            _ => None,
+                        },
+                        login,
+                        source,
+                    })
+                    .collect();
+                to_json(accounts)
+            }
+            "githubChoose" => {
+                let a = Args(&args);
+                let root = self.repo()?.root().display().to_string();
+                let mut settings = self.settings.lock().unwrap();
+                settings.ui.insert(format!("github.account:{root}"), json!({ "source": a.s("source")?, "login": a.s("login").unwrap_or("") }));
+                self.save_settings(&settings);
+                drop(settings);
+                self.apply_globals();
+                Ok(Value::Null)
+            }
+            "githubRepo" => {
+                let ids = self.github_remote.lock().unwrap().clone();
+                let me = self.github_api_token().map(|(login, _)| login);
+                Ok(json!({ "owner": ids.as_ref().map(|i| i.0.clone()), "repo": ids.as_ref().map(|i| i.1.clone()), "me": me, "signedIn": self.app_login().is_some() }))
+            }
+            "githubApi" => {
+                let a = Args(&args);
+                let token = self.github_api_token().map(|(_, t)| t);
+                github::api(a.s("method").unwrap_or("GET"), a.s("path")?, args.get("body").filter(|b| !b.is_null()), token.as_deref())
+            }
+            "githubGraphql" => {
+                let token = self.github_api_token().map(|(_, t)| t).ok_or_else(|| GitError::new("GitHub 에 로그인해 주세요."))?;
+                github::graphql(Args(&args).s("query")?, args.get("variables").cloned().unwrap_or(json!({})), &token)
+            }
+            "openUrl" => {
+                let a = Args(&args);
+                let url = a.s("url")?;
+                if !url.starts_with("https://") {
+                    return Err(GitError::new("https 주소만 엽니다."));
+                }
+                open_url(url).map(|_| Value::Null)
+            }
+            "explorerHistory" => {
+                let q: gitvcs_core::history::ExplorerQuery = parse(args)?;
+                to_json(self.repo()?.explorer_history(&q)?)
+            }
+            "workspace" => to_json(self.repo()?.workspace(Args(&args).b("ignored"))?),
+            "treeFiles" => to_json(self.repo()?.tree_files(Args(&args).s("revision")?)?),
+            "readText" => to_json(self.repo()?.read_text(Args(&args).s("path")?)?),
+            "writeText" => {
+                let a = Args(&args);
+                let original: gitvcs_core::history::TextFile = serde_json::from_value(args.get("original").cloned().unwrap_or_default())
+                    .map_err(|_| GitError::new("파일 정보가 잘못되었습니다."))?;
+                self.repo()?.write_text(a.s("path")?, a.s("text")?, &original, a.b("force")).map(|m| json!(m))
+            }
+            "createFile" => {
+                let repo = self.repo()?;
+                let a = Args(&args);
+                let path = a.s("path")?;
+                let full = repo.root().join(path);
+                if full.exists() {
+                    return Err(GitError::new(format!("이미 있는 파일입니다: {path}")));
+                }
+                if let Some(dir) = full.parent() {
+                    std::fs::create_dir_all(dir).map_err(|e| GitError::new(e.to_string()))?;
+                }
+                std::fs::write(&full, "").map(|_| Value::Null).map_err(|e| GitError::new(format!("파일을 만들지 못했습니다: {e}")))
+            }
+            "stageWarnings" => to_json(self.repo()?.stage_warnings(&parse::<PathsArg>(args)?.paths)),
+            "openInEditor" => {
+                let a = Args(&args);
+                let repo = self.repo()?;
+                let full = repo.root().join(a.s("path")?);
+                let line = args.get("line").and_then(Value::as_u64).unwrap_or(1).max(1);
+                open_in_editor(a.s("editor").unwrap_or(""), &full, line).map(|_| Value::Null)
+            }
+            "openDefault" => {
+                let repo = self.repo()?;
+                open_path(&repo.root().join(Args(&args).s("path")?)).map(|_| Value::Null)
+            }
+            "createPatch" => {
+                let a = Args(&args);
+                let paths = parse::<PathsArg>(args.clone())?.paths;
+                let patch = self.repo()?.create_patch(&paths, a.b("staged"))?;
+                std::fs::write(a.s("dest")?, patch).map(|_| Value::Null).map_err(|e| GitError::new(format!("패치를 쓰지 못했습니다: {e}")))
+            }
+            "saveFileVersion" => {
+                let a = Args(&args);
+                let bytes = self.repo()?.file_bytes(a.s("revision")?, a.s("path")?)?;
+                std::fs::write(a.s("dest")?, bytes).map(|_| Value::Null).map_err(|e| GitError::new(format!("파일을 쓰지 못했습니다: {e}")))
             }
             "reveal" => {
                 let a: PathArg = parse(args)?;
@@ -295,46 +573,176 @@ impl AppState {
                         repo.resolve(a.s("path")?, side).map(|_| Value::Null)
                     }
                     "saveResolution" => repo.save_resolution(a.s("path")?, a.s("text")?).map(|_| Value::Null),
-                    "continueOperation" => repo.continue_operation().map(|t| json!(t.trim())),
+                    "continueOperation" => repo.continue_with_message(a.s("message").ok()).map(|t| json!(t.trim())),
                     "skipOperation" => repo.skip_operation().map(|t| json!(t.trim())),
                     _ => repo.abort_operation().map(|_| Value::Null),
                 }
             }
-            "openTerminal" => open_terminal(self.repo()?.root()).map(|_| Value::Null),
+            "openTerminal" => match Args(&args).s("path") {
+                Ok(path) => open_terminal(Path::new(path)).map(|_| Value::Null),
+                Err(_) => open_terminal(self.repo()?.root()).map(|_| Value::Null),
+            },
+            "openFolder" => open_folder(Path::new(Args(&args).s("path")?)).map(|_| Value::Null),
+            "savePatch" => {
+                let a = Args(&args);
+                self.repo()?.save_patch(a.s("hash")?, a.s("path")?).map(|_| Value::Null)
+            }
+            "rewrite" => {
+                let repo = self.repo()?;
+                let _guard = self.write_lock.lock().unwrap();
+                let a = Args(&args);
+                let kind: RewriteKind = serde_json::from_value(args.get("kind").cloned().unwrap_or_default())
+                    .map_err(|_| GitError::new("고치기 방식이 잘못되었습니다."))?;
+                let hash = a.s("hash")?;
+                let before = repo.undo_snapshot();
+                let label = match kind {
+                    RewriteKind::Reword => "Reword",
+                    RewriteKind::Squash => "Squash",
+                    RewriteKind::Fixup => "Fixup",
+                    RewriteKind::Drop => "Drop",
+                };
+                let r = repo.rewrite(kind, hash, a.s("message").ok()).map(|h| json!(h));
+                self.recorded(&repo, r, &before, |b, after| {
+                    let mut e = UndoEntry::new(UndoKind::MoveHead, format!("{label} {}", &hash[..7.min(hash.len())]));
+                    e.head_before = b.head.clone();
+                    e.head_after = after.head.clone();
+                    if kind != RewriteKind::Drop {
+                        e.reset_mode = "--soft".into();
+                    }
+                    (b.head != after.head).then_some(e)
+                })
+            }
+            "undo" | "redo" => {
+                let repo = self.repo()?;
+                let _guard = self.write_lock.lock().unwrap();
+                let mut journals = self.journals.lock().unwrap();
+                let journal = journals.entry(repo.root().display().to_string()).or_default();
+                let title = if cmd == "undo" { undo::undo(&repo, journal) } else { undo::redo(&repo, journal) };
+                title.map(|t| json!(t))
+            }
             "checkout" | "checkoutDetached" | "createBranch" | "renameBranch" | "deleteBranch" | "deleteRemoteBranch" | "merge" | "rebase"
-            | "cherryPick" | "revert" | "reset" | "createTag" | "deleteTag" | "pushTag" | "stashPush" | "stashApply" | "stashDrop" => {
+            | "cherryPick" | "revert" | "reset" | "createTag" | "deleteTag" | "pushTag" | "deleteRemoteTag" | "stashPush" | "stashApply"
+            | "stashDrop" | "stashBranch" | "addRemote" | "renameRemote" | "setRemoteUrl" | "removeRemote" | "pruneRemote" | "fetchRemote"
+            | "pushBranch" | "setUpstream" | "fastForward" | "addWorktree" | "removeWorktree" | "addSubmodule" | "updateSubmodules"
+            | "editSubmodule" => {
                 let repo = self.repo()?;
                 let _guard = self.write_lock.lock().unwrap();
                 let a = Args(&args);
                 let done = |r: Result<()>| r.map(|_| Value::Null);
                 let text = |r: Result<String>| r.map(|t| json!(t.trim()));
+                let before = repo.undo_snapshot();
+                let short = |h: &str| h.chars().take(7).collect::<String>();
+                let name_or_hash = |s: &undo::Snapshot| if s.branch.is_empty() { short(&s.head) } else { s.branch.clone() };
                 match cmd {
-                    "checkout" => done(repo.checkout(a.s("name")?, a.b("remote"))),
-                    "checkoutDetached" => done(repo.checkout_detached(a.s("hash")?)),
-                    "createBranch" => done(repo.create_branch(a.s("name")?, a.s("start")?, a.b("checkout"))),
+                    "checkout" | "checkoutDetached" => {
+                        let r = if cmd == "checkout" { repo.checkout(a.s("name")?, a.b("remote")) } else { repo.checkout_detached(a.s("hash")?) };
+                        self.recorded(&repo, done(r), &before, |b, after| {
+                            let mut e = UndoEntry::new(UndoKind::Switch, format!("{} → {} 전환", name_or_hash(b), name_or_hash(after)));
+                            e.head_before = b.head.clone();
+                            e.head_after = after.head.clone();
+                            e.branch_before = b.branch.clone();
+                            e.branch_after = after.branch.clone();
+                            Some(e)
+                        })
+                    }
+                    "createBranch" => {
+                        let (name, start, switch) = (a.s("name")?, a.s("start")?, a.b("checkout"));
+                        let r = repo.create_branch(name, start, switch);
+                        self.recorded(&repo, done(r), &before, |b, _| {
+                            let mut e = UndoEntry::new(UndoKind::CreateBranch, format!("브랜치 '{name}' 만들기"));
+                            e.head_before = b.head.clone();
+                            e.branch_before = b.branch.clone();
+                            e.name = name.to_string();
+                            e.hash = repo.branch_tip(name);
+                            e.switched = switch;
+                            Some(e)
+                        })
+                    }
                     "renameBranch" => done(repo.rename_branch(a.s("old")?, a.s("new")?)),
-                    "deleteBranch" => done(repo.delete_branch(a.s("name")?, a.b("force"))),
+                    "deleteBranch" => {
+                        let name = a.s("name")?;
+                        let tip = repo.branch_tip(name);
+                        let r = repo.delete_branch(name, a.b("force"));
+                        self.recorded(&repo, done(r), &before, |_, _| {
+                            let mut e = UndoEntry::new(UndoKind::DeleteBranch, format!("브랜치 '{name}' 삭제"));
+                            e.name = name.to_string();
+                            e.hash = tip.clone();
+                            (!tip.is_empty()).then_some(e)
+                        })
+                    }
                     "deleteRemoteBranch" => done(repo.delete_remote_branch(a.s("remote")?, a.s("branch")?)),
-                    "merge" => text(repo.merge(a.s("revision")?)),
-                    "rebase" => text(repo.rebase(a.s("revision")?)),
-                    "cherryPick" => text(repo.cherry_pick(a.s("hash")?, a.b("merge"))),
-                    "revert" => text(repo.revert(a.s("hash")?, a.b("merge"))),
-                    "reset" => {
-                        let mode: ResetMode = serde_json::from_value(args.get("mode").cloned().unwrap_or_default())
-                            .map_err(|_| GitError::new("reset 방식이 잘못되었습니다."))?;
-                        done(repo.reset(a.s("hash")?, mode))
+                    "merge" | "rebase" | "cherryPick" | "revert" | "reset" => {
+                        let (r, title, mode) = match cmd {
+                            "merge" => {
+                                let revision = a.s("revision")?;
+                                let mode: MergeMode = serde_json::from_value(args.get("mode").cloned().unwrap_or(json!("default"))).unwrap_or_default();
+                                let r = if mode == MergeMode::Default { repo.merge(revision) } else { repo.merge_with(revision, mode) };
+                                (text(r), format!("병합 '{revision}'"), String::new())
+                            }
+                            "rebase" => {
+                                let stop = args.get("stopOnConflict").and_then(Value::as_bool).unwrap_or(true);
+                                (text(repo.rebase_with(a.s("revision")?, stop)), format!("Rebase → '{}'", a.s("revision")?), String::new())
+                            }
+                            "cherryPick" => (text(repo.cherry_pick(a.s("hash")?, a.b("merge"))), format!("Cherry-pick {}", short(a.s("hash")?)), String::new()),
+                            "revert" => (text(repo.revert(a.s("hash")?, a.b("merge"))), format!("Revert {}", short(a.s("hash")?)), String::new()),
+                            _ => {
+                                let mode: ResetMode = serde_json::from_value(args.get("mode").cloned().unwrap_or_default())
+                                    .map_err(|_| GitError::new("reset 방식이 잘못되었습니다."))?;
+                                let flag = match mode {
+                                    ResetMode::Soft => "--soft",
+                                    ResetMode::Mixed => "--mixed",
+                                    ResetMode::Hard => "--hard",
+                                };
+                                (done(repo.reset(a.s("hash")?, mode)), format!("Reset {} → {}", &flag[2..], short(a.s("hash")?)), flag.to_string())
+                            }
+                        };
+                        self.recorded(&repo, r, &before, |b, after| {
+                            if after.head == b.head {
+                                return None;
+                            }
+                            let mut e = UndoEntry::new(UndoKind::MoveHead, title.clone());
+                            e.head_before = b.head.clone();
+                            e.head_after = after.head.clone();
+                            e.reset_mode = mode.clone();
+                            Some(e)
+                        })
                     }
                     "createTag" => done(repo.create_tag(a.s("name")?, a.s("hash")?, a.s("message").unwrap_or(""))),
                     "deleteTag" => done(repo.delete_tag(a.s("name")?)),
                     "pushTag" => done(repo.push_tag(a.s("remote")?, a.s("name")?)),
-                    "stashPush" => done(repo.stash_push(a.s("message").unwrap_or(""))),
+                    "deleteRemoteTag" => done(repo.delete_remote_tag(a.s("remote")?, a.s("name")?)),
+                    "stashPush" => {
+                        let r = repo.stash_push(a.s("message").unwrap_or(""));
+                        self.recorded_any(&repo, done(r), &before, |b, after| {
+                            let mut e = UndoEntry::new(UndoKind::Stash, "Stash");
+                            e.hash = after.stash.clone();
+                            (!after.stash.is_empty() && after.stash != b.stash).then_some(e)
+                        })
+                    }
                     "stashApply" => text(repo.stash_apply(a.s("name")?, a.b("pop"))),
+                    "stashBranch" => done(repo.stash_branch(a.s("branch")?, a.s("name")?)),
+                    "addRemote" => done(repo.add_remote(a.s("name")?, a.s("url")?, a.s("pushUrl").unwrap_or(""))),
+                    "renameRemote" => done(repo.rename_remote(a.s("old")?, a.s("new")?)),
+                    "setRemoteUrl" => done(repo.set_remote_url(a.s("name")?, a.s("url")?, a.s("pushUrl").unwrap_or(""))),
+                    "removeRemote" => done(repo.remove_remote(a.s("name")?)),
+                    "pruneRemote" => text(repo.prune_remote(a.s("name")?)),
+                    "fetchRemote" => done(repo.fetch_remote(a.s("name")?)),
+                    "pushBranch" => text(repo.push_branch(a.s("branch")?, a.s("remote")?, a.b("setUpstream"), a.b("force"))),
+                    "setUpstream" => done(repo.set_upstream(a.s("branch")?, a.s("upstream").ok())),
+                    "fastForward" => done(repo.fast_forward(a.s("branch")?, a.b("current"))),
+                    "addWorktree" => done(repo.add_worktree(a.s("path")?, a.s("reference")?, a.s("newBranch").ok())),
+                    "removeWorktree" => done(repo.remove_worktree(a.s("path")?, a.b("force"))),
+                    "addSubmodule" => done(repo.add_submodule(a.s("url")?, a.s("path")?, a.s("branch").ok())),
+                    "updateSubmodules" => done(repo.update_submodules(a.s("path").ok())),
+                    "editSubmodule" => done(repo.edit_submodule(a.s("path")?, a.s("url")?, a.s("branch").ok())),
                     _ => done(repo.stash_drop(a.s("name")?)),
                 }
             }
-            "stage" | "unstage" | "stageAll" | "unstageAll" | "commit" | "push" | "applyLines" | "discard" | "fetch" | "pull" => {
+            "stage" | "unstage" | "stageAll" | "unstageAll" | "commit" | "push" | "applyLines" | "discard" | "fetch" | "pull" | "ignore" | "lfsTrack"
+            | "lfsPull" | "stashPaths" | "deletePath" | "restoreFile" => {
                 let repo = self.repo()?;
                 let _guard = self.write_lock.lock().unwrap();
+                let before = repo.undo_snapshot();
                 match cmd {
                     "stage" => repo.stage(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
                     "unstage" => repo.unstage(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
@@ -343,22 +751,101 @@ impl AppState {
                     "discard" => repo.discard(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
                     "applyLines" => {
                         let a: LinesArg = parse(args)?;
-                        repo.apply_lines(a.action, &a.path, a.untracked, &a.fingerprint, &a.lines).map(|_| Value::Null)
+                        repo.apply_lines_with(a.action, &a.path, a.untracked, &a.fingerprint, &a.lines, a.context.unwrap_or(3)).map(|_| Value::Null)
                     }
+                    "ignore" | "lfsTrack" => {
+                        let a = Args(&args);
+                        let kind: gitvcs_core::files::PatternKind = serde_json::from_value(args.get("kind").cloned().unwrap_or_default())
+                            .map_err(|_| GitError::new("무시 방식이 잘못되었습니다."))?;
+                        let r = if cmd == "ignore" { repo.ignore(a.s("path")?, kind) } else { repo.lfs_track(a.s("path")?, kind) };
+                        r.map(|p| json!(p))
+                    }
+                    "lfsPull" => repo.lfs_pull(Args(&args).s("path")?).map(|_| Value::Null),
+                    "stashPaths" => {
+                        let message = Args(&args).s("message").unwrap_or("").to_string();
+                        let paths = parse::<PathsArg>(args)?.paths;
+                        let r = repo.stash_paths(&paths, &message).map(|_| Value::Null);
+                        self.recorded_any(&repo, r, &before, |b, after| {
+                            let mut e = UndoEntry::new(UndoKind::Stash, if message.is_empty() { "Stash (고른 파일)".to_string() } else { message.clone() });
+                            e.hash = after.stash.clone();
+                            e.paths = paths.clone();
+                            (!after.stash.is_empty() && after.stash != b.stash).then_some(e)
+                        })
+                    }
+                    "deletePath" => repo.delete_path(Args(&args).s("path")?).map(|_| Value::Null),
+                    "restoreFile" => repo.restore_file(Args(&args).s("revision")?, Args(&args).s("path")?).map(|_| Value::Null),
                     "commit" => {
                         let a: CommitArg = parse(args)?;
-                        repo.commit(&a.message, a.amend).map(|hash| json!(hash))
+                        let subject = a.message.lines().next().unwrap_or_default().to_string();
+                        let r = repo.commit(&a.message, a.amend).map(|hash| json!(hash));
+                        self.recorded(&repo, r, &before, |b, after| {
+                            let title = if a.amend { format!("커밋 고쳐 쓰기 '{subject}'") } else { format!("커밋 '{subject}'") };
+                            let mut e = UndoEntry::new(UndoKind::Commit, title);
+                            e.head_before = b.head.clone();
+                            e.head_after = after.head.clone();
+                            Some(e)
+                        })
                     }
                     "fetch" => repo.fetch(false).map(|fetched| json!(fetched)),
                     "pull" => {
-                        let mode = self.settings.lock().unwrap().pull_mode;
-                        repo.pull(mode).map(|msg| json!(msg))
+                        let mode = args
+                            .get("mode")
+                            .and_then(|m| serde_json::from_value::<PullMode>(m.clone()).ok())
+                            .unwrap_or_else(|| self.settings.lock().unwrap().pull_mode);
+                        let r = repo.pull(mode).map(|msg| json!(msg));
+                        self.recorded(&repo, r, &before, |b, after| {
+                            if after.head == b.head {
+                                return None;
+                            }
+                            let mut e = UndoEntry::new(UndoKind::Pull, format!("Pull {} → {}", &b.head[..7.min(b.head.len())], &after.head[..7.min(after.head.len())]));
+                            e.head_before = b.head.clone();
+                            e.head_after = after.head.clone();
+                            Some(e)
+                        })
                     }
-                    _ => repo.push().map(|msg| json!(msg)),
+                    _ => repo.push_to(Args(&args).s("remote").ok()).map(|msg| json!(msg)),
                 }
             }
             _ => Err(GitError::new(format!("모르는 요청: {cmd}"))),
         }
+    }
+
+    /// 작업이 성공했고 그 전에 커밋이 있었으면 실행 취소 기록을 남긴다.
+    fn recorded(
+        &self,
+        repo: &Repository,
+        result: Result<Value>,
+        before: &undo::Snapshot,
+        make: impl FnOnce(&undo::Snapshot, &undo::Snapshot) -> Option<UndoEntry>,
+    ) -> Result<Value> {
+        if result.is_ok() && !before.head.is_empty() {
+            self.recorded_any(repo, Ok(Value::Null), before, make)?;
+        }
+        result
+    }
+
+    /// 성공했으면 기록한다(커밋이 없어도 — stash 등).
+    fn recorded_any(
+        &self,
+        repo: &Repository,
+        result: Result<Value>,
+        before: &undo::Snapshot,
+        make: impl FnOnce(&undo::Snapshot, &undo::Snapshot) -> Option<UndoEntry>,
+    ) -> Result<Value> {
+        if result.is_ok() {
+            let after = repo.undo_snapshot();
+            if let Some(entry) = make(before, &after) {
+                self.journals.lock().unwrap().entry(repo.root().display().to_string()).or_default().record(entry);
+            }
+        }
+        result
+    }
+
+    /// 실행 취소·다시 실행 버튼에 보일 이름.
+    fn undo_titles(&self, repo: &Repository) -> Value {
+        let journals = self.journals.lock().unwrap();
+        let (undo, redo) = journals.get(&repo.root().display().to_string()).map(|j| j.titles()).unwrap_or((None, None));
+        json!({ "undo": undo, "redo": redo })
     }
 
     fn settings_json(&self) -> Value {
@@ -381,6 +868,7 @@ impl AppState {
             "cloneDir": if s.clone_dir.is_empty() { dirs::home_dir().map(|h| h.display().to_string()).unwrap_or_default() } else { s.clone_dir.clone() },
             "openTabs": tabs,
             "sshLogin": ssh,
+            "ui": s.ui,
             "platform": std::env::consts::OS,
         })
     }
@@ -392,6 +880,7 @@ fn repo_info(repo: &Repository) -> Value {
         "name": repo.name(),
         "identity": repo.identity(),
         "remotes": repo.remotes().unwrap_or_default(),
+        "superproject": repo.superproject(),
     })
 }
 
@@ -419,6 +908,75 @@ fn reveal(repo: &Repository, path: &str) -> Result<()> {
     let spawned = std::process::Command::new("explorer").arg(format!("/select,{}", target.display())).spawn();
     #[cfg(not(any(target_os = "macos", windows)))]
     let spawned = std::process::Command::new("xdg-open").arg(target.parent().unwrap_or(&target)).spawn();
+    spawned.map(|_| ()).map_err(|e| GitError::new(format!("파일 관리자를 열지 못했습니다: {e}")))
+}
+
+/// 주소를 기본 브라우저로 연다.
+fn open_url(url: &str) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("/usr/bin/open").arg(url).spawn();
+    #[cfg(windows)]
+    let spawned = {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", url]).creation_flags(0x0800_0000).spawn()
+    };
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let spawned = std::process::Command::new("xdg-open").arg(url).spawn();
+    spawned.map(|_| ()).map_err(|e| GitError::new(format!("브라우저를 열지 못했습니다: {e}")))
+}
+
+/// 파일을 OS 기본 프로그램으로 연다.
+fn open_path(path: &Path) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("/usr/bin/open").arg(path).spawn();
+    #[cfg(windows)]
+    let spawned = {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("cmd").args(["/C", "start", ""]).arg(path).creation_flags(0x0800_0000).spawn()
+    };
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let spawned = std::process::Command::new("xdg-open").arg(path).spawn();
+    spawned.map(|_| ()).map_err(|e| GitError::new(format!("파일을 열지 못했습니다: {e}")))
+}
+
+/// 외부 편집기로 그 줄을 연다. `template` 은 "code -g {file}:{line}" 꼴. 비우면 VS Code 가 있으면 그것, 없으면 기본 프로그램.
+fn open_in_editor(template: &str, file: &Path, line: u64) -> Result<()> {
+    // 앱으로 실행하면 PATH 가 짧아 Homebrew·VS Code 명령을 못 찾는다 — 흔한 자리를 더한다.
+    let mut path = std::env::var("PATH").unwrap_or_default();
+    for extra in ["/usr/local/bin", "/opt/homebrew/bin", "/Applications/Visual Studio Code.app/Contents/Resources/app/bin"] {
+        if !path.split(':').any(|p| p == extra) {
+            path.push(':');
+            path.push_str(extra);
+        }
+    }
+    let template = if template.trim().is_empty() { "code -g {file}:{line}" } else { template.trim() };
+    let file_text = file.display().to_string();
+    let words: Vec<String> = template.split_whitespace().map(|w| w.replace("{file}", &file_text).replace("{line}", &line.to_string())).collect();
+    let mut cmd = std::process::Command::new(&words[0]);
+    cmd.args(&words[1..]).env("PATH", path);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    match cmd.spawn() {
+        Ok(_) => Ok(()),
+        // 편집기를 못 찾으면 기본 프로그램으로 연다.
+        Err(_) => open_path(file),
+    }
+}
+
+/// 폴더를 파일 관리자(Finder·탐색기)로 연다.
+fn open_folder(path: &Path) -> Result<()> {
+    if !path.is_dir() {
+        return Err(GitError::new(format!("폴더가 없습니다: {}", path.display())));
+    }
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("/usr/bin/open").arg(path).spawn();
+    #[cfg(windows)]
+    let spawned = std::process::Command::new("explorer").arg(path).spawn();
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let spawned = std::process::Command::new("xdg-open").arg(path).spawn();
     spawned.map(|_| ()).map_err(|e| GitError::new(format!("파일 관리자를 열지 못했습니다: {e}")))
 }
 
@@ -450,6 +1008,38 @@ impl Args<'_> {
     fn b(&self, key: &str) -> bool {
         self.0.get(key).and_then(Value::as_bool).unwrap_or(false)
     }
+}
+
+/// 그림 바이트의 형식(앞 몇 바이트로).
+fn image_mime(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        "image/png"
+    } else if bytes.starts_with(&[0xff, 0xd8]) {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF8") {
+        "image/gif"
+    } else if bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+/// 표준 base64(작은 그림을 data: 주소로 넘길 때만 쓴다).
+pub fn base64(bytes: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = (chunk[0] as u32) << 16 | (*chunk.get(1).unwrap_or(&0) as u32) << 8 | *chunk.get(2).unwrap_or(&0) as u32;
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(TABLE[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
 }
 
 /// 임시 폴더 이름을 사용자마다 나누려고 쓴다.
@@ -498,6 +1088,8 @@ struct SettingsArg {
 #[derive(Deserialize)]
 struct DiffArg {
     target: DiffTarget,
+    #[serde(default)]
+    options: gitvcs_core::repo::DiffOptions,
 }
 
 #[derive(Deserialize)]
@@ -508,6 +1100,8 @@ struct LinesArg {
     untracked: bool,
     fingerprint: String,
     lines: Vec<usize>,
+    #[serde(default)]
+    context: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -515,4 +1109,19 @@ struct CommitArg {
     message: String,
     #[serde(default)]
     amend: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base64_matches_standard() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64(&[0xff, 0xfe, 0xfd]), "//79");
+    }
 }

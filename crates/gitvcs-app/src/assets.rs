@@ -5,26 +5,7 @@ use std::borrow::Cow;
 
 use wry::http::{Request, Response, header::CONTENT_TYPE};
 
-macro_rules! asset {
-    ($name:literal) => {
-        ($name, include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../ui/", $name)) as &[u8])
-    };
-}
-
-const EMBEDDED: &[(&str, &[u8])] = &[
-    asset!("index.html"),
-    asset!("app.css"),
-    asset!("app.js"),
-    asset!("bridge.js"),
-    asset!("graph.js"),
-    asset!("changes.js"),
-    asset!("diff.js"),
-    asset!("dialogs.js"),
-    asset!("refs.js"),
-    asset!("merge.js"),
-    asset!("screens.js"),
-    asset!("util.js"),
-];
+include!(concat!(env!("OUT_DIR"), "/assets_gen.rs"));
 
 fn mime(path: &str) -> &'static str {
     match path.rsplit('.').next() {
@@ -33,6 +14,8 @@ fn mime(path: &str) -> &'static str {
         Some("js") => "text/javascript; charset=utf-8",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
+        Some("woff2") => "font/woff2",
+        Some("txt") => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     }
 }

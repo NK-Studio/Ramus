@@ -13,6 +13,7 @@
     <div class="start-card">
       <h1>GitVcs</h1>
       <p class="muted">PC 에 설치된 git 으로 동작하는 Git 클라이언트</p>
+      <div class="notice" id="start-notice" hidden></div>
       <div class="start-actions">
         <button id="start-open" class="btn primary">저장소 열기…</button>
         <button id="start-clone" class="btn">Clone…</button>
@@ -26,66 +27,34 @@
 
   <!-- 저장소 화면 -->
   <section id="main" class="main" hidden>
-    <header class="toolbar">
-      <button id="repo-button" class="tb-repo" title="다른 저장소 열기">
-        <span class="tb-label">저장소</span>
-        <span id="repo-name" class="tb-value"></span>
-      </button>
-      <div class="tb-sep"></div>
-      <div class="tb-branch" title="지금 브랜치">
-        <span class="tb-label">브랜치</span>
-        <span id="branch-name" class="tb-value"></span>
-      </div>
-      <div class="tb-center">
-        <button id="act-refresh" class="tb-btn" title="새로고침 (F5)"><span class="ico">⟳</span><span>새로고침</span></button>
-        <button id="act-fetch" class="tb-btn" title="원격에서 새 커밋 받아 오기 (작업 트리는 그대로)"><span class="ico">⇣</span><span>페치</span></button>
-        <div class="tb-split">
-          <button id="act-pull" class="tb-btn" title="풀"><span class="ico">↓</span><span>풀</span><span id="pull-badge" class="tb-badge" hidden></span></button>
-          <button id="act-pull-mode" class="tb-caret" title="풀 방식 고르기">▾</button>
-        </div>
-        <button id="act-push" class="tb-btn" title="푸시"><span class="ico">↑</span><span>푸시</span><span id="push-badge" class="tb-badge" hidden></span></button>
-        <div class="tb-sep"></div>
-        <button id="act-branch" class="tb-btn" title="지금 커밋에서 새 브랜치"><span class="ico">⑂</span><span>브랜치</span></button>
-        <button id="act-stash" class="tb-btn" title="작업 중 변경을 잠시 치워 두기"><span class="ico">⊟</span><span>Stash</span></button>
-        <button id="act-pop" class="tb-btn" title="마지막 stash 되돌리기"><span class="ico">⊞</span><span>Pop</span></button>
-        <div class="tb-sep"></div>
-        <button id="act-terminal" class="tb-btn" title="이 저장소 폴더에서 터미널 열기"><span class="ico">⌨</span><span>터미널</span></button>
-        <span id="fetch-info" class="tb-info muted small"></span>
-      </div>
-      <div class="tb-right">
-        <button id="act-settings" class="tb-btn" title="설정 (SSL 인증서·풀 방식·자동 페치…)"><span class="ico">⚙</span><span>설정</span></button>
-        <button id="act-theme" class="tb-btn" title="다크·라이트 테마 바꾸기"><span class="ico">◐</span><span>테마</span></button>
-      </div>
-    </header>
+    <header class="toolbar" id="toolbar"></header>
 
     <div class="op-banner" id="op-banner" hidden></div>
-    <div class="workspace">
+    <div class="workspace" id="workspace">
+      <nav class="rail" id="rail" hidden></nav>
       <aside class="sidebar" id="sidebar"></aside>
       <div class="splitter" data-split="sidebar"></div>
 
       <section class="graph-pane">
-        <div class="graph-header">
-          <div class="col col-refs">브랜치 / 태그</div>
-          <div class="col col-graph" id="graph-header-graph">그래프</div>
-          <div class="col col-msg">커밋 메시지</div>
-          <div class="col col-author">작성자</div>
-          <div class="col col-date">날짜</div>
-          <div class="col col-sha">SHA</div>
-        </div>
-        <div class="graph-scroll" id="graph-scroll">
+        <div class="graph-header" id="graph-header"></div>
+        <div class="graph-scroll" id="graph-scroll" tabindex="0">
           <div class="graph-sizer" id="graph-sizer">
             <canvas id="graph-canvas"></canvas>
             <div class="graph-rows" id="graph-rows"></div>
           </div>
         </div>
+        <div class="graph-search" id="graph-search" hidden></div>
         <div class="graph-empty" id="graph-empty" hidden>아직 커밋이 없습니다. 오른쪽에서 첫 커밋을 만들어 보세요.</div>
         <div class="diff-view" id="diff-view" hidden></div>
         <div class="diff-view merge-view" id="merge-view" hidden></div>
+        <div class="diff-view tool-view" id="tool-view" hidden></div>
       </section>
 
       <div class="splitter" data-split="detail"></div>
       <aside class="detail" id="detail"></aside>
+      <div class="skeleton" id="skeleton" hidden></div>
     </div>
+    <footer class="footer" id="footer"></footer>
   </section>
 
   <div id="toasts" class="toasts"></div>

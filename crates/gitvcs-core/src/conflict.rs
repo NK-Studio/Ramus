@@ -184,6 +184,8 @@ pub struct ConflictDocument {
     pub ours_deleted: bool,
     pub theirs_deleted: bool,
     pub binary: bool,
+    /// 작업 사본에서 충돌 표시를 지워 버려 인덱스의 세 판으로 다시 만들었다.
+    pub recovered: bool,
 }
 
 impl Repository {
@@ -200,11 +202,16 @@ impl Repository {
         let bytes = std::fs::read(&full).unwrap_or_default();
         let binary = bytes.contains(&0);
         let mut file = None;
+        let mut recovered = false;
         if !binary && !ours_deleted && !theirs_deleted {
             let text = String::from_utf8_lossy(bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes)).into_owned();
-            file = parse(&text).or_else(|| self.conflict_text_from_stages(path).and_then(|t| parse(&t)));
+            file = parse(&text);
+            if file.is_none() {
+                file = self.conflict_text_from_stages(path).and_then(|t| parse(&t));
+                recovered = file.is_some();
+            }
         }
-        Ok(ConflictDocument { path: path.to_string(), file, ours_deleted, theirs_deleted, binary })
+        Ok(ConflictDocument { path: path.to_string(), file, ours_deleted, theirs_deleted, binary, recovered })
     }
 
     /// 인덱스의 세 판(:1 조상 :2 우리 :3 들어오는)을 `git merge-file` 로 다시 합쳐 충돌 표시가 든 글을 만든다.
@@ -282,10 +289,22 @@ impl Repository {
 
     /// 이어간다. 병합·cherry-pick·revert 는 Stage 한 내용으로 커밋하며 끝난다. 다음 커밋에서 또 충돌하면 오류로 알린다.
     pub fn continue_operation(&self) -> Result<String> {
+        self.continue_with_message(None)
+    }
+
+    /// 이어간다. 병합·cherry-pick·revert 에 `message` 를 주면 그 메시지로 커밋한다(커밋 상자에서 고친 메시지).
+    pub fn continue_with_message(&self, message: Option<&str>) -> Result<String> {
         if let Some(blocker) = self.continue_blocker()? {
             return Err(GitError::new(blocker));
         }
         let op = self.operation().expect("blocker 가 없으면 작업이 있다");
+        if let Some(message) = message.filter(|m| !m.trim().is_empty())
+            && op != Operation::Rebase
+        {
+            // MERGE_MSG 를 바꿔 두면 --continue 가 그 메시지로 커밋한다.
+            std::fs::write(self.git_dir().join("MERGE_MSG"), format!("{}\n", message.trim_end()))
+                .map_err(|e| GitError::new(format!("메시지를 쓰지 못했습니다: {e}")))?;
+        }
         let out = self.git_run_with_env(&[op.verb(), "--continue"], &[("GIT_EDITOR", "true")]);
         self.explain_next_conflict(op, out)
     }
