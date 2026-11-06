@@ -1,0 +1,123 @@
+# main 에 올라오는 커밋과 PR 은 테스트·빌드만 하고,
+# v* 태그를 푸시하면 macOS(Apple Silicon)·Windows 빌드를 GitHub 릴리즈에 올린다.
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: git identity for tests
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+      - run: cargo test --workspace
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tests/ui/syntax.test.mjs
+
+  build-macos:
+    name: Build macOS (Apple Silicon)
+    runs-on: macos-15 # arm64 러너
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build GitVcs.app
+        run: sh scripts/bundle-macos.sh release
+      - name: Check architecture
+        run: lipo -archs target/release/GitVcs.app/Contents/MacOS/gitvcs
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent target/release/GitVcs.app "dist/GitVcs-${{ github.ref_name }}-macos-arm64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: dist/*
+
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - name: Build gitvcs.exe
+        run: cargo build --release -p gitvcs-app --target x86_64-pc-windows-msvc
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = "GitVcs-${{ github.ref_name }}-windows-x64"
+          New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/gitvcs.exe "dist/$name/GitVcs.exe"
+          Copy-Item README.md "dist/$name/"
+          Compress-Archive -Path "dist/$name/*" -DestinationPath "dist/$name.zip"
+          Remove-Item -Recurse "dist/$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/*
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## 내려받기
+
+            | OS | 파일 |
+            | --- | --- |
+            | macOS (Apple Silicon, macOS 12 이상) | `GitVcs-${{ github.ref_name }}-macos-arm64.zip` |
+            | Windows 10/11 (x64) | `GitVcs-${{ github.ref_name }}-windows-x64.zip` |
+
+            PC 에 `git` 이 설치되어 있어야 합니다. Windows 는 WebView2 런타임(Windows 10/11 기본 포함)을 씁니다.
+
+            ### macOS 처음 실행
+            서명·공증하지 않은 빌드라 처음에는 Gatekeeper 가 막습니다. 압축을 풀고 `GitVcs.app` 을 응용 프로그램 폴더로 옮긴 뒤 아래를 한 번 실행하세요.
+
+            ```bash
+            xattr -dr com.apple.quarantine /Applications/GitVcs.app
+            ```
+
+            ### Windows 처음 실행
+            SmartScreen 경고가 뜨면 **추가 정보 → 실행** 을 누르세요.
