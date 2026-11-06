@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use gitvcs_core::ops::MergeMode;
-use gitvcs_core::undo::{self, Journal, UndoEntry, UndoKind};
-use gitvcs_core::{GitRunner, Repository};
+use ramus_core::ops::MergeMode;
+use ramus_core::undo::{self, Journal, UndoEntry, UndoKind};
+use ramus_core::{GitRunner, Repository};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = GitRunner::default().run(dir, args);
@@ -120,7 +120,7 @@ fn remotes_worktrees_and_merge_modes() {
     let subs = repo.submodules().unwrap();
     assert_eq!(subs.len(), 1);
     assert_eq!(subs[0].path, "vendor/lib");
-    assert_eq!(subs[0].state, gitvcs_core::ops::SubmoduleState::Ok);
+    assert_eq!(subs[0].state, ramus_core::ops::SubmoduleState::Ok);
     // 편집 드로어의 현재 리비전: 그 서브모듈 커밋의 메시지.
     let (time, message) = repo.submodule_revision("vendor/lib").unwrap();
     assert!(time > 0);
@@ -136,7 +136,7 @@ fn remotes_worktrees_and_merge_modes() {
 
 #[test]
 fn rewrite_reword_squash_drop() {
-    use gitvcs_core::rewrite::RewriteKind;
+    use ramus_core::rewrite::RewriteKind;
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     init(d);
@@ -159,9 +159,9 @@ fn rewrite_reword_squash_drop() {
 
 #[test]
 fn whole_file_partial_stage_ignore_and_path_stash() {
-    use gitvcs_core::diff::LineKind;
-    use gitvcs_core::files::PatternKind;
-    use gitvcs_core::repo::{DiffOptions, DiffTarget, FULL_CONTEXT, LineAction};
+    use ramus_core::diff::LineKind;
+    use ramus_core::files::PatternKind;
+    use ramus_core::repo::{DiffOptions, DiffTarget, FULL_CONTEXT, LineAction};
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     init(d);

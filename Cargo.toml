@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/gitvcs-core", "crates/gitvcs-app"]
+members = ["crates/ramus-core", "crates/ramus-app"]
 
 [workspace.package]
 version = "0.2.0"

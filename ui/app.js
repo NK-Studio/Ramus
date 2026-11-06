@@ -1504,7 +1504,7 @@ function renderFooter() {
     }, icon('zoomIn', 14, 'footer-icon'), el('span', { class: 'footer-text', text: `${scale}%` })),
     el('button', { class: 'footer-btn', 'data-tip': '이 레포지토리의 GitHub 계정…', onclick: () => github.chooseAccount() },
       icon('github', 14, 'footer-icon'), el('span', { class: 'footer-text', text: github.account ?? 'GitHub' })),
-    el('span', { class: 'footer-version', 'data-tip': 'GitVcs', text: state.version }));
+    el('span', { class: 'footer-version', 'data-tip': 'Ramus', text: state.version }));
 }
 
 /** 원본 RefTreeBuilder.Sections 순서. 레일 아이콘도 이 순서다. */

@@ -2,7 +2,7 @@
 //
 // 한 줄은 [브랜치/태그 이름표][그래프][메시지] 이고(Fork 모양이면 뒤에 작성자·SHA·날짜), 머리 줄 칸을 끌어 순서를, 칸 경계를 끌어 폭을 바꾼다.
 // 맨 오른쪽 칸은 남은 폭을 갖는다. 줄은 보이는 것만 DOM 으로 만들고(가상 스크롤), 가지 선·커밋 원은 그 위에 겹친 canvas 에 그린다.
-// 가지 배치는 Rust(gitvcs-core::graph)가 정해 보낸다: nodes[i] = {lane, truncated, refs}, lanes[k] = {name, column, color, …}, edges = [{child, parent, merge}].
+// 가지 배치는 Rust(ramus-core::graph)가 정해 보낸다: nodes[i] = {lane, truncated, refs}, lanes[k] = {name, column, color, …}, edges = [{child, parent, merge}].
 
 import { el, formatDate, initials, isComposing } from './util.js';
 import { icon } from './icons.js';

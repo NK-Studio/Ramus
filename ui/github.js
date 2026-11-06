@@ -361,7 +361,7 @@ export function createGitHub(ctx) {
   function connectScreen(host, onLeave) {
     const B = 'github-connect';
     const title = el('div', { class: `${B}__title`, text: 'GitHub 연결' });
-    const text = el('div', { class: `${B}__text`, text: 'GitVcs 를 쓰기 전에 GitHub 계정을 연결하세요. 로그인하면 비공개 레포지토리에서도 커밋 작성자의 아바타가 보이고 Pull Request 를 보고 만들 수 있습니다. 한 번 로그인하면 이 PC 의 모든 레포지토리에 적용됩니다.' });
+    const text = el('div', { class: `${B}__text`, text: 'Ramus 를 쓰기 전에 GitHub 계정을 연결하세요. 로그인하면 비공개 레포지토리에서도 커밋 작성자의 아바타가 보이고 Pull Request 를 보고 만들 수 있습니다. 한 번 로그인하면 이 PC 의 모든 레포지토리에 적용됩니다.' });
     // 로그인은 전용 창(deviceLogin)에서 한다. 마치면 이 화면을 떠난다.
     const signIn = el('button', { class: `${B}__primary`, text: 'GitHub 로 로그인', onclick: () => deviceLogin().then((r) => { if (r) leave(true); }) });
     const startStep = el('div', { class: `${B}__step` }, signIn);

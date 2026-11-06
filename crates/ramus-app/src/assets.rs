@@ -1,4 +1,4 @@
-//! 화면 파일(ui/)을 웹뷰에 준다. 보통은 실행 파일에 묻어 둔 것을, `GITVCS_UI_DIR` 이 있으면 그 폴더의 파일을 바로 읽는다
+//! 화면 파일(ui/)을 웹뷰에 준다. 보통은 실행 파일에 묻어 둔 것을, `RAMUS_UI_DIR` 이 있으면 그 폴더의 파일을 바로 읽는다
 //! (화면을 고치며 앱을 다시 빌드하지 않고 새로고침만 하려고).
 
 use std::borrow::Cow;
@@ -26,7 +26,7 @@ pub fn respond(request: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
     // 폴더를 벗어나는 경로는 받지 않는다.
     let body: Option<Cow<'static, [u8]>> = if path.contains("..") {
         None
-    } else if let Some(dir) = std::env::var_os("GITVCS_UI_DIR") {
+    } else if let Some(dir) = std::env::var_os("RAMUS_UI_DIR") {
         std::fs::read(std::path::Path::new(&dir).join(path)).ok().map(Cow::Owned)
     } else {
         EMBEDDED.iter().find(|(name, _)| *name == path).map(|(_, bytes)| Cow::Borrowed(*bytes))

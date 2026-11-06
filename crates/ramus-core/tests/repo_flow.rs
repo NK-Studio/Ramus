@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use gitvcs_core::status::FileState;
-use gitvcs_core::{GitRunner, Repository};
+use ramus_core::status::FileState;
+use ramus_core::{GitRunner, Repository};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = GitRunner::default().run(dir, args);
@@ -133,8 +133,8 @@ fn global_config_args_reach_git() {
     // SSL 설정처럼 앞에 붙인 -c 가 실제 git 에 닿는지(사용자 .gitconfig 는 건드리지 않는다).
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());
-    let runner = GitRunner::new(gitvcs_core::GitGlobals {
-        config_args: gitvcs_core::ssl::build_arguments(&gitvcs_core::ssl::SslSettings { verify: false, ..Default::default() }, false),
+    let runner = GitRunner::new(ramus_core::GitGlobals {
+        config_args: ramus_core::ssl::build_arguments(&ramus_core::ssl::SslSettings { verify: false, ..Default::default() }, false),
         ..Default::default()
     });
     let out = runner.run(dir.path(), &["config", "--get", "http.sslVerify"]);
@@ -158,18 +158,18 @@ fn clone_and_test_connection() {
 
     let runner = GitRunner::default();
     let url = remote.to_str().unwrap();
-    assert_eq!(gitvcs_core::remote::test_connection(&runner, tmp.path(), url).unwrap(), 1);
-    assert!(gitvcs_core::remote::test_connection(&runner, tmp.path(), "/없는/곳.git").is_err());
+    assert_eq!(ramus_core::remote::test_connection(&runner, tmp.path(), url).unwrap(), 1);
+    assert!(ramus_core::remote::test_connection(&runner, tmp.path(), "/없는/곳.git").is_err());
 
     let dest = tmp.path().join("받은 레포지토리");
-    let repo = gitvcs_core::remote::clone(&runner, url, &dest).unwrap();
+    let repo = ramus_core::remote::clone(&runner, url, &dest).unwrap();
     assert!(dest.join("a").exists());
     assert_eq!(repo.default_remote_url().as_deref(), Some(url));
     // 이미 파일이 있는 폴더에는 받지 않는다.
-    assert!(gitvcs_core::remote::clone(&runner, url, &dest).is_err());
+    assert!(ramus_core::remote::clone(&runner, url, &dest).is_err());
     // 실패하면 만들다 만 폴더를 남기지 않는다.
     let bad = tmp.path().join("bad");
-    assert!(gitvcs_core::remote::clone(&runner, "/없는/곳.git", &bad).is_err());
+    assert!(ramus_core::remote::clone(&runner, "/없는/곳.git", &bad).is_err());
     assert!(!bad.exists());
 }
 

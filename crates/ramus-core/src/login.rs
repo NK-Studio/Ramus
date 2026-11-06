@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::runner::GitRunner;
 
-pub const HOST_VARIABLE: &str = "GITVCS_SSH_HOST";
-pub const PASSWORD_VARIABLE: &str = "GITVCS_SSH_PASSWORD";
+pub const HOST_VARIABLE: &str = "RAMUS_SSH_HOST";
+pub const PASSWORD_VARIABLE: &str = "RAMUS_SSH_PASSWORD";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,7 +128,7 @@ fn percent_decode(s: &str) -> String {
 pub fn askpass_script() -> String {
     format!(
         "#!/bin/sh\n\
-         # GitVcs: ssh 가 비밀번호를 물을 때 앱에서 받은 값을 돌려준다. 값은 환경 변수로만 받는다.\n\
+         # Ramus: ssh 가 비밀번호를 물을 때 앱에서 받은 값을 돌려준다. 값은 환경 변수로만 받는다.\n\
          case \"$1\" in\n  \
          *\"${HOST_VARIABLE}\"*\"(yes/no\"*) echo yes; exit 0 ;;\n  \
          *\"${HOST_VARIABLE}\"*assword*) printf '%s\\n' \"${PASSWORD_VARIABLE}\"; exit 0 ;;\n\
@@ -234,8 +234,8 @@ mod tests {
     #[test]
     fn askpass_answers_only_its_host() {
         let script = askpass_script();
-        assert!(script.contains("*\"$GITVCS_SSH_HOST\"*assword*"));
-        assert!(script.contains("*\"$GITVCS_SSH_HOST\"*\"(yes/no\"*"));
+        assert!(script.contains("*\"$RAMUS_SSH_HOST\"*assword*"));
+        assert!(script.contains("*\"$RAMUS_SSH_HOST\"*\"(yes/no\"*"));
         assert!(script.ends_with("exit 1\n"));
     }
 

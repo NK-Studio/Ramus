@@ -345,7 +345,7 @@ impl Repository {
         }
         let joined = join_with_separators(text, original);
         let bytes = encode_bytes(&joined, &original.encoding, original.bom);
-        let tmp = full.with_extension("gitvcs-save");
+        let tmp = full.with_extension("ramus-save");
         std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &full)).map_err(|e| GitError::new(format!("{path} 를 쓰지 못했습니다: {e}")))?;
         Ok(text_file(&joined, original.encoding.clone(), original.bom, modified_ms(&full)))
     }

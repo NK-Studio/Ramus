@@ -1,4 +1,4 @@
-# GitVcs (데스크톱)
+# Ramus (데스크톱)
 
 Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.gitvcs) 를 Unity 밖에서 혼자 도는 앱으로 옮긴 Git 클라이언트입니다.
 PC 에 설치된 `git` 을 실행하고, 화면은 웹뷰(wry)로 그립니다. 대상은 macOS(Apple Silicon)·Windows 입니다.
@@ -7,15 +7,15 @@ PC 에 설치된 `git` 을 실행하고, 화면은 웹뷰(wry)로 그립니다. 
 
 [Releases](https://github.com/NK-Studio/gitvcs-desktop/releases/latest) 에서 받습니다.
 
-- macOS(Apple Silicon): `GitVcs-<버전>-macos-arm64.zip` — 서명하지 않은 빌드라 처음 한 번 `xattr -dr com.apple.quarantine /Applications/GitVcs.app` 을 실행합니다.
-- Windows 10/11(x64): `GitVcs-<버전>-windows-x64.zip` — 압축을 풀고 `GitVcs.exe` 를 실행합니다(WebView2 런타임 사용).
+- macOS(Apple Silicon): `Ramus-<버전>-macos-arm64.zip` — 서명하지 않은 빌드라 처음 한 번 `xattr -dr com.apple.quarantine /Applications/Ramus.app` 을 실행합니다.
+- Windows 10/11(x64): `Ramus-<버전>-windows-x64.zip` — 압축을 풀고 `Ramus.exe` 를 실행합니다(WebView2 런타임 사용).
 
 PC 에 `git` 이 설치되어 있어야 합니다.
 
 ## 구성
 
-- `crates/gitvcs-core` — git 실행·파싱(status·log·그래프 열 배치), SSL `-c` 설정, 설정·최근 레포지토리. 화면과 상관없어 테스트로 확인합니다.
-- `crates/gitvcs-app` — tao 창 + wry 웹뷰, 화면과 JSON 메시지로 주고받기, 폴더 고르기.
+- `crates/ramus-core` — git 실행·파싱(status·log·그래프 열 배치), SSL `-c` 설정, 설정·최근 레포지토리. 화면과 상관없어 테스트로 확인합니다.
+- `crates/ramus-app` — tao 창 + wry 웹뷰, 화면과 JSON 메시지로 주고받기, 폴더 고르기.
 - `ui/` — 화면(HTML·CSS·JS, 빌드 도구 없음). 실행 파일 안에 묻어 넣습니다.
 
 ## 빌드·실행
@@ -23,11 +23,11 @@ PC 에 `git` 이 설치되어 있어야 합니다.
 ```bash
 cargo test
 node tests/ui/syntax.test.mjs     # 문법 색(원본 GitTextEditorTests 의 Tokenize 시험)
-cargo run -p gitvcs-app
-scripts/bundle-macos.sh release   # target/release/GitVcs.app
+cargo run -p ramus-app
+scripts/bundle-macos.sh release   # target/release/Ramus.app
 ```
 
-개발 중에는 `GITVCS_UI_DIR=$PWD/ui` 를 주면 화면 파일을 디스크에서 바로 읽습니다. `GITVCS_SETTINGS` 로 설정 파일 위치를 바꿀 수 있습니다.
+개발 중에는 `RAMUS_UI_DIR=$PWD/ui` 를 주면 화면 파일을 디스크에서 바로 읽습니다. `RAMUS_SETTINGS` 로 설정 파일 위치를 바꿀 수 있습니다.
 
 ## 주요 기능
 
@@ -56,7 +56,7 @@ scripts/bundle-macos.sh release   # target/release/GitVcs.app
 
 ## 개발 빌드 점검 통로
 
-디버그 빌드를 `GITVCS_DEV_PORT=7777` 으로 띄우면 127.0.0.1:7777 에서 JS(async 함수 본문)를 받아 웹뷰에서 실행하고 결과를 돌려줍니다.
+디버그 빌드를 `RAMUS_DEV_PORT=7777` 으로 띄우면 127.0.0.1:7777 에서 JS(async 함수 본문)를 받아 웹뷰에서 실행하고 결과를 돌려줍니다.
 
 ```bash
 echo 'return document.title' | nc 127.0.0.1 7777

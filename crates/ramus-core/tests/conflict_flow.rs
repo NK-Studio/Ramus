@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use gitvcs_core::conflict::{Operation, Segment, Side};
-use gitvcs_core::{GitRunner, Repository};
+use ramus_core::conflict::{Operation, Segment, Side};
+use ramus_core::{GitRunner, Repository};
 
 fn git(dir: &Path, args: &[&str]) -> (bool, String) {
     let out = GitRunner::default().run(dir, args);

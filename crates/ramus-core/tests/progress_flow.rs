@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use gitvcs_core::{GitRunner, Progress, Repository, remote, set_progress_sink};
+use ramus_core::{GitRunner, Progress, Repository, remote, set_progress_sink};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = GitRunner::default().run(dir, args);

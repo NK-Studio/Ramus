@@ -1,15 +1,15 @@
 [package]
-name = "gitvcs-app"
+name = "ramus-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "gitvcs"
+name = "ramus"
 path = "src/main.rs"
 
 [dependencies]
-gitvcs-core = { path = "../gitvcs-core" }
+ramus-core = { path = "../ramus-core" }
 serde.workspace = true
 serde_json.workspace = true
 tao = "0.37"

@@ -1,5 +1,5 @@
 //! 앱 설정과 최근 레포지토리 목록. 사용자 설정 폴더의 JSON 하나에 둔다
-//! (macOS `~/Library/Application Support/GitVcs/settings.json`, Windows `%APPDATA%\GitVcs\settings.json`).
+//! (macOS `~/Library/Application Support/Ramus/settings.json`, Windows `%APPDATA%\Ramus\settings.json`).
 
 use std::path::{Path, PathBuf};
 
@@ -63,8 +63,19 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// 이름을 GitVcs 에서 Ramus 로 바꾸기 전의 설정이 있고 새 설정이 아직 없으면, 처음 한 번 옛 파일을 새 자리로 복사한다
+    /// (최근 레포지토리·열린 탭·SSL 설정이 그대로 남게). 옛 파일은 지우지 않는다.
     pub fn default_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("GitVcs").join("settings.json"))
+        let config = dirs::config_dir()?;
+        let path = config.join("Ramus").join("settings.json");
+        let legacy = config.join("GitVcs").join("settings.json");
+        if !path.exists() && legacy.exists() {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::copy(&legacy, &path);
+        }
+        Some(path)
     }
 
     /// 파일이 없거나 깨졌으면 기본값.

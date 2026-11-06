@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use gitvcs_core::diff::LineKind;
-use gitvcs_core::repo::{DiffTarget, LineAction, PullMode};
-use gitvcs_core::{GitRunner, Repository};
+use ramus_core::diff::LineKind;
+use ramus_core::repo::{DiffTarget, LineAction, PullMode};
+use ramus_core::{GitRunner, Repository};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = GitRunner::default().run(dir, args);
@@ -39,7 +39,7 @@ fn staged() -> DiffTarget {
     DiffTarget::Staged { path: PATH.into(), original_path: None }
 }
 
-fn index_of(doc: &gitvcs_core::diff::DiffDocument, kind: LineKind, text: &str) -> usize {
+fn index_of(doc: &ramus_core::diff::DiffDocument, kind: LineKind, text: &str) -> usize {
     doc.lines.iter().position(|l| l.kind == kind && l.text == text).unwrap_or_else(|| panic!("{text} 없음"))
 }
 
@@ -64,7 +64,7 @@ fn stage_unstage_and_discard_single_lines() {
 
     // 첫 hunk(2 → 2a)를 통째로 Stage.
     let doc = repo.diff(&unstaged()).unwrap();
-    let hunk0 = gitvcs_core::patch::changed_lines_of_hunk(&doc.lines, 0);
+    let hunk0 = ramus_core::patch::changed_lines_of_hunk(&doc.lines, 0);
     repo.apply_lines(LineAction::Stage, PATH, false, &doc.fingerprint, &hunk0).unwrap();
     let cached = git(dir.path(), &["diff", "--cached", "--no-color"]);
     assert!(cached.contains("+2a") && cached.contains("-2\n"));

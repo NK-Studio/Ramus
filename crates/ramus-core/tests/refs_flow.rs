@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use gitvcs_core::refs::ResetMode;
-use gitvcs_core::{GitRunner, Repository};
+use ramus_core::refs::ResetMode;
+use ramus_core::{GitRunner, Repository};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = GitRunner::default().run(dir, args);

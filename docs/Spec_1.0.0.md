@@ -1,10 +1,10 @@
-# GitVcs 데스크톱 1.0.0 스펙
+# Ramus 데스크톱 1.0.0 스펙
 
 | 항목 | 내용 |
 |---|---|
 | 문서 버전 | 1.0.0 (초안) |
 | 작성일 | 2026-11-03 |
-| 대상 | GitVcs 데스크톱 앱 1.0.0 |
+| 대상 | Ramus 데스크톱 앱 1.0.0 |
 | 기준 원본 | Unity 패키지 `com.nkstudio.gitvcs` 1.2.0 (`Packages/com.nkstudio.gitvcs`, 커밋 `37d0d28`) |
 | 근거 자료 | [ui-gap.md](ui-gap.md) — 원본과 지금 앱을 코드로 맞대 본 빠진 목록(원본 `파일:줄` 포함) |
 | 레포지토리 | `gitvcs-desktop` (Rust + cargo, wry 웹뷰) |
@@ -61,8 +61,8 @@ Unity 에디터 안의 Git 클라이언트(`com.nkstudio.gitvcs`)를 Unity 밖�
 
 | 이름 | 종류 | 맡는 일 |
 |---|---|---|
-| `gitvcs-core` | lib | git 실행(`GitRunner`), 파서(status·log·diff·refs·충돌), 그래프 배치, 부분 패치, SSL·로그인, 설정. 화면과 무관하고 테스트로 확인한다 |
-| `gitvcs-app` | bin | tao 창 + wry 웹뷰, IPC 분배, 작업 스레드, 파일 감시(notify), 자동 페치, 파일·폴더 고르기(rfd) |
+| `ramus-core` | lib | git 실행(`GitRunner`), 파서(status·log·diff·refs·충돌), 그래프 배치, 부분 패치, SSL·로그인, 설정. 화면과 무관하고 테스트로 확인한다 |
+| `ramus-app` | bin | tao 창 + wry 웹뷰, IPC 분배, 작업 스레드, 파일 감시(notify), 자동 페치, 파일·폴더 고르기(rfd) |
 | `ui/` | 정적 파일 | HTML·CSS·JS(빌드 도구 없음). 실행 파일에 묻어 `gitvcs://`(Windows `http://gitvcs.localhost`)로 제공 |
 
 ### 3.2 메시지
@@ -74,8 +74,8 @@ Unity 에디터 안의 Git 클라이언트(`com.nkstudio.gitvcs`)를 Unity 밖�
 
 ### 3.3 개발 도구
 
-- 디버그 빌드 + `GITVCS_DEV_PORT` 로 점검 통로를 연다(JS 를 웹뷰에서 실행). 릴리스 빌드에는 들어가지 않는다.
-- `GITVCS_UI_DIR` 로 화면 파일을 디스크에서 읽는다. `GITVCS_SETTINGS` 로 설정 파일 위치를 바꾼다.
+- 디버그 빌드 + `RAMUS_DEV_PORT` 로 점검 통로를 연다(JS 를 웹뷰에서 실행). 릴리스 빌드에는 들어가지 않는다.
+- `RAMUS_UI_DIR` 로 화면 파일을 디스크에서 읽는다. `RAMUS_SETTINGS` 로 설정 파일 위치를 바꾼다.
 
 ---
 
@@ -105,7 +105,7 @@ Unity 에디터 안의 Git 클라이언트(`com.nkstudio.gitvcs`)를 Unity 밖�
 | WIN-13 | 글꼴 | UI 는 IBM Plex Sans KR, 코드는 Jetendard(앱에 포함, 라이선스 고지) | P2 | ⬜ 글꼴 미포함(P2, 1.0.x) |
 | WIN-14 | 전환 연출 | 배치·테마 바꿀 때 "다시 그리는 중" 덮개, 연결 화면 → 본체 전환 | P2 | ✅ |
 | WIN-15 | 칸 경계 끌기 | 사이드바·오른쪽 패널 폭을 끌어 바꾸고 저장. 두 번 누르면 기본 폭 | P1 | ✅ |
-| WIN-16 | 운영체제 메뉴 막대 (원본에 없음 · 확장) | macOS 화면 위 메뉴 / Windows 창 메뉴 막대(muda). GitVcs(macOS: 정보·설정·가리기·종료) · 파일(새 탭·탭 닫기·닫은 탭 다시 열기·복제·만들기·열기·터미널·Finder/탐색기·GitHub 로그아웃) · 편집(실행 취소/다시 실행 — 글 칸이면 글, 밖이면 git · 잘라내기·복사·붙여넣기·모두 선택 · 찾기) · 보기(확대·축소·실제 크기·새로 고침·전체 화면) · 레포지토리(커밋·Fetch·Pull·Push·Stash·Pop·브랜치 전환·새 브랜치·새 태그·새 워크트리, 레포지토리가 없거나 작업 중이면 꺼짐) · 창 · 도움말(키보드 단축키 카드). 단축키는 macOS 는 메뉴가, Windows 는 화면 keydown 이 받아 같은 명령 하나로 부른다. 카드가 떠 있으면 레포지토리 동작은 무시 | P2 | ✅ |
+| WIN-16 | 운영체제 메뉴 막대 (원본에 없음 · 확장) | macOS 화면 위 메뉴 / Windows 창 메뉴 막대(muda). Ramus(macOS: 정보·설정·가리기·종료) · 파일(새 탭·탭 닫기·닫은 탭 다시 열기·복제·만들기·열기·터미널·Finder/탐색기·GitHub 로그아웃) · 편집(실행 취소/다시 실행 — 글 칸이면 글, 밖이면 git · 잘라내기·복사·붙여넣기·모두 선택 · 찾기) · 보기(확대·축소·실제 크기·새로 고침·전체 화면) · 레포지토리(커밋·Fetch·Pull·Push·Stash·Pop·브랜치 전환·새 브랜치·새 태그·새 워크트리, 레포지토리가 없거나 작업 중이면 꺼짐) · 창 · 도움말(키보드 단축키 카드). 단축키는 macOS 는 메뉴가, Windows 는 화면 keydown 이 받아 같은 명령 하나로 부른다. 카드가 떠 있으면 레포지토리 동작은 무시 | P2 | ✅ |
 | WIN-17 | 레포지토리 만들기 창 (원본에 없음 · 확장) | GitKraken "Initialize a Repository" 처럼 왼쪽 [로컬만][GitHub.com], 오른쪽 양식(라벨 오른쪽 정렬). 로컬: 이름·만들 위치(찾아보기)·전체 경로·기본 브랜치(빈칸=main)·.gitignore 템플릿·라이선스(검색 고르기, ✕ 비우기)·LFS → 폴더 만들기·init·.gitignore/LICENSE(올해·user.name 채움)·`git lfs install --local`·"Initial commit" → 새 탭. GitHub: 계정(사용자+조직, 아바타)·이름·설명·공개 범위·만든 뒤 클론·클론할 위치·폴더 이름·기본 브랜치·템플릿·라이선스·LFS → POST /user/repos·/orgs/{org}/repos, 기본 브랜치가 다르면 rename API(빈 레포지토리면 clone 의 HEAD 로), clone 하면 새 탭, 아니면 주소 알림·브라우저 열기. 템플릿·라이선스 목록은 GitHub API 를 앱이 켜져 있는 동안 기억, 오프라인이면 내장 틀만·라이선스 끔. 비었거나 비어 있지 않은 폴더면 버튼을 끄고 이유 한 줄. 메뉴 ⌘I·명령·시작 화면이 모두 이 창을 연다 | P2 | ✅ |
 
 ### 4.2 도구 막대 (TB)

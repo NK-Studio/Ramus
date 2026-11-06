@@ -15,7 +15,7 @@ use regex::Regex;
 /// 받는 사진 크기(px).
 pub const SIZE: u32 = 64;
 const CACHE_LIFETIME: Duration = Duration::from_secs(7 * 24 * 3600);
-const USER_AGENT: &str = "GitVcs-Desktop";
+const USER_AGENT: &str = "Ramus-Desktop";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiAuthor {
@@ -161,9 +161,9 @@ impl AvatarCache {
         AvatarCache { dir, missing: Mutex::new(HashSet::new()) }
     }
 
-    /// 기본 위치: macOS `~/Library/Caches/GitVcs/Avatars`, Windows `%LOCALAPPDATA%\GitVcs\Avatars`.
+    /// 기본 위치: macOS `~/Library/Caches/Ramus/Avatars`, Windows `%LOCALAPPDATA%\Ramus\Avatars`.
     pub fn default_dir() -> Option<PathBuf> {
-        dirs::cache_dir().map(|d| d.join("GitVcs").join("Avatars"))
+        dirs::cache_dir().map(|d| d.join("Ramus").join("Avatars"))
     }
 
     /// 사진을 찾는다(네트워크를 쓸 수 있어 작업 스레드에서 부른다). `github` 는 원격이 GitHub 일 때 (소유자, 레포지토리).

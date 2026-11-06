@@ -21,8 +21,9 @@ pub const CLIENT_ID: &str = "Ov23liwBBq0RMqbmU44U";
 pub const SCOPE: &str = "repo read:org";
 /// 레포지토리 만들기에 필요한 scope.
 pub const CREATE_SCOPES: [&str; 2] = ["repo", "read:org"];
-const USER_AGENT: &str = "GitVcs-Desktop";
+const USER_AGENT: &str = "Ramus-Desktop";
 /// 앱 로그인 토큰을 넣어 둘 자격 증명 저장소의 이름(실제 git 접속에는 쓰지 않는 호스트).
+/// 앱 이름을 Ramus 로 바꾼 뒤에도 그대로 둔다 — 바꾸면 이미 로그인한 사람이 다시 로그인해야 한다.
 const STORE_HOST: &str = "gitvcs-desktop.github.com";
 const API: &str = "https://api.github.com";
 
@@ -222,8 +223,8 @@ pub fn token_environment(token: &str) -> HashMap<String, String> {
         ("GIT_CONFIG_KEY_0".to_string(), "credential.https://github.com.helper".to_string()),
         ("GIT_CONFIG_VALUE_0".to_string(), String::new()),
         ("GIT_CONFIG_KEY_1".to_string(), "credential.https://github.com.helper".to_string()),
-        ("GIT_CONFIG_VALUE_1".to_string(), "!f() { test \"$1\" = get && echo username=x-access-token && echo \"password=$GITVCS_GITHUB_TOKEN\"; }; f".to_string()),
-        ("GITVCS_GITHUB_TOKEN".to_string(), token.to_string()),
+        ("GIT_CONFIG_VALUE_1".to_string(), "!f() { test \"$1\" = get && echo username=x-access-token && echo \"password=$RAMUS_GITHUB_TOKEN\"; }; f".to_string()),
+        ("RAMUS_GITHUB_TOKEN".to_string(), token.to_string()),
     ])
 }
 
@@ -248,7 +249,7 @@ mod tests {
     #[test]
     fn token_stays_in_environment() {
         let env = token_environment("secret");
-        assert_eq!(env["GITVCS_GITHUB_TOKEN"], "secret");
+        assert_eq!(env["RAMUS_GITHUB_TOKEN"], "secret");
         assert!(env.values().filter(|v| v.contains("secret")).count() == 1);
     }
 }

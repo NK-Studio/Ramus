@@ -80,22 +80,22 @@ impl AppMenu {
 
         #[cfg(target_os = "macos")]
         {
-            let about = muda::AboutMetadata { name: Some("GitVcs".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
+            let about = muda::AboutMetadata { name: Some("Ramus".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
             let app = Submenu::with_items(
-                "GitVcs",
+                "Ramus",
                 true,
                 &[
-                    &PredefinedMenuItem::about(Some("GitVcs 정보"), Some(about)),
+                    &PredefinedMenuItem::about(Some("Ramus 정보"), Some(about)),
                     &sep(),
                     &item("settings", "설정…"),
                     &sep(),
                     &PredefinedMenuItem::services(Some("서비스")),
                     &sep(),
-                    &PredefinedMenuItem::hide(Some("GitVcs 가리기")),
+                    &PredefinedMenuItem::hide(Some("Ramus 가리기")),
                     &PredefinedMenuItem::hide_others(Some("기타 가리기")),
                     &PredefinedMenuItem::show_all(Some("모두 보기")),
                     &sep(),
-                    &PredefinedMenuItem::quit(Some("GitVcs 종료")),
+                    &PredefinedMenuItem::quit(Some("Ramus 종료")),
                 ],
             )
             .expect("앱 메뉴");
@@ -204,8 +204,8 @@ impl AppMenu {
         let help = Submenu::with_items("도움말", true, &[&item("shortcuts", "키보드 단축키 보기")]).expect("도움말 메뉴");
         #[cfg(not(target_os = "macos"))]
         {
-            let about = muda::AboutMetadata { name: Some("GitVcs".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
-            help.append_items(&[&sep(), &PredefinedMenuItem::about(Some("GitVcs 정보"), Some(about))]).expect("도움말 메뉴");
+            let about = muda::AboutMetadata { name: Some("Ramus".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
+            help.append_items(&[&sep(), &PredefinedMenuItem::about(Some("Ramus 정보"), Some(about))]).expect("도움말 메뉴");
         }
         // macOS 가 도움말 메뉴 맨 위에 검색 칸을 넣는다.
         #[cfg(target_os = "macos")]

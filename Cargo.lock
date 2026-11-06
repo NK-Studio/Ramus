@@ -806,36 +806,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gitvcs-app"
-version = "0.2.0"
-dependencies = [
- "dirs",
- "gitvcs-core",
- "muda",
- "notify",
- "rfd",
- "serde",
- "serde_json",
- "tao",
- "tempfile",
- "wry",
-]
-
-[[package]]
-name = "gitvcs-core"
-version = "0.2.0"
-dependencies = [
- "dirs",
- "md5",
- "regex",
- "serde",
- "serde_json",
- "sha1_smol",
- "tempfile",
- "ureq",
-]
-
-[[package]]
 name = "glib"
 version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1935,6 +1905,36 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "ramus-app"
+version = "0.2.0"
+dependencies = [
+ "dirs",
+ "muda",
+ "notify",
+ "ramus-core",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tao",
+ "tempfile",
+ "wry",
+]
+
+[[package]]
+name = "ramus-core"
+version = "0.2.0"
+dependencies = [
+ "dirs",
+ "md5",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha1_smol",
+ "tempfile",
+ "ureq",
+]
 
 [[package]]
 name = "raw-window-handle"

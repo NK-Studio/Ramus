@@ -4,15 +4,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use gitvcs_core::conflict::Side;
-use gitvcs_core::refs::ResetMode;
-use gitvcs_core::repo::{DiffTarget, LineAction, PullMode, Result};
-use gitvcs_core::avatar::{self, Avatar, AvatarCache};
-use gitvcs_core::github;
-use gitvcs_core::ops::MergeMode;
-use gitvcs_core::rewrite::RewriteKind;
-use gitvcs_core::undo::{self, Journal, UndoEntry, UndoKind};
-use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, newrepo, remote, ssl};
+use ramus_core::conflict::Side;
+use ramus_core::refs::ResetMode;
+use ramus_core::repo::{DiffTarget, LineAction, PullMode, Result};
+use ramus_core::avatar::{self, Avatar, AvatarCache};
+use ramus_core::github;
+use ramus_core::ops::MergeMode;
+use ramus_core::rewrite::RewriteKind;
+use ramus_core::undo::{self, Journal, UndoEntry, UndoKind};
+use ramus_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, newrepo, remote, ssl};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -53,7 +53,7 @@ pub enum SideEffect {
 
 impl AppState {
     pub fn load(emit: Emit) -> AppState {
-        let settings_path = std::env::var_os("GITVCS_SETTINGS").map(PathBuf::from).or_else(Settings::default_path);
+        let settings_path = std::env::var_os("RAMUS_SETTINGS").map(PathBuf::from).or_else(Settings::default_path);
         let settings = settings_path.as_deref().map(Settings::load).unwrap_or_default();
         let runner = GitRunner::new(globals_for(&settings));
         AppState {
@@ -85,7 +85,7 @@ impl AppState {
     fn apply_globals(&self) {
         let mut globals = globals_for(&self.settings.lock().unwrap());
         if let Some((host, password)) = self.ssh_login.lock().unwrap().clone() {
-            match login::write_askpass(&std::env::temp_dir().join(format!("GitVcs-{}", whoami()))) {
+            match login::write_askpass(&std::env::temp_dir().join(format!("Ramus-{}", whoami()))) {
                 Ok(askpass) => globals.env = login::ssh_environment(&askpass, &host, &password),
                 Err(e) => eprintln!("SSH 비밀번호 도우미를 만들지 못했습니다: {e}"),
             }
@@ -238,7 +238,7 @@ impl AppState {
         }
         let info = repo_info(&repo);
         *self.github_remote.lock().unwrap() = repo.default_remote_url().as_deref().and_then(avatar::parse_github_remote);
-        effects.push(SideEffect::Title(format!("{} — GitVcs", repo.name())));
+        effects.push(SideEffect::Title(format!("{} — Ramus", repo.name())));
         self.start_watching(&repo);
         *self.repo.lock().unwrap() = Some(repo);
         *self.last_auto_fetch.lock().unwrap() = None;
@@ -481,7 +481,7 @@ impl AppState {
                 let mut settings = self.settings.lock().unwrap();
                 settings.last_repo = None;
                 self.save_settings(&settings);
-                effects.push(SideEffect::Title("GitVcs".into()));
+                effects.push(SideEffect::Title("Ramus".into()));
                 Ok(Value::Null)
             }
             "removeRecent" => {
@@ -546,7 +546,7 @@ impl AppState {
                     value["sizes"] = to_json(repo.blob_sizes(&a.target))?;
                 }
                 // 받지 않은 LFS 파일: 포인터 글만 바뀌었다.
-                value["lfsPointer"] = json!(doc.lines.iter().any(|l| gitvcs_core::files::is_lfs_pointer(&l.text)));
+                value["lfsPointer"] = json!(doc.lines.iter().any(|l| ramus_core::files::is_lfs_pointer(&l.text)));
                 Ok(value)
             }
             "fileBytes" => {
@@ -676,7 +676,7 @@ impl AppState {
                 open_url(url).map(|_| Value::Null)
             }
             "explorerHistory" => {
-                let q: gitvcs_core::history::ExplorerQuery = parse(args)?;
+                let q: ramus_core::history::ExplorerQuery = parse(args)?;
                 to_json(self.repo()?.explorer_history(&q)?)
             }
             "workspace" => to_json(self.repo()?.workspace(Args(&args).b("ignored"))?),
@@ -684,7 +684,7 @@ impl AppState {
             "readText" => to_json(self.repo()?.read_text(Args(&args).s("path")?)?),
             "writeText" => {
                 let a = Args(&args);
-                let original: gitvcs_core::history::TextFile = serde_json::from_value(args.get("original").cloned().unwrap_or_default())
+                let original: ramus_core::history::TextFile = serde_json::from_value(args.get("original").cloned().unwrap_or_default())
                     .map_err(|_| GitError::new("파일 정보가 잘못되었습니다."))?;
                 // 방금 쓴 판(줄 끝 목록·수정 시각)을 돌려준다. 다음 저장은 이 판과 견준다.
                 to_json(self.repo()?.write_text_file(a.s("path")?, a.s("text")?, &original, a.b("force"))?)
@@ -946,7 +946,7 @@ impl AppState {
                     }
                     "ignore" | "lfsTrack" => {
                         let a = Args(&args);
-                        let kind: gitvcs_core::files::PatternKind = serde_json::from_value(args.get("kind").cloned().unwrap_or_default())
+                        let kind: ramus_core::files::PatternKind = serde_json::from_value(args.get("kind").cloned().unwrap_or_default())
                             .map_err(|_| GitError::new("무시 방식이 잘못되었습니다."))?;
                         let r = if cmd == "ignore" { repo.ignore(a.s("path")?, kind) } else { repo.lfs_track(a.s("path")?, kind) };
                         r.map(|p| json!(p))
@@ -1272,7 +1272,7 @@ struct SettingsArg {
     pull_mode: Option<PullMode>,
     diff_layout: Option<String>,
     auto_fetch_minutes: Option<u32>,
-    ssl: Option<gitvcs_core::ssl::SslSettings>,
+    ssl: Option<ramus_core::ssl::SslSettings>,
     git_path: Option<String>,
 }
 
@@ -1280,7 +1280,7 @@ struct SettingsArg {
 struct DiffArg {
     target: DiffTarget,
     #[serde(default)]
-    options: gitvcs_core::repo::DiffOptions,
+    options: ramus_core::repo::DiffOptions,
 }
 
 #[derive(Deserialize)]

@@ -216,7 +216,7 @@ impl Repository {
 
     /// 인덱스의 세 판(:1 조상 :2 우리 :3 들어오는)을 `git merge-file` 로 다시 합쳐 충돌 표시가 든 글을 만든다.
     fn conflict_text_from_stages(&self, path: &str) -> Option<String> {
-        let dir = std::env::temp_dir().join(format!("gitvcs-merge-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ramus-merge-{}", std::process::id()));
         std::fs::create_dir_all(&dir).ok()?;
         let result = (|| {
             let stage = |n: u32, name: &str| -> Option<std::path::PathBuf> {

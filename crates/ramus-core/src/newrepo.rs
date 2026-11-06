@@ -402,7 +402,7 @@ mod tests {
         assert!(git(&path, &["config", "--local", "--get", "filter.lfs.process"]).contains("git-lfs"));
     }
 
-    /// 실제 GitHub API 를 부른다(인터넷 필요): `cargo test -p gitvcs-core -- --ignored online`.
+    /// 실제 GitHub API 를 부른다(인터넷 필요): `cargo test -p ramus-core -- --ignored online`.
     #[test]
     #[ignore]
     fn online_templates_and_bodies() {

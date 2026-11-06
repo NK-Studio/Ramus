@@ -1,4 +1,4 @@
-//! gitvcs 데스크톱 앱: tao 창 하나에 wry 웹뷰를 띄우고, 화면(ui/)과 JSON 메시지로 주고받는다.
+//! Ramus 데스크톱 앱: tao 창 하나에 wry 웹뷰를 띄우고, 화면(ui/)과 JSON 메시지로 주고받는다.
 //!
 //! - 화면 → Rust: `window.ipc.postMessage('{"id":1,"cmd":"status","args":{}}')`
 //! - Rust → 화면: 작업 스레드가 결과를 이벤트 루프에 넘기면(`UserEvent`) `window.__gitvcs.reply({...})` 를 실행한다.
@@ -94,7 +94,7 @@ fn start_url() -> String {
     if cfg!(windows) { format!("http://{PROTOCOL}.localhost/index.html") } else { format!("{PROTOCOL}://localhost/index.html") }
 }
 
-fn reply_json(id: u64, result: gitvcs_core::repo::Result<Value>) -> String {
+fn reply_json(id: u64, result: ramus_core::repo::Result<Value>) -> String {
     let body = match result {
         Ok(value) => json!({ "id": id, "ok": true, "value": value }),
         Err(error) => json!({ "id": id, "ok": false, "error": error }),
@@ -129,7 +129,7 @@ fn main() -> wry::Result<()> {
     let proxy = event_loop.create_proxy();
     // git 진행 줄(받는 중 45% 등)을 화면에 알린다 — 오래 걸리는 Pull·Push 가 멈춘 것처럼 보이지 않게.
     let progress_proxy = Mutex::new(proxy.clone());
-    gitvcs_core::set_progress_sink(move |progress| {
+    ramus_core::set_progress_sink(move |progress| {
         let body = json!({ "event": "progress", "data": progress }).to_string();
         let _ = progress_proxy.lock().unwrap().send_event(UserEvent::Emit(body));
     });
@@ -168,7 +168,7 @@ fn main() -> wry::Result<()> {
     };
     let dark = theme != "light";
     let builder = WindowBuilder::new()
-        .with_title("GitVcs")
+        .with_title("Ramus")
         .with_inner_size(LogicalSize::new(1440.0, 900.0))
         .with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
     // macOS 는 화면의 탭 막대가 제목 막대를 겸한다(GitKraken 처럼): 제목 막대를 비우고 웹뷰를 창 꼭대기까지 펴며,
@@ -202,7 +202,7 @@ fn main() -> wry::Result<()> {
     #[cfg(debug_assertions)]
     let dev_pending = devtools::Pending::default();
     #[cfg(debug_assertions)]
-    if let Some(port) = std::env::var("GITVCS_DEV_PORT").ok().and_then(|p| p.parse().ok()) {
+    if let Some(port) = std::env::var("RAMUS_DEV_PORT").ok().and_then(|p| p.parse().ok()) {
         let eval_proxy = Mutex::new(proxy.clone());
         devtools::start(port, dev_pending.clone(), move |id, js| {
             let _ = eval_proxy.lock().unwrap().send_event(UserEvent::Eval(devtools::wrap(id, &js)));
@@ -217,7 +217,7 @@ fn main() -> wry::Result<()> {
         .with_url(start_url())
         .with_initialization_script(format!("window.__boot = {boot};"))
         .with_background_color(background)
-        .with_devtools(cfg!(debug_assertions) || std::env::var_os("GITVCS_DEVTOOLS").is_some())
+        .with_devtools(cfg!(debug_assertions) || std::env::var_os("RAMUS_DEVTOOLS").is_some())
         // 외부 주소는 웹뷰 안에서 열지 않는다(화면 파일만).
         .with_navigation_handler(|url| url.starts_with(&format!("{PROTOCOL}:")) || url.starts_with(&format!("http://{PROTOCOL}.localhost")))
         .with_ipc_handler(move |request| {
