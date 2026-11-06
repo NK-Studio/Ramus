@@ -167,6 +167,7 @@ export function fileList(opts) {
       class: `file-row${selected.has(entry.path) ? ' selected' : ''}${key && key === opts.activeKey ? ' active' : ''}${st.cursor === fileKey(entry.path) ? ' cursor' : ''}`,
       'data-path': entry.path,
       'data-key': fileKey(entry.path),
+      'data-diff-key': key ?? null,
       style: depth ? { paddingLeft: `${4 + depth * 14}px` } : null,
       onmousedown: (event) => {
         // Shift 로 누를 때 글자가 끌려 선택되지 않게.

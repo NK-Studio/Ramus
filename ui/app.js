@@ -844,7 +844,7 @@ async function openDiffView(key, target, mode, title, entryState) {
   $('diff-view').hidden = false;
   const hasStaged = mode === 'unstaged' && (state.status?.staged ?? []).some((e) => e.path === target.path);
   diffView.open({ target, mode, title, entryState, hasStaged, layout: state.settings.diffLayout || 'inline', api: diffApi });
-  for (const row of document.querySelectorAll('.file-row')) row.classList.remove('active');
+  for (const row of document.querySelectorAll('.file-row')) row.classList.toggle('active', row.dataset.diffKey === key);
   showDetail(graph.selected, false);
   renderRail();
 }

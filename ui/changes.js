@@ -60,6 +60,22 @@ new MutationObserver(() => {
 /** 패키지 목록 충돌은 먼저 풀어야 해서 맨 위로(원본 GitConflictSafety.ManifestFirst). */
 const manifestFirst = (entries) => [...entries].sort((a, b) => Number(b.path.endsWith('Packages/manifest.json')) - Number(a.path.endsWith('Packages/manifest.json')));
 
+/**
+ * 패널을 다시 그려도 파일 목록의 스크롤·포커스가 그대로 남게 한다. 파일을 눌러 diff 를 열거나 감시가 새로 읽을 때
+ * 패널을 통째로 다시 그리는데, 그대로 두면 목록이 맨 위로 돌아가고 화살표 키도 먹지 않는다.
+ */
+function keepListState(container, redraw) {
+  const lists = [...container.querySelectorAll('.file-list')];
+  const tops = lists.map((n) => n.scrollTop);
+  const focused = lists.indexOf(document.activeElement);
+  redraw();
+  const next = [...container.querySelectorAll('.file-list')];
+  next.forEach((n, i) => {
+    if (tops[i]) n.scrollTop = tops[i];
+  });
+  if (focused >= 0) next[focused]?.focus({ preventScroll: true });
+}
+
 /** Fork·GitKraken 의 머리 줄 버튼. */
 function headerButton(kind, { fork, picked, total, onAll, onSome }) {
   const verb = kind === 'stage' ? 'Stage' : 'Unstage';
@@ -303,13 +319,13 @@ export function renderStaging(container, status, draft, api) {
     ];
   }
 
-  container.replaceChildren(...[
+  keepListState(container, () => container.replaceChildren(...[
     ...(head ?? []),
     toolbar,
     filterRow,
     lists,
     commitBox(status, draft, api),
-  ].filter(Boolean));
+  ].filter(Boolean)));
 
   // Fork 배치: ⌘/Ctrl+F 는 목록 안 어디서든 찾기 칸을 연다(원본 StagingLists 의 Root 키 처리).
   if (!container.stagingKeys) {
@@ -574,7 +590,10 @@ export function renderCommit(container, detail, api) {
     onMenu: (event, files) => api.commitFileMenu(event, detail, files),
     empty: '바뀐 파일이 없습니다.',
   });
-  container.replaceChildren(
+  // 같은 커밋을 다시 그릴 때만 목록 스크롤을 남긴다(다른 커밋은 맨 위부터).
+  const sameCommit = container.commitHash === detail.hash;
+  container.commitHash = detail.hash;
+  const draw = () => container.replaceChildren(
     el('div', { class: 'commit-detail' },
       commitHeader(detail.hash),
       el('div', { class: 'cd-body' },
@@ -585,6 +604,8 @@ export function renderCommit(container, detail, api) {
         el('div', { class: 'cd-files-head' }, fileSummary(detail.files),
           viewSwitch(view, (v) => { api.prefs.set('commit.view', v); rerender(); })),
         el('div', { class: 'cd-files' }, list))));
+  if (sameCommit) keepListState(container, draw);
+  else draw();
 }
 
 /**
