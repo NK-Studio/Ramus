@@ -7,25 +7,30 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
+  <!-- 앱을 켜는 동안의 스켈레톤: 모듈보다 먼저 돈다. -->
+  <script src="boot.js"></script>
   <nav id="tabs" class="tabs"></nav>
-  <!-- 시작 화면: 저장소가 열려 있지 않을 때 -->
+  <!-- GitHub 연결 화면: 로그인하지 않았으면 본체 대신 보인다(원본 Layouts/GitHubConnect.uxml). -->
+  <section id="connect" class="github-connect" hidden></section>
+  <!-- 시작 화면: 레포지토리가 열려 있지 않을 때 -->
   <section id="start" class="start" hidden>
     <div class="start-card">
       <h1>GitVcs</h1>
       <p class="muted">PC 에 설치된 git 으로 동작하는 Git 클라이언트</p>
       <div class="notice" id="start-notice" hidden></div>
       <div class="start-actions">
-        <button id="start-open" class="btn primary">저장소 열기…</button>
+        <button id="start-open" class="btn primary">레포지토리 열기…</button>
         <button id="start-clone" class="btn">Clone…</button>
+        <button id="start-create" class="btn">레포지토리 만들기…</button>
         <button id="start-settings" class="btn">설정</button>
       </div>
-      <h2>최근 저장소</h2>
+      <h2>최근 레포지토리</h2>
       <ul id="recent-list" class="recent-list"></ul>
-      <p id="recent-empty" class="muted small" hidden>아직 연 저장소가 없습니다.</p>
+      <p id="recent-empty" class="muted small" hidden>아직 연 레포지토리가 없습니다.</p>
     </div>
   </section>
 
-  <!-- 저장소 화면 -->
+  <!-- 레포지토리 화면 -->
   <section id="main" class="main" hidden>
     <header class="toolbar" id="toolbar"></header>
 

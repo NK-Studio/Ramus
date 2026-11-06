@@ -1,7 +1,7 @@
 //! 실행 취소·다시 실행. 원본 `Core/GitUndo.cs` 를 옮겼다.
 //!
-//! 작업마다 전후 상태(HEAD·브랜치·stash 꼭대기)를 기록해 두고, 되돌릴 때는 먼저 저장소가 기록한 뒤 그대로인지 확인한다(다른 커밋·전환이
-//! 끼었으면 안전하지 않으니 하지 않고 그 기록을 뺀다). 기록은 앱을 끌 때까지만, 저장소마다 30개까지 둔다.
+//! 작업마다 전후 상태(HEAD·브랜치·stash 꼭대기)를 기록해 두고, 되돌릴 때는 먼저 레포지토리가 기록한 뒤 그대로인지 확인한다(다른 커밋·전환이
+//! 끼었으면 안전하지 않으니 하지 않고 그 기록을 뺀다). 기록은 앱을 끌 때까지만, 레포지토리마다 30개까지 둔다.
 
 use serde::{Deserialize, Serialize};
 
@@ -195,7 +195,7 @@ impl Journal {
     }
 }
 
-/// 작업 앞뒤로 재는 저장소 상태.
+/// 작업 앞뒤로 재는 레포지토리 상태.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Snapshot {
     pub head: String,
@@ -247,7 +247,7 @@ pub fn undo(repo: &Repository, journal: &mut Journal) -> Result<String> {
     let entry = journal.undo.last().cloned().ok_or_else(|| GitError::new("기록된 작업이 없습니다."))?;
     if !repo.run_plan(&undo_plan(&entry))? {
         journal.undo.pop();
-        return Err(GitError::new("기록한 뒤 저장소가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다."));
+        return Err(GitError::new("기록한 뒤 레포지토리가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다."));
     }
     journal.redo.push(journal.undo.pop().unwrap());
     Ok(entry.title)
@@ -257,7 +257,7 @@ pub fn redo(repo: &Repository, journal: &mut Journal) -> Result<String> {
     let entry = journal.redo.last().cloned().ok_or_else(|| GitError::new("기록된 작업이 없습니다."))?;
     if !repo.run_plan(&redo_plan(&entry))? {
         journal.redo.pop();
-        return Err(GitError::new("기록한 뒤 저장소가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다."));
+        return Err(GitError::new("기록한 뒤 레포지토리가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다."));
     }
     let mut entry = journal.redo.pop().unwrap();
     // 다시 넣은 stash 는 새 커밋이다.

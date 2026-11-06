@@ -16,6 +16,9 @@ pub struct Commit {
     pub time: i64,
     pub refs: Vec<RefLabel>,
     pub subject: String,
+    /// stash 이름("stash@{0}"). stash 커밋은 첫 부모(만든 자리)만 남겨 그래프에 끼운다 — [`insert_stashes`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stash: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -80,9 +83,31 @@ pub fn parse_commits(output: &str, remotes: &[String]) -> Vec<Commit> {
                 time: f[5].trim().parse().unwrap_or(0),
                 refs: parse_refs(f[6], remotes),
                 subject: f[7].trim_end().to_string(),
+                stash: None,
             })
         })
         .collect()
+}
+
+/// stash 커밋들을 히스토리(새 커밋이 앞)에 시각 순서대로 끼운다. `stashes` 는 (이름, 커밋) 이고 새 stash 가 앞이다.
+/// stash 커밋의 index·새 파일 부모는 버리고 첫 부모(만든 자리)만 남긴다 — 늘 그 부모보다 위에 놓인다.
+/// 읽은 범위(`truncated`)보다 오래되어 만든 자리도 없는 stash 는 넣지 않는다.
+pub fn insert_stashes(commits: &mut Vec<Commit>, stashes: Vec<(String, Commit)>, truncated: bool) {
+    for (name, mut stash) in stashes {
+        stash.parents.truncate(1);
+        stash.refs.clear();
+        stash.stash = Some(name);
+        let base = stash.parents.first().and_then(|p| commits.iter().position(|c| &c.hash == p));
+        // 같은 시각이면 먼저 넣은(더 새) stash·커밋 밑으로.
+        let by_time = commits.iter().position(|c| c.time < stash.time);
+        let at = match (base, by_time) {
+            (Some(b), t) => t.map_or(b, |t| t.min(b)),
+            (None, Some(t)) => t,
+            (None, None) if truncated => continue,
+            (None, None) => commits.len(),
+        };
+        commits.insert(at, stash);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -154,6 +179,49 @@ mod tests {
         assert_eq!(c[0].refs[0].kind, RefKind::Head);
         assert!(c[1].parents.is_empty());
         assert!(c[1].refs.is_empty());
+    }
+
+    fn at(hash: &str, time: i64, parents: &[&str]) -> Commit {
+        Commit {
+            hash: hash.into(),
+            short_hash: hash.into(),
+            parents: parents.iter().map(|p| p.to_string()).collect(),
+            author_name: "t".into(),
+            author_email: "t@x".into(),
+            time,
+            refs: Vec::new(),
+            subject: hash.into(),
+            stash: None,
+        }
+    }
+
+    #[test]
+    fn stashes_go_above_their_base_in_time_order() {
+        let hashes = |c: &[Commit]| c.iter().map(|c| c.hash.clone()).collect::<Vec<_>>();
+        let mut commits = vec![at("c3", 30, &["c2"]), at("c2", 20, &["c1"]), at("c1", 10, &[])];
+        let stashes = vec![
+            // 만든 뒤 c3 가 커밋됐다.
+            ("stash@{0}".to_string(), at("s0", 25, &["c2", "i0", "u0"])),
+            // 시각이 바탕 커밋보다 이르게 찍혀도 바탕 위.
+            ("stash@{1}".to_string(), at("s1", 5, &["c1", "i1"])),
+            // 바탕이 읽은 범위 밖: 시각으로.
+            ("stash@{2}".to_string(), at("s2", 15, &["gone"])),
+        ];
+        insert_stashes(&mut commits, stashes, false);
+        assert_eq!(hashes(&commits), ["c3", "s0", "c2", "s2", "s1", "c1"]);
+        assert_eq!(commits[1].parents, ["c2"]);
+        assert_eq!(commits[1].stash.as_deref(), Some("stash@{0}"));
+        assert!(commits[0].stash.is_none());
+
+        // 같은 시각의 stash 둘은 새 것이 위, 둘 다 바탕 위.
+        let mut commits = vec![at("c1", 10, &[])];
+        insert_stashes(&mut commits, vec![("stash@{0}".into(), at("s0", 10, &["c1"])), ("stash@{1}".into(), at("s1", 10, &["c1"]))], false);
+        assert_eq!(hashes(&commits), ["s0", "s1", "c1"]);
+
+        // 잘린 히스토리보다 오래되고 바탕도 없으면 뺀다.
+        let mut commits = vec![at("c2", 20, &["c1"])];
+        insert_stashes(&mut commits, vec![("stash@{0}".into(), at("s0", 5, &["old"]))], true);
+        assert_eq!(hashes(&commits), ["c2"]);
     }
 
     #[test]

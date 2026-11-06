@@ -15,7 +15,7 @@ fn ok(dir: &Path, args: &[&str]) {
     assert!(success, "git {args:?}: {msg}");
 }
 
-/// main 과 side 가 같은 줄을 다르게 고친 저장소. main 에 체크아웃된 채로.
+/// main 과 side 가 같은 줄을 다르게 고친 레포지토리. main 에 체크아웃된 채로.
 fn conflicted_repo() -> (tempfile::TempDir, Repository) {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();

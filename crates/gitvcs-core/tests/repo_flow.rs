@@ -1,4 +1,4 @@
-//! 임시 저장소에서 실제 git 으로 열기 → 변경 → Stage → 커밋 → 푸시 흐름을 돌린다.
+//! 임시 레포지토리에서 실제 git 으로 열기 → 변경 → Stage → 커밋 → 푸시 흐름을 돌린다.
 
 use std::path::Path;
 
@@ -21,7 +21,7 @@ fn init(dir: &Path) {
 fn open_rejects_non_repository() {
     let dir = tempfile::tempdir().unwrap();
     let err = Repository::open(GitRunner::default(), dir.path()).err().unwrap();
-    assert!(err.message.contains("Git 저장소가 아닙니다"), "{}", err.message);
+    assert!(err.message.contains("Git 레포지토리가 아닙니다"), "{}", err.message);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn push_without_remote_explains() {
     repo.stage_all().unwrap();
     repo.commit("a", false).unwrap();
     let err = repo.push().err().unwrap();
-    assert!(err.message.contains("원격 저장소가 없습니다"));
+    assert!(err.message.contains("원격 레포지토리가 없습니다"));
 }
 
 #[test]
@@ -161,7 +161,7 @@ fn clone_and_test_connection() {
     assert_eq!(gitvcs_core::remote::test_connection(&runner, tmp.path(), url).unwrap(), 1);
     assert!(gitvcs_core::remote::test_connection(&runner, tmp.path(), "/없는/곳.git").is_err());
 
-    let dest = tmp.path().join("받은 저장소");
+    let dest = tmp.path().join("받은 레포지토리");
     let repo = gitvcs_core::remote::clone(&runner, url, &dest).unwrap();
     assert!(dest.join("a").exists());
     assert_eq!(repo.default_remote_url().as_deref(), Some(url));
@@ -171,4 +171,35 @@ fn clone_and_test_connection() {
     let bad = tmp.path().join("bad");
     assert!(gitvcs_core::remote::clone(&runner, "/없는/곳.git", &bad).is_err());
     assert!(!bad.exists());
+}
+
+#[test]
+fn history_shows_every_stash_on_its_base_without_helper_commits() {
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path();
+    init(work);
+    std::fs::write(work.join("a.txt"), "1\n").unwrap();
+    git(work, &["add", "."]);
+    git(work, &["commit", "-q", "-m", "첫 커밋"]);
+    std::fs::write(work.join("a.txt"), "2\n").unwrap();
+    git(work, &["stash", "push", "-q", "-m", "하나"]);
+    std::fs::write(work.join("a.txt"), "3\n").unwrap();
+    std::fs::write(work.join("new.txt"), "새 파일\n").unwrap();
+    git(work, &["stash", "push", "-q", "-u", "-m", "둘"]);
+
+    let repo = Repository::open(GitRunner::default(), work).unwrap();
+    let snap = repo.snapshot(100).unwrap();
+    let commits = &snap.history.commits;
+    let head = snap.history.head.clone().unwrap();
+    // stash 둘 + 첫 커밋. index·새 파일 커밋은 들어오지 않는다.
+    assert_eq!(commits.len(), 3, "{:?}", commits.iter().map(|c| &c.subject).collect::<Vec<_>>());
+    let stashes: Vec<_> = commits.iter().filter_map(|c| c.stash.as_deref()).collect();
+    assert_eq!(stashes, ["stash@{0}", "stash@{1}"]);
+    for c in commits.iter().filter(|c| c.stash.is_some()) {
+        assert_eq!(c.parents, [head.clone()]);
+        assert!(c.refs.is_empty());
+    }
+    assert_eq!(commits[2].hash, head);
+    let lanes = &snap.history.graph.lanes;
+    assert!(snap.history.graph.nodes[..2].iter().all(|n| lanes[n.lane].stash));
 }

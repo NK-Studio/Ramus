@@ -260,12 +260,17 @@ impl Repository {
 
     /// 병합 편집기에서 만든 글을 파일에 쓰고 해결로 올린다.
     pub fn save_resolution(&self, path: &str, text: &str) -> Result<()> {
-        if has_markers(text) {
+        self.save_resolution_with(path, text, false)
+    }
+
+    /// `allow_markers` 면 충돌 표시가 남아도 쓴다(직접 고치기에서 사용자가 한 번 더 확인한 뒤, 원본 GitMergeEditor.Save).
+    pub fn save_resolution_with(&self, path: &str, text: &str, allow_markers: bool) -> Result<()> {
+        if !allow_markers && has_markers(text) {
             return Err(GitError::new("출력에 아직 충돌 표시(<<<<<<<)가 남아 있습니다. 모든 충돌을 고른 뒤 저장해 주세요."));
         }
         let relative = Path::new(path);
         if relative.is_absolute() || relative.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-            return Err(GitError::new("저장소 밖의 경로입니다."));
+            return Err(GitError::new("레포지토리 밖의 경로입니다."));
         }
         std::fs::write(self.root().join(relative), text).map_err(|e| GitError::new(format!("{path} 를 쓰지 못했습니다: {e}")))?;
         self.git_run(&["add", "-A", "--", path]).map(|_| ())

@@ -62,7 +62,7 @@ pub fn noreply_avatar_url(email: &str) -> Option<String> {
     })
 }
 
-/// GitHub 원격 주소에서 (소유자, 저장소). git@github.com:o/r.git, ssh://git@github.com/o/r, https://github.com/o/r(.git)
+/// GitHub 원격 주소에서 (소유자, 레포지토리). git@github.com:o/r.git, ssh://git@github.com/o/r, https://github.com/o/r(.git)
 pub fn parse_github_remote(url: &str) -> Option<(String, String)> {
     let re = Regex::new(r"(?i)github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$").unwrap();
     let c = re.captures(url.trim())?;
@@ -103,6 +103,9 @@ enum Download {
 fn download(url: &str) -> Download {
     match ureq::get(url).set("User-Agent", USER_AGENT).timeout(Duration::from_secs(10)).call() {
         Ok(response) => {
+            if is_github_default(&response) {
+                return Download::Missing;
+            }
             let mut bytes = Vec::new();
             match response.into_reader().take(2 * 1024 * 1024).read_to_end(&mut bytes) {
                 Ok(_) if !bytes.is_empty() => Download::Ok(bytes),
@@ -115,7 +118,24 @@ fn download(url: &str) -> Download {
     }
 }
 
-/// GitHub 에 그 커밋의 작성자를 묻는다. (사진 주소, 답을 받았는가). 비공개 저장소·요청 제한이면 답이 없다.
+/// GitHub 계정에 등록된 메일이면 그 계정 사진. 레포지토리 접근 권한이 없어도(비공개 레포지토리·다른 계정으로 로그인) 쓸 수 있다.
+pub fn github_email_avatar_url(email: &str) -> String {
+    let email: String = email.trim().bytes().map(|b| match b {
+        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'@' => (b as char).to_string(),
+        _ => format!("%{b:02X}"),
+    }).collect();
+    format!("https://avatars.githubusercontent.com/u/e?email={email}&s={SIZE}")
+}
+
+/// GitHub 은 모르는 메일에도 200 으로 늘 같은 기본 그림(보라 무늬)을 준다 — 그 그림이면 없는 것으로 친다.
+const GITHUB_DEFAULT_ETAG: &str = "6fc333308ecddc5d9d3c67b9df7f74161551c2cfa5f7229eb1286693ed377401";
+const GITHUB_DEFAULT_MODIFIED: &str = "Sat, 05 Nov 2016 20:57:50 GMT";
+
+fn is_github_default(response: &ureq::Response) -> bool {
+    response.header("etag").is_some_and(|e| e.contains(GITHUB_DEFAULT_ETAG)) || response.header("last-modified") == Some(GITHUB_DEFAULT_MODIFIED)
+}
+
+/// GitHub 에 그 커밋의 작성자를 묻는다. (사진 주소, 답을 받았는가). 비공개 레포지토리·요청 제한이면 답이 없다.
 fn github_commit_avatar(owner: &str, repo: &str, hash: &str, token: Option<&str>) -> (Option<String>, bool) {
     let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{hash}");
     let mut request = ureq::get(&url).set("User-Agent", USER_AGENT).set("Accept", "application/vnd.github+json").timeout(Duration::from_secs(10));
@@ -146,7 +166,7 @@ impl AvatarCache {
         dirs::cache_dir().map(|d| d.join("GitVcs").join("Avatars"))
     }
 
-    /// 사진을 찾는다(네트워크를 쓸 수 있어 작업 스레드에서 부른다). `github` 는 원격이 GitHub 일 때 (소유자, 저장소).
+    /// 사진을 찾는다(네트워크를 쓸 수 있어 작업 스레드에서 부른다). `github` 는 원격이 GitHub 일 때 (소유자, 레포지토리).
     pub fn get(&self, email: &str, commit_hash: &str, github: Option<&(String, String)>, token: Option<&str>) -> Avatar {
         let email = email.trim();
         if email.is_empty() {
@@ -181,6 +201,8 @@ impl AvatarCache {
             temporary |= !answered;
             urls.extend(url);
         }
+        // 메일로 GitHub 계정 사진을 찾는다(커밋을 물을 수 없는 비공개 레포지토리에서도 된다). 없으면 Gravatar.
+        urls.push(github_email_avatar_url(email));
         urls.push(gravatar_url(email));
         for url in urls {
             match download(&url) {
@@ -221,6 +243,11 @@ mod tests {
         );
         assert_eq!(noreply_avatar_url("octo@users.noreply.github.com").as_deref(), Some("https://github.com/octo.png?size=64"));
         assert_eq!(noreply_avatar_url("octo@example.com"), None);
+    }
+
+    #[test]
+    fn github_email_avatar_escapes_email() {
+        assert_eq!(github_email_avatar_url(" Kim+Dev@Example.com "), format!("https://avatars.githubusercontent.com/u/e?email=Kim%2BDev@Example.com&s={SIZE}"));
     }
 
     #[test]

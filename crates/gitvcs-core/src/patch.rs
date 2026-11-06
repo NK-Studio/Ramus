@@ -21,7 +21,7 @@ pub fn changed_lines_of_hunk(lines: &[DiffLine], hunk: usize) -> Vec<usize> {
 }
 
 /// 고른 줄만 든 패치. 고른 줄에 바뀐 줄이 하나도 없으면 None.
-/// `path` 는 저장소 기준 경로 — 이름이 바뀐 파일도 인덱스에는 새 경로로 있으므로 양쪽 다 새 경로를 쓴다.
+/// `path` 는 레포지토리 기준 경로 — 이름이 바뀐 파일도 인덱스에는 새 경로로 있으므로 양쪽 다 새 경로를 쓴다.
 pub fn build(lines: &[DiffLine], selected: &[usize], path: &str, reverse: bool) -> Option<String> {
     let chosen: HashSet<usize> = selected.iter().copied().collect();
     if chosen.is_empty() {

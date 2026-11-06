@@ -1,4 +1,4 @@
-//! 저장소 폴더의 바깥 변경(편집기 저장, 터미널 git)을 감시해 화면에 다시 읽으라고 알린다.
+//! 레포지토리 폴더의 바깥 변경(편집기 저장, 터미널 git)을 감시해 화면에 다시 읽으라고 알린다.
 //!
 //! 작업 트리의 변경과 .git 안의 참조·인덱스 변경만 본다. .git 안의 다른 파일(objects, *.lock, logs)은 git 이 일하는 동안
 //! 수없이 바뀌므로 거른다. 알림은 잠잠해질 때까지 모아(디바운스) 한 번만 보낸다.
@@ -36,7 +36,7 @@ pub fn is_interesting(path: &Path, root: &Path, git_dir: &Path) -> bool {
     if let Ok(relative) = path.strip_prefix(git_dir) {
         return is_interesting_git_file(relative);
     }
-    // worktree·서브모듈의 git 폴더가 저장소 안에 있을 수도 있다.
+    // worktree·서브모듈의 git 폴더가 레포지토리 안에 있을 수도 있다.
     if let Ok(relative) = path.strip_prefix(root) {
         return !relative.components().any(|c| c.as_os_str() == ".git");
     }
@@ -48,7 +48,7 @@ pub fn watch(root: PathBuf, git_dir: PathBuf, on_change: impl Fn() + Send + 'sta
     let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
     let mut watcher = notify::recommended_watcher(tx)?;
     watcher.watch(&root, RecursiveMode::Recursive)?;
-    // git 폴더가 저장소 밖에 있으면(worktree) 따로 본다.
+    // git 폴더가 레포지토리 밖에 있으면(worktree) 따로 본다.
     if !git_dir.starts_with(&root) {
         watcher.watch(&git_dir, RecursiveMode::Recursive)?;
     }

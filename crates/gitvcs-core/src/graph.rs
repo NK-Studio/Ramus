@@ -4,12 +4,12 @@
 //! 그래서 main 에서 갈라진 feature 는 갈라진 지점 이후만 feature 가지에 놓인다. 어느 브랜치에서도 첫 부모로 닿지 않는 커밋(병합 뒤 지워진
 //! 브랜치)은 이름 없는 가지에 모으고, 병합 커밋 메시지에서 이름을 짐작한다.
 //!
-//! 세로 그래프(GitKraken)는 위(새 커밋)부터 차례로 열을 준다: 맨 위 끝 커밋의 브랜치가 맨 왼쪽 열과 줄기를 갖고, 작업 중 줄(WIP)이 있으면
-//! 지금 브랜치가 맨 위 커밋처럼 먼저다. 가지마다 차지하는 기간이 겹치지 않으면 같은 열을 나눠 쓴다.
+//! 세로 그래프(GitKraken)는 브랜치 이름과 상관없이 GitKraken 과 같은 규칙으로 위(새 커밋)부터 한 줄씩 열을 준다 — [`top_down_columns`].
+//! 그때 가지는 "한 열에 곧게 이어진 첫 부모 줄" 하나이고, 색은 열 번호다. 위 이름 있는 가지는 이름표·가지 이름에만 쓴다.
 //!
 //! 커밋은 `git log --date-order` 순서(자식이 늘 부모보다 앞)로 받는다. 안에서는 원본처럼 오래된 커밋부터 0 인 "칸"(column)으로 센다.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use regex::Regex;
 use serde::Serialize;
@@ -83,6 +83,9 @@ pub struct Lane {
     /// 이름 있는 브랜치가 아니라 병합된 뒤 지워진 브랜치에서 온 가지.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub anonymous: bool,
+    /// stash 하나만 든 가지. 색은 만든 자리 가지를 따르고, 브랜치 가지 배치를 바꾸지 않는다.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stash: bool,
     #[serde(skip)]
     first: usize,
     #[serde(skip)]
@@ -133,7 +136,7 @@ pub struct Options {
 }
 
 /// 가지 색 번호. 브랜치 이름에서 정해 새 커밋·새 브랜치가 생겨도 같은 브랜치는 같은 색이다. 원격 "origin/x" 는 로컬 "x" 와 같은 색.
-/// 원본(C#)의 32비트 문자열 해시와 같은 값을 낸다 — 두 앱에서 같은 저장소가 같은 색으로 보이게.
+/// 원본(C#)의 32비트 문자열 해시와 같은 값을 낸다 — 두 앱에서 같은 레포지토리가 같은 색으로 보이게.
 pub fn stable_color(name: &str, fallback: usize) -> u32 {
     if name.is_empty() {
         return fallback as u32;
@@ -208,7 +211,7 @@ impl<'a> Builder<'a> {
 }
 
 fn new_lane(name: &str, remote: bool, current: bool, anonymous: bool) -> Lane {
-    Lane { name: name.to_string(), column: 0, color: 0, remote, current, anonymous, first: usize::MAX, last: 0 }
+    Lane { name: name.to_string(), column: 0, color: 0, remote, current, anonymous, stash: false, first: usize::MAX, last: 0 }
 }
 
 /// 그래프를 만든다. `commits` 는 새 커밋이 앞(`git log --date-order`), `head` 는 HEAD 의 해시.
@@ -220,6 +223,18 @@ pub fn build(commits: &[Commit], branches: &[BranchTip], anonymous_name: &str, o
         lane_of: vec![None; n],
         lanes: Vec::new(),
     };
+
+    // stash 는 저마다 제 줄 하나만 갖는 가지(첫 부모로 이어 가지 않는다 — 만든 자리부터는 브랜치 가지가 갖는다).
+    for column in 0..n {
+        if let Some(name) = &b.commit(column).stash {
+            let mut lane = new_lane(name, false, false, false);
+            lane.stash = true;
+            lane.first = column;
+            lane.last = column;
+            b.lane_of[column] = Some(b.lanes.len());
+            b.lanes.push(lane);
+        }
+    }
 
     // 이름 있는 가지. 먼저 놓인 브랜치가 첫 부모를 따라가며 공통 조상(줄기)을 차지한다.
     let tip_column = |br: &BranchTip| b.column_of.get(br.hash.as_str()).map(|&c| c as i64).unwrap_or(-1);
@@ -259,6 +274,17 @@ pub fn build(commits: &[Commit], branches: &[BranchTip], anonymous_name: &str, o
     let column_of = &b.column_of;
     let mut lanes = b.lanes;
 
+    // stash 색은 만든 자리 커밋의 가지 색.
+    for i in 0..lanes.len() {
+        if lanes[i].stash {
+            let base = commits[n - 1 - lanes[i].first].parents.first().and_then(|p| column_of.get(p.as_str()));
+            lanes[i].color = match base {
+                Some(&column) => lanes[lane_of[column]].color,
+                None => stable_color(&lanes[i].name, i),
+            };
+        }
+    }
+
     // 선. 읽은 범위 밖의 첫 부모는 짧은 흐린 선으로만.
     let mut edges = Vec::new();
     let mut truncated = vec![false; n];
@@ -270,6 +296,25 @@ pub fn build(commits: &[Commit], branches: &[BranchTip], anonymous_name: &str, o
                 None => {}
             }
         }
+    }
+
+    if options.top_down {
+        // 이름표는 이름 있는 가지로 정하고, 열·가지는 GitKraken 규칙으로 다시 짠다.
+        let refs: Vec<Vec<CommitRef>> =
+            commits.iter().enumerate().map(|(row, commit)| commit_refs(commit, &lanes[lane_of[n - 1 - row]], n - 1 - row)).collect();
+        let row_of: HashMap<&str, usize> = column_of.iter().map(|(&h, &c)| (h, n - 1 - c)).collect();
+        let owner: Vec<&Lane> = (0..n).map(|row| &lanes[lane_of[n - 1 - row]]).collect();
+        let head = branches
+            .iter()
+            .find(|br| options.head_first && br.current && !br.remote)
+            .and_then(|br| row_of.get(br.hash.as_str()).copied());
+        let (segments, segment_of, lane_count) = top_down_columns(commits, &row_of, &owner, head);
+        let nodes = refs
+            .into_iter()
+            .enumerate()
+            .map(|(row, refs)| GraphNode { lane: segment_of[row], truncated: truncated[row], refs })
+            .collect();
+        return GraphLayout { nodes, edges, lanes: segments, lane_count };
     }
 
     let lane_count = pack_columns(&mut lanes, &edges, &lane_of, n, options);
@@ -286,6 +331,164 @@ pub fn build(commits: &[Commit], branches: &[BranchTip], anonymous_name: &str, o
     GraphLayout { nodes, edges, lanes, lane_count }
 }
 
+/// 화면 열마다 쓰이는 기간(줄 번호, 새 커밋이 0). 세로 그래프 열 배정용.
+#[derive(Default)]
+struct Columns {
+    /// 열마다 지금 쓰기 시작한 줄(비어 있으면 None).
+    open: Vec<Option<i64>>,
+    /// 열마다 끝난 기간들(양 끝 포함).
+    spans: Vec<Vec<(i64, i64)>>,
+}
+
+impl Columns {
+    /// 가장 왼쪽 빈 열을 이 줄부터 쓴다.
+    fn take_free(&mut self, row: i64) -> usize {
+        let column = self.open.iter().position(Option::is_none).unwrap_or(self.open.len());
+        self.take(column, row);
+        column
+    }
+
+    fn take(&mut self, column: usize, row: i64) {
+        if column >= self.open.len() {
+            self.open.resize(column + 1, None);
+            self.spans.resize(column + 1, Vec::new());
+        }
+        self.open[column] = Some(row);
+    }
+
+    /// 열을 이 줄까지 쓰고 비운다.
+    fn free(&mut self, column: usize, row: i64) {
+        if let Some(start) = self.open[column].take() {
+            self.spans[column].push((start, row));
+        }
+    }
+
+    /// 아직 쓰는 열은 끝까지 쓴 것으로 닫는다.
+    fn finish(&mut self) {
+        for column in 0..self.open.len() {
+            self.free(column, i64::MAX);
+        }
+    }
+
+    /// `[start, end]` 동안 이 열이 비었는가. `except` 기간은 빼고 본다.
+    fn is_free(&self, column: usize, start: i64, end: i64, except: Option<(i64, i64)>) -> bool {
+        self.spans.get(column).is_none_or(|spans| spans.iter().all(|&s| Some(s) == except || s.1 < start || end < s.0))
+    }
+}
+
+/// 아직 나오지 않은 부모 커밋에 미리 잡아 둔 열.
+struct Reserved {
+    column: usize,
+    /// 첫 부모로 이어 주는 자식의 가지(병합으로 들어오는 부모면 None — 그 부모에서 새 가지가 시작한다).
+    segment: Option<usize>,
+}
+
+/// 세로 그래프의 열 배정. GitKraken(`@gitkraken/gitkraken-components` 의 `getColumns`)과 같은 규칙이다.
+///
+/// - 위에서부터 한 줄씩 본다. 자식이 잡아 둔 열이 있으면 그 열, 없으면(브랜치 끝) 가장 왼쪽 빈 열을 쓴다.
+/// - 첫 부모는 내 열에 잡아 둔다. 두 번째 이후 부모(병합)는 병합 줄에서 바로 가장 왼쪽 빈 열을 잡는다.
+/// - 첫 부모가 이미 다른 자식의 열에 잡혀 있으면 더 왼쪽 열이 부모를 갖고(부모를 병합하는 자식이 있으면 옮기지 않는다),
+///   다른 열은 부모 줄에서 비운다 — 그 열의 선은 부모 줄에서 꺾여 들어간다.
+/// - stash 는 브랜치를 다 놓은 뒤, 상자에서 만든 자리까지 빈 가장 왼쪽 열에 놓는다. 만든 자리가 그 열의 맨 위면 그 열을 이어 쓴다.
+/// - `head` (작업 중 줄이 이어지는 지금 브랜치 끝)는 맨 위 작업 중 줄의 부모처럼 0 열을 위에서부터 잡아 둔다.
+///
+/// 가지(`Lane`)는 한 열에 곧게 이어진 첫 부모 줄 하나다. 이름·종류는 그 줄 맨 위 커밋이 든 이름 있는 가지(`owner`)를 따르고, 색은 열 번호.
+/// (가지들, 줄마다 가지 번호, 열 수)를 돌려준다.
+fn top_down_columns(commits: &[Commit], row_of: &HashMap<&str, usize>, owner: &[&Lane], head: Option<usize>) -> (Vec<Lane>, Vec<usize>, usize) {
+    let n = commits.len();
+    let mut columns = Columns::default();
+    let mut reserved: HashMap<usize, Reserved> = HashMap::new();
+    let mut free_when_found: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut merge_child: HashSet<usize> = HashSet::new();
+    let mut column_of = vec![0usize; n];
+    let mut segment_of = vec![0usize; n];
+    let mut segments: Vec<Lane> = Vec::new();
+    let new_segment = |segments: &mut Vec<Lane>, row: usize, column: usize| {
+        let mut lane = owner[row].clone();
+        lane.column = column;
+        lane.color = column as u32;
+        lane.first = n - 1 - row;
+        lane.last = n - 1 - row;
+        segments.push(lane);
+        segments.len() - 1
+    };
+
+    if let Some(head) = head {
+        columns.take(0, -1);
+        reserved.insert(head, Reserved { column: 0, segment: None });
+    }
+
+    for (row, commit) in commits.iter().enumerate() {
+        if commit.stash.is_some() {
+            continue;
+        }
+        let at = row as i64;
+        for column in free_when_found.remove(&row).unwrap_or_default() {
+            columns.free(column, at);
+        }
+        let (column, segment) = match reserved.remove(&row) {
+            Some(r) => (r.column, r.segment),
+            None => (columns.take_free(at), None),
+        };
+        let segment = segment.unwrap_or_else(|| new_segment(&mut segments, row, column));
+        segments[segment].first = n - 1 - row;
+        column_of[row] = column;
+        segment_of[row] = segment;
+
+        let merge = commit.parents.len() > 1;
+        for (i, parent) in commit.parents.iter().enumerate() {
+            // 읽은 범위 밖의 부모: 첫 부모면 이 열을 끝까지 쓴다(아래로 흐린 선). 병합 부모는 선이 없다.
+            let Some(&parent) = row_of.get(parent.as_str()) else { continue };
+            if merge {
+                merge_child.insert(parent);
+            }
+            match reserved.get(&parent).map(|r| r.column) {
+                Some(existing) if i == 0 && existing != column => {
+                    if existing > column && !merge_child.contains(&parent) {
+                        reserved.insert(parent, Reserved { column, segment: Some(segment) });
+                        free_when_found.entry(parent).or_default().push(existing);
+                    } else {
+                        free_when_found.entry(parent).or_default().push(column);
+                    }
+                }
+                Some(_) => {}
+                None if i == 0 => {
+                    reserved.insert(parent, Reserved { column, segment: Some(segment) });
+                }
+                None => {
+                    let taken = columns.take_free(at);
+                    reserved.insert(parent, Reserved { column: taken, segment: None });
+                }
+            }
+        }
+    }
+    columns.finish();
+
+    // stash: 새 것(위)부터, 상자 줄에서 만든 자리 줄까지 빈 열에.
+    for (row, commit) in commits.iter().enumerate() {
+        if commit.stash.is_none() {
+            continue;
+        }
+        let at = row as i64;
+        let base = commit.parents.first().and_then(|p| row_of.get(p.as_str()).copied());
+        // 만든 자리가 읽은 범위 밖이면 상자 줄만 쓴다(아래로는 짧은 흐린 선뿐).
+        let end = base.map_or(at, |b| b as i64);
+        let continued = base
+            .map(|b| (column_of[b], b as i64))
+            .and_then(|(column, b)| columns.spans[column].iter().find(|s| s.0 == b).map(|&s| (column, s)))
+            .filter(|&(column, base_span)| columns.is_free(column, at, end, Some(base_span)))
+            .map(|(column, _)| column);
+        let column = continued.unwrap_or_else(|| (0..).find(|&c| columns.is_free(c, at, end, None)).unwrap_or(0));
+        columns.take(column, at);
+        columns.free(column, end);
+        column_of[row] = column;
+        segment_of[row] = new_segment(&mut segments, row, column);
+    }
+
+    let lane_count = columns.spans.len().max(1);
+    (segments, segment_of, lane_count)
+}
+
 /// 가지를 화면 열에 채운다. 정한 순서대로, 기간(+여백)이 겹치지 않는 가장 왼쪽 열에 놓는다. 열 수를 돌려준다.
 fn pack_columns(lanes: &mut [Lane], edges: &[GraphEdge], lane_of: &[usize], n: usize, options: Options) -> usize {
     if lanes.is_empty() {
@@ -294,14 +497,25 @@ fn pack_columns(lanes: &mut [Lane], edges: &[GraphEdge], lane_of: &[usize], n: u
     // 가지가 차지하는 기간. 갈라져 나온 부모·들어가는 병합 커밋 칸까지 친다 — 가지 선이 그 칸까지 그 열 위로 그어지므로,
     // 치지 않으면 짧은 가지가 같은 열을 나눠 써서 선이 남의 커밋을 뚫고 지나간다. 앞뒤로 한 칸 여유를 둔다.
     let mut spans: Vec<(i64, i64)> = lanes.iter().map(|l| (l.first as i64 - 1, l.last as i64 + 1)).collect();
+    // 가지 선이 실제로 그어지는 기간(여유 칸 없이). stash 는 이것끼리 견준다 — 선이 만든 자리 줄에서 꺾여 나가고 상자 위로는 아무것도 없어서.
+    let mut drawn: Vec<(i64, i64)> = lanes.iter().map(|l| (l.first as i64, l.last as i64)).collect();
+    // stash 가지마다 (만든 자리 가지, 만든 자리 칸).
+    let mut stash_base: Vec<Option<(usize, usize)>> = vec![None; lanes.len()];
     for edge in edges {
         let (child, parent) = (n - 1 - edge.child, n - 1 - edge.parent);
         let (lc, lp) = (lane_of[child], lane_of[parent]);
         if lc == lp {
             continue;
         }
+        if lanes[lc].stash {
+            // stash 선은 stash 가지 기간만 늘린다 — stash 가 브랜치 가지 열을 밀어내지 않게.
+            drawn[lc].0 = drawn[lc].0.min(parent as i64);
+            stash_base[lc] = Some((lp, parent));
+            continue;
+        }
         for lane in [lc, lp] {
             spans[lane] = (spans[lane].0.min(parent as i64), spans[lane].1.max(child as i64));
+            drawn[lane] = (drawn[lane].0.min(parent as i64), drawn[lane].1.max(child as i64));
         }
     }
     let head_first = |l: &Lane| options.head_first && l.current && !l.remote;
@@ -310,23 +524,33 @@ fn pack_columns(lanes: &mut [Lane], edges: &[GraphEdge], lane_of: &[usize], n: u
         for (i, lane) in lanes.iter().enumerate() {
             if head_first(lane) {
                 spans[i].1 = i64::MAX;
+                drawn[i].1 = i64::MAX;
             }
         }
     }
+    // stash 가지는 브랜치 가지를 다 놓은 뒤 빈 자리에.
     let mut order: Vec<usize> = (0..lanes.len()).collect();
     if options.top_down {
-        order.sort_by_key(|&i| (!head_first(&lanes[i]), std::cmp::Reverse(lanes[i].last)));
+        order.sort_by_key(|&i| (lanes[i].stash, !head_first(&lanes[i]), std::cmp::Reverse(lanes[i].last)));
+    } else {
+        order.sort_by_key(|&i| lanes[i].stash);
     }
     let mut columns: Vec<Vec<usize>> = Vec::new();
     for i in order {
-        let (start, end) = spans[i];
-        let column = columns
-            .iter()
-            .position(|taken| !taken.iter().any(|&o| spans[o].0 <= end && start <= spans[o].1))
-            .unwrap_or_else(|| {
-                columns.push(Vec::new());
-                columns.len() - 1
-            });
+        // 브랜치 가지는 여유 칸을 둔 기간끼리, stash 는 선이 그어지는 기간끼리 견준다(stash 는 브랜치를 다 놓은 뒤라 섞이지 않는다).
+        let range = if lanes[i].stash { &drawn } else { &spans };
+        let (start, end) = range[i];
+        let free = |taken: &[usize], except: Option<usize>| !taken.iter().any(|&o| Some(o) != except && range[o].0 <= end && start <= range[o].1);
+        // 가지 끝 커밋에서 만든 stash 는(그 위로 이어 가는 선도 작업 중 줄도 없으면) 그 가지 열을 이어 써 점선이 곧게 내려간다.
+        let continued = stash_base[i]
+            .filter(|&(base, at)| drawn[base].1 == at as i64)
+            .map(|(base, _)| (base, lanes[base].column))
+            .filter(|&(base, column)| free(&columns[column], Some(base)))
+            .map(|(_, column)| column);
+        let column = continued.or_else(|| columns.iter().position(|taken| free(taken, None))).unwrap_or_else(|| {
+            columns.push(Vec::new());
+            columns.len() - 1
+        });
         columns[column].push(i);
         lanes[i].column = column;
     }
@@ -338,7 +562,7 @@ fn commit_refs(commit: &Commit, lane: &Lane, column: usize) -> Vec<CommitRef> {
     let tip = column == lane.last;
     let head_branch = commit.refs.iter().find(|r| r.kind == RefKind::Head).map(|r| r.name.as_str());
     let mut refs = Vec::new();
-    if tip && !lane.anonymous {
+    if tip && !lane.anonymous && !lane.stash {
         let kind = if lane.current { CommitRefKind::Current } else if lane.remote { CommitRefKind::Remote } else { CommitRefKind::Local };
         refs.push(CommitRef { name: lane.name.clone(), kind, has_remote: false });
     }
@@ -401,6 +625,7 @@ mod tests {
             time: 0,
             refs: parse_refs(refs, &["origin".into()]),
             subject: subject.into(),
+            stash: None,
         }
     }
 
@@ -591,6 +816,60 @@ mod tests {
         assert!(b.node("B").refs.is_empty());
     }
 
+    fn stash(hash: &str, name: &str, base: &str) -> Commit {
+        Commit { stash: Some(name.into()), ..commit(hash, &[base]) }
+    }
+
+    #[test]
+    fn stash_on_branch_tip_continues_its_column() {
+        let top = Options { top_down: true, head_first: false };
+        let b = build_opts(vec![commit("A", &[]), commit("B", &["A"]), stash("S", "stash@{0}", "B")], &[local("main", "B", true, 1)], top);
+        let lane = b.lane("S");
+        assert!(lane.stash);
+        assert_eq!(lane.name, "stash@{0}");
+        assert_eq!(lane.column, b.named("main").column);
+        assert_eq!(lane.color, b.named("main").color);
+        assert!(b.node("S").refs.is_empty());
+        // 가지 끝 이름표는 stash 가 아니라 브랜치 끝 커밋에.
+        assert_eq!(b.node("B").refs.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["main"]);
+        assert_eq!(b.g.lane_count, 1);
+    }
+
+    #[test]
+    fn stash_does_not_push_branch_lanes() {
+        let top = Options { top_down: true, head_first: false };
+        // B 에서 stash 한 뒤 C 를 커밋: stash 는 main 줄기를 밀어내지 않고 옆 열에.
+        let b = build_opts(vec![commit("A", &[]), commit("B", &["A"]), commit("C", &["B"]), stash("S", "stash@{0}", "B")], &[local("main", "C", true, 1)], top);
+        assert_eq!(b.named("main").column, 0);
+        assert_eq!(b.lane("S").column, 1);
+        // 같은 끝에서 만든 stash 둘: 새 것(위)이 이어 쓰고 다른 하나는 옆 열.
+        let b = build_opts(
+            vec![commit("A", &[]), stash("S1", "stash@{1}", "A"), stash("S0", "stash@{0}", "A")],
+            &[local("main", "A", true, 1)],
+            top,
+        );
+        assert_eq!(b.lane("S0").column, 0);
+        assert_eq!(b.lane("S1").column, 1);
+        // 옆 가지 끝(F) 바로 위는 비어 있으면 쓴다 — 가지끼리 두는 여유 칸은 stash 에는 두지 않는다.
+        let b = build_opts(
+            vec![commit("A", &[]), commit("F", &["A"]), commit("C", &["A"]), stash("S1", "stash@{1}", "C"), stash("S0", "stash@{0}", "C")],
+            &[local("main", "C", true, 1), local("feature", "F", false, 2)],
+            top,
+        );
+        assert_eq!((b.named("main").column, b.named("feature").column), (0, 1));
+        assert_eq!(b.lane("S0").column, 0);
+        assert_eq!(b.lane("S1").column, 1);
+        assert_eq!(b.g.lane_count, 2);
+    }
+
+    #[test]
+    fn stash_leaves_current_column_to_work_in_progress() {
+        let top = Options { top_down: true, head_first: true };
+        let b = build_opts(vec![commit("A", &[]), commit("B", &["A"]), stash("S", "stash@{0}", "B")], &[local("main", "B", true, 1)], top);
+        assert_eq!(b.named("main").column, 0);
+        assert_eq!(b.lane("S").column, 1);
+    }
+
     #[test]
     fn top_down_head_first_puts_current_lane_in_first_column() {
         let top = Options { top_down: true, head_first: true };
@@ -626,6 +905,61 @@ mod tests {
         assert_eq!(b.named("feature").column, 0);
         assert_eq!(b.lane("B").name, "feature");
         assert_eq!(b.named("current").column, 1);
+    }
+
+    #[test]
+    fn top_down_merged_branch_opens_next_to_its_merge() {
+        // M(main) 이 X2 를 병합. 그 아래 끝 커밋 T 보다 병합된 가지가 먼저(병합 줄에서) 열을 잡는다.
+        let b = build_opts(
+            vec![commit("A", &[]), commit("X1", &["A"]), commit("X2", &["X1"]), commit("T", &["A"]), commit("B", &["A"]), commit("M", &["B", "X2"])],
+            &[local("main", "M", true, 2), local("topic", "T", false, 1)],
+            Options { top_down: true, head_first: false },
+        );
+        assert_eq!(b.lane("M").column, 0);
+        assert_eq!(b.lane("X2").column, 1);
+        assert_eq!(b.lane("X1").column, 1);
+        assert_eq!(b.lane("T").column, 2);
+        assert_eq!(b.g.lane_count, 3);
+    }
+
+    #[test]
+    fn top_down_column_is_reused_right_after_a_branch_ends() {
+        // f1 은 C 에서 끝나고, 바로 아래 줄의 g1 이 그 열을 이어 쓴다(여유 칸 없이).
+        let b = build_opts(
+            vec![commit("A", &[]), commit("B", &["A"]), commit("g1", &["A"]), commit("C", &["B"]), commit("f1", &["C"]), commit("D", &["C"])],
+            &[local("main", "D", true, 3), local("f", "f1", false, 2), local("g", "g1", false, 1)],
+            Options { top_down: true, head_first: false },
+        );
+        assert_eq!(b.lane("f1").column, 1);
+        assert_eq!(b.lane("g1").column, 1);
+        assert_eq!(b.lane("A").column, 0);
+        assert_eq!(b.g.lane_count, 2);
+    }
+
+    #[test]
+    fn top_down_parent_goes_to_leftmost_branch_child() {
+        // X(1열)가 먼저 P 를 잡아도, 아래의 0열 자식 Y 가 P 를 데려간다 — X 의 열은 P 줄에서 꺾여 끝난다.
+        let b = build_opts(
+            vec![commit("P", &[]), commit("Y1", &["P"]), commit("X", &["P"]), commit("Y2", &["Y1"])],
+            &[local("y", "Y2", true, 2), local("x", "X", false, 1)],
+            Options { top_down: true, head_first: false },
+        );
+        assert_eq!(b.lane("Y2").column, 0);
+        assert_eq!(b.lane("X").column, 1);
+        assert_eq!(b.lane("P").column, 0);
+        assert_eq!(b.lane("P"), b.lane("Y1"));
+    }
+
+    #[test]
+    fn top_down_color_is_column() {
+        let b = build_opts(
+            vec![commit("A", &[]), commit("X1", &["A"]), commit("B", &["A"]), commit("M", &["B", "X1"])],
+            &[local("main", "M", true, 1)],
+            Options { top_down: true, head_first: false },
+        );
+        for lane in &b.g.lanes {
+            assert_eq!(lane.color, lane.column as u32);
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! 저장소 하나에 하는 git 작업. 화면과 상관없는 순수 git 호출이라 테스트에서 임시 저장소로 돌린다.
+//! 레포지토리 하나에 하는 git 작업. 화면과 상관없는 순수 git 호출이라 테스트에서 임시 레포지토리로 돌린다.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -51,10 +51,7 @@ impl std::fmt::Display for GitError {
 pub type Result<T> = std::result::Result<T, GitError>;
 
 fn is_auth_failure(message: &str) -> bool {
-    let lower = message.to_lowercase();
-    ["permission denied (", "could not read username", "authentication failed", "could not read password", "invalid username or password"]
-        .iter()
-        .any(|p| lower.contains(p))
+    crate::advice::is_auth_failure(message)
 }
 
 fn check(out: GitOutput) -> Result<GitOutput> {
@@ -104,6 +101,10 @@ pub struct CommitDetail {
     pub author_name: String,
     pub author_email: String,
     pub time: i64,
+    /// 커미터(원본 CommitHistoryView 의 COMMITTER 칸). 작성자와 같은 사람·같은 시각이면 화면에서 따로 보이지 않는다.
+    pub committer_name: String,
+    pub committer_email: String,
+    pub committer_time: i64,
     pub parents: Vec<String>,
     pub files: Vec<FileChange>,
 }
@@ -166,9 +167,9 @@ pub enum PullMode {
 impl PullMode {
     pub fn args(self) -> &'static [&'static str] {
         match self {
-            PullMode::FfOnly => &["pull", "--ff-only"],
-            PullMode::Merge => &["pull", "--no-rebase"],
-            PullMode::Rebase => &["pull", "--rebase", "--autostash"],
+            PullMode::FfOnly => &["pull", "--progress", "--ff-only"],
+            PullMode::Merge => &["pull", "--progress", "--no-rebase"],
+            PullMode::Rebase => &["pull", "--progress", "--rebase", "--autostash"],
         }
     }
 }
@@ -260,7 +261,7 @@ pub fn diff_args_with(target: &DiffTarget, options: DiffOptions) -> Vec<String> 
 }
 
 impl Repository {
-    /// `path` 가 든 저장소를 연다(하위 폴더를 골라도 저장소 루트를 찾는다).
+    /// `path` 가 든 레포지토리를 연다(하위 폴더를 골라도 레포지토리 루트를 찾는다).
     pub fn open(git: GitRunner, path: &Path) -> Result<Repository> {
         if !path.is_dir() {
             return Err(GitError::new(format!("폴더가 없습니다: {}", path.display())));
@@ -269,7 +270,7 @@ impl Repository {
         if !out.success() {
             let msg = out.message();
             if msg.contains("not a git repository") {
-                return Err(GitError::new(format!("Git 저장소가 아닙니다: {}", path.display())));
+                return Err(GitError::new(format!("Git 레포지토리가 아닙니다: {}", path.display())));
             }
             return Err(GitError::new(msg));
         }
@@ -293,7 +294,7 @@ impl Repository {
         std::fs::metadata(self.git_dir.join("FETCH_HEAD")).and_then(|m| m.modified()).ok()
     }
 
-    /// 서브모듈이면 상위 저장소 폴더.
+    /// 서브모듈이면 상위 레포지토리 폴더.
     pub fn superproject(&self) -> Option<String> {
         self.git_run(&["rev-parse", "--show-superproject-working-tree"]).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
     }
@@ -352,7 +353,9 @@ impl Repository {
         out.success().then(|| out.stdout.trim().to_string())
     }
 
-    /// 모든 브랜치의 커밋(stash 는 빼고)과 그 그래프. 커밋이 하나도 없으면 빈 히스토리.
+    /// 모든 참조의 커밋과 그 그래프. 커밋이 하나도 없으면 빈 히스토리.
+    /// stash 는 `refs/stash` 를 빼고 읽은 뒤(그대로 두면 index·새 파일 커밋까지 따라 들어온다) `stash list` 의 모든 stash 를
+    /// 만든 자리 위에 따로 끼운다 — 그래프는 점선 상자로 그린다.
     /// `head_first` 면 지금 브랜치가 맨 왼쪽 열을 갖는다 — 그래프 맨 위 작업 중 줄(WIP)이 지금 브랜치에 이어질 때.
     pub fn history(&self, max_count: usize, refs: &crate::refs::Refs, head_first: bool) -> Result<History> {
         let head = self.head();
@@ -361,7 +364,9 @@ impl Repository {
         }
         let max = format!("--max-count={max_count}");
         let out = self.run(&["log", log::LOG_FORMAT, "--date-order", "--exclude=refs/stash", "--all", "HEAD", &max])?;
-        let commits = log::parse_commits(&out.stdout, &refs.remotes);
+        let mut commits = log::parse_commits(&out.stdout, &refs.remotes);
+        let truncated = commits.len() >= max_count;
+        log::insert_stashes(&mut commits, self.stash_commits(&refs.stashes), truncated);
         let tips: Vec<graph::BranchTip> = refs
             .local
             .iter()
@@ -369,8 +374,19 @@ impl Repository {
             .map(|b| graph::BranchTip { name: b.name.clone(), hash: b.hash.clone(), remote: b.remote.is_some(), current: b.current, time: b.time })
             .collect();
         let graph = graph::build(&commits, &tips, graph::ANONYMOUS_LANE, graph::Options { top_down: true, head_first });
-        let truncated = commits.len() >= max_count;
         Ok(History { commits, graph, head, truncated })
+    }
+
+    /// stash 마다 (이름, 커밋). 새 stash 가 앞. 읽지 못하면 비운다(그래프에 stash 만 빠진다).
+    fn stash_commits(&self, stashes: &[crate::refs::Stash]) -> Vec<(String, log::Commit)> {
+        if stashes.is_empty() {
+            return Vec::new();
+        }
+        let mut args = vec!["log", "--no-walk=unsorted", log::LOG_FORMAT];
+        args.extend(stashes.iter().map(|s| s.hash.as_str()));
+        let Ok(out) = self.run(&args) else { return Vec::new() };
+        let mut by_hash: HashMap<String, log::Commit> = log::parse_commits(&out.stdout, &[]).into_iter().map(|c| (c.hash.clone(), c)).collect();
+        stashes.iter().filter_map(|s| by_hash.remove(&s.hash).map(|c| (s.name.clone(), c))).collect()
     }
 
     /// 화면을 새로 그릴 때 필요한 것을 한 번에 읽는다: 상태·참조·히스토리. 상태와 참조는 함께 읽고, 그래프는 작업 중 변경이 있는지에 따라 배치한다.
@@ -389,9 +405,9 @@ impl Repository {
     }
 
     pub fn commit_detail(&self, hash: &str) -> Result<CommitDetail> {
-        let out = self.run(&["show", "-s", "--format=%H%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%B", hash])?;
-        let f: Vec<&str> = out.stdout.splitn(6, '\x1f').collect();
-        if f.len() < 6 {
+        let out = self.run(&["show", "-s", "--format=%H%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%P%x1f%B", hash])?;
+        let f: Vec<&str> = out.stdout.splitn(9, '\x1f').collect();
+        if f.len() < 9 {
             return Err(GitError::new(format!("커밋을 읽지 못했습니다: {hash}")));
         }
         let files = self.run(&["diff-tree", "-r", "-z", "--no-commit-id", "--name-status", "-M", "--root", "--diff-merges=first-parent", hash])?;
@@ -400,8 +416,11 @@ impl Repository {
             author_name: f[1].to_string(),
             author_email: f[2].to_string(),
             time: f[3].parse().unwrap_or(0),
-            parents: f[4].split_whitespace().map(str::to_string).collect(),
-            message: f[5].trim_end().to_string(),
+            committer_name: f[4].to_string(),
+            committer_email: f[5].to_string(),
+            committer_time: f[6].parse().unwrap_or(0),
+            parents: f[7].split_whitespace().map(str::to_string).collect(),
+            message: f[8].trim_end().to_string(),
             files: log::parse_name_status(&files.stdout),
         })
     }
@@ -472,14 +491,14 @@ impl Repository {
             return Err(GitError::new("브랜치가 아닌 커밋을 보고 있어 푸시할 수 없습니다. 브랜치를 체크아웃해 주세요."));
         }
         let out = if st.branch.upstream.is_some() {
-            self.run(&["push"])?
+            self.run(&["push", "--progress"])?
         } else {
             let remotes = self.remotes()?;
             let remote = remote.map(str::to_string).filter(|r| remotes.contains(r)).or_else(|| remotes.iter().find(|r| *r == "origin").or(remotes.first()).cloned());
             let Some(remote) = remote else {
-                return Err(GitError::new("원격 저장소가 없습니다. 먼저 원격을 추가해 주세요."));
+                return Err(GitError::new("원격 레포지토리가 없습니다. 먼저 원격을 추가해 주세요."));
             };
-            self.run(&["push", "-u", &remote, &st.branch.name])?
+            self.run(&["push", "--progress", "-u", &remote, &st.branch.name])?
         };
         Ok(out.message())
     }
@@ -585,6 +604,35 @@ impl Repository {
         Ok(())
     }
 
+    /// 작업 트리 쪽 변경만 버린다(인덱스에 올린 내용은 남는다). 새 파일(untracked)은 지운다.
+    /// Unstaged 목록의 "변경 버리기" 다(원본 GitOperations.DiscardWorkTreeAsync = `git restore --worktree`).
+    pub fn discard_worktree(&self, paths: &[String]) -> Result<()> {
+        let st = self.status()?;
+        let mut untracked = Vec::new();
+        let mut tracked = Vec::new();
+        for e in st.unstaged.iter().filter(|e| paths.contains(&e.path)) {
+            if e.state == status::FileState::Untracked {
+                untracked.push(e.path.clone());
+            } else {
+                tracked.push(e.path.clone());
+            }
+        }
+        untracked.sort();
+        untracked.dedup();
+        for path in &untracked {
+            let full = self.safe_join(path)?;
+            std::fs::remove_file(&full).map_err(|e| GitError::new(format!("{path} 를 지우지 못했습니다: {e}")))?;
+        }
+        tracked.sort();
+        tracked.dedup();
+        if !tracked.is_empty() {
+            let mut args = vec!["restore".to_string(), "--worktree".into(), "--".into()];
+            args.extend(tracked);
+            self.run(&args)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn runner(&self) -> &GitRunner {
         &self.git
     }
@@ -593,11 +641,11 @@ impl Repository {
         self.safe_join(path)
     }
 
-    /// 저장소 안의 경로만 받는다(`..` 로 밖을 가리키면 거절).
+    /// 레포지토리 안의 경로만 받는다(`..` 로 밖을 가리키면 거절).
     fn safe_join(&self, path: &str) -> Result<PathBuf> {
         let relative = Path::new(path);
         if relative.is_absolute() || relative.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-            return Err(GitError::new(format!("저장소 밖의 경로입니다: {path}")));
+            return Err(GitError::new(format!("레포지토리 밖의 경로입니다: {path}")));
         }
         Ok(self.root.join(relative))
     }
@@ -612,7 +660,9 @@ impl Repository {
         if background {
             env.insert("GCM_INTERACTIVE".to_string(), "never".to_string());
         }
-        check(self.git.run_with(&self.root, &["fetch", "--all", "--prune", "--quiet"], None, &env))?;
+        // 직접 누른 페치는 진행을 보이고(--progress), 자동 페치는 조용히 한다.
+        let args: &[&str] = if background { &["fetch", "--all", "--prune", "--quiet"] } else { &["fetch", "--all", "--prune", "--progress"] };
+        check(self.git.run_with(&self.root, args, None, &env))?;
         Ok(true)
     }
 
@@ -656,8 +706,8 @@ mod tests {
 
     #[test]
     fn pull_args() {
-        assert_eq!(PullMode::FfOnly.args(), ["pull", "--ff-only"]);
-        assert_eq!(PullMode::Rebase.args(), ["pull", "--rebase", "--autostash"]);
+        assert_eq!(PullMode::FfOnly.args(), ["pull", "--progress", "--ff-only"]);
+        assert_eq!(PullMode::Rebase.args(), ["pull", "--progress", "--rebase", "--autostash"]);
     }
 
     #[test]

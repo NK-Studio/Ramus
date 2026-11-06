@@ -3,21 +3,24 @@
 
 import { el } from './util.js';
 import { icon } from './icons.js';
-import { confirmDialog, formDialog, showMenu, openDrawer, searchSelect, pickDialog } from './dialogs.js';
+import { confirmDialog, formDialog, showMenu, openDrawer, searchSelect, pickDialog, drawerPrimary, drawerProblem, drawerField } from './dialogs.js';
 import { branchNameProblem } from './graph.js';
 
 const copy = (text) => navigator.clipboard?.writeText(text);
 
 /**
  * ctx: { call, act(label, work, {success}), state, prefs, graph, reveal(hash), showCommit(hash), openRepo(path), notify(text),
- *        inlineBranches(), beforeInlineBranch(), sidebarElement(), compare(a, b, options), fileManager }
+ *        inlineBranches(), beforeInlineBranch(), sidebarElement(), compare(a, b, options), fileManager, showInExplorer(hash) }
+ * state.busy 면(다른 작업이 도는 중) 원본처럼 쓰는 메뉴 항목을 끄고 더블클릭을 무시한다.
  */
 export function createRefs(ctx) {
   const { call, act } = ctx;
 
   const current = () => ctx.state.refs?.local.find((b) => b.current);
   const remotes = () => ctx.state.refs?.remotes ?? [];
-  const busyOp = () => !!ctx.state.status?.operation;
+  const busy = () => !!ctx.state.busy;
+  /** 병합·rebase 가 멈춰 있거나 다른 작업이 도는 중(그동안은 레포지토리를 바꾸는 항목을 끈다). */
+  const busyOp = () => !!ctx.state.status?.operation || busy();
   const remoteOf = () => current()?.upstream?.split('/')[0] || remotes()[0] || 'origin';
   const run = (label, cmd, args, success) => act(label, () => call(cmd, args), success ? { success: () => success } : {});
   const localNames = () => (ctx.state.refs?.local ?? []).map((b) => b.name);
@@ -39,7 +42,7 @@ export function createRefs(ctx) {
    * 새 브랜치. GitKraken 배치면 그 커밋 줄의 브랜치/태그 칸에 입력란을 띄우고(쓰는 동안 검사, Enter 면 만들고 바로 전환),
    * 그래프에 없는 커밋이거나 다른 배치면 브랜치 만들기 카드로 묻는다.
    */
-  async function createBranch(start = 'HEAD', startLabel = '지금 커밋 (HEAD)', { inline = true } = {}) {
+  async function createBranch(start = 'HEAD', startLabel = (start === 'HEAD' && current()?.name) || start, { inline = true } = {}) {
     const hash = inline && ctx.inlineBranches?.() ? resolve(start) : null;
     if (hash) {
       ctx.beforeInlineBranch?.();
@@ -50,19 +53,22 @@ export function createRefs(ctx) {
       });
       if (started) return;
     }
+    // 원본 GitBranchDialog: 브랜치 원 배지 · "'/' 로 나누면…" 안내 · 만들 위치 줄 · 아이콘 든 이름 칸 · "만든 뒤 체크아웃"(고른 값을 기억).
     const values = await formDialog({
-      title: '새 브랜치',
+      title: '브랜치 만들기',
       glyph: 'branch',
       className: 'branch-card',
-      message: `시작점: ${startLabel}`,
+      message: "'/' 로 나누면 폴더처럼 묶입니다",
       fields: [
-        { name: 'name', placeholder: 'feature/새-기능', icon: 'branch', hint: "'/' 로 폴더를 나눌 수 있습니다 (feature/login)" },
-        { name: 'checkout', type: 'checkbox', label: '만든 뒤 바로 전환', value: true },
+        { type: 'static', label: '만들 위치:', icon: 'branch', text: startLabel },
+        { name: 'name', label: '브랜치 이름:', placeholder: '브랜치 이름 입력', icon: 'branch' },
+        { name: 'checkout', type: 'checkbox', label: '만든 뒤 체크아웃', value: ctx.prefs.get('branch.checkout') ?? true },
       ],
       ok: '만들기',
       validate: (v) => branchNameProblem(v.name, localNames()),
     });
     if (!values) return;
+    ctx.prefs.set('branch.checkout', values.checkout);
     await run('브랜치를 만드는 중…', 'createBranch', { name: values.name.trim(), start, checkout: values.checkout }, `브랜치 '${values.name.trim()}' 를 만들었습니다.`);
   }
 
@@ -90,21 +96,52 @@ export function createRefs(ctx) {
     if (values) await run('이름을 바꾸는 중…', 'renameBranch', { old: name, new: values.name.trim() });
   }
 
+  /**
+   * 원본 BranchActions.DeleteAsync: 확인 → `branch -d`. 병합되지 않은 커밋이 있어 거부되면 강제 삭제를 한 번 더 묻고,
+   * 지운 뒤에는 추적하던 원격 브랜치도 지울지 묻는다.
+   */
   async function deleteBranch(branch) {
-    const unmerged = branch.ahead > 0 || !branch.upstream;
-    const values = await formDialog({
-      title: '브랜치 지우기',
-      danger: true,
-      message: `로컬 브랜치 '${branch.name}' 를 지웁니다. 원격 브랜치는 그대로입니다. 실행 취소로 되살릴 수 있습니다.`,
-      fields: [{ name: 'force', type: 'checkbox', label: '병합하지 않은 커밋이 있어도 강제로 지우기', value: false, hint: unmerged ? '(올리지 않은 커밋이 있을 수 있습니다)' : '' }],
-      ok: '지우기',
+    if (!(await confirmDialog({
+      title: '브랜치 삭제', glyph: 'branch', danger: true, ok: '삭제',
+      message: `로컬 브랜치 '${branch.name}'을(를) 삭제합니다. 원격 브랜치는 그대로 둡니다.`,
+    }))) return;
+    const upstream = branch.upstream;
+    let notMerged = false;
+    const deleted = await act(`'${branch.name}' 삭제하는 중…`, () => call('deleteBranch', { name: branch.name, force: false }).then(() => true), {
+      success: () => `'${branch.name}' 를 지웠습니다.`,
+      onError: (error) => {
+        // Rust 가 "not fully merged" 를 우리말로 바꿔 돌려준다(refs.rs delete_branch).
+        if (!/not fully merged|병합하지 않은 커밋/i.test(error?.message ?? '')) return false;
+        notMerged = true;
+        return true;
+      },
     });
-    if (values) await run('브랜치를 지우는 중…', 'deleteBranch', { name: branch.name, force: values.force }, `'${branch.name}' 를 지웠습니다.`);
+    if (notMerged) {
+      if (!(await confirmDialog({
+        title: '브랜치 삭제', glyph: 'branch', danger: true, ok: '강제 삭제',
+        message: `'${branch.name}' 에는 병합되지 않은 커밋이 있습니다. 강제로 삭제하면 그 커밋에 다시 가기 어렵습니다.\n\n강제로 삭제할까요?`,
+      }))) return;
+      const forced = await act(`'${branch.name}' 강제 삭제하는 중…`, () => call('deleteBranch', { name: branch.name, force: true }).then(() => true),
+        { success: () => `'${branch.name}' 를 지웠습니다.` });
+      if (forced !== true) return;
+    } else if (deleted !== true) return;
+    await offerDeleteUpstream(upstream);
+  }
+
+  /** 지운 로컬 브랜치가 추적하던 원격 브랜치가 아직 있으면 그것도 지울지 묻는다(원본 OfferDeleteUpstreamAsync). */
+  async function offerDeleteUpstream(upstream) {
+    if (!upstream || !(ctx.state.refs?.remote ?? []).some((b) => b.name === upstream)) return;
+    if (!(await confirmDialog({
+      title: '원격 브랜치 삭제', glyph: 'cloud', danger: true, ok: '삭제', cancel: '원격은 남기기',
+      message: `로컬 브랜치를 지웠습니다.\n추적하던 원격 브랜치 '${upstream}' 도 지울까요? 다른 사람에게도 사라집니다.`,
+    }))) return;
+    const remote = remotes().find((r) => upstream.startsWith(`${r}/`)) ?? upstream.split('/')[0];
+    await run(`'${upstream}' 삭제하는 중…`, 'deleteRemoteBranch', { remote, branch: upstream.slice(remote.length + 1) }, `${upstream} 를 지웠습니다.`);
   }
 
   async function deleteRemoteBranch(branch) {
     const short = branch.name.slice(branch.remote.length + 1);
-    if (!(await confirmDialog({ title: '원격 브랜치 지우기', message: `원격 '${branch.remote}' 에서 '${short}' 를 지웁니다. 다른 사람도 더는 볼 수 없고 실행 취소로 되살릴 수 없습니다.`, ok: '지우기', danger: true }))) return;
+    if (!(await confirmDialog({ title: '원격 브랜치 삭제', glyph: 'cloud', message: `'${branch.remote}' 에서 '${short}' 를 삭제할까요? 다른 사람에게도 사라지고 실행 취소로 되살릴 수 없습니다.`, ok: '삭제', danger: true }))) return;
     await run('원격 브랜치를 지우는 중…', 'deleteRemoteBranch', { remote: branch.remote, branch: short }, `${branch.name} 를 지웠습니다.`);
   }
 
@@ -127,12 +164,17 @@ export function createRefs(ctx) {
     await run('Rebase 하는 중…', 'rebase', { revision, stopOnConflict: ctx.prefs.get('rebase.stop') !== false }, 'Rebase 했습니다.');
   }
 
+  /** 원격이 없으면 원격 추가 드로어를 권한다(원본 SyncFlows.OfferAddRemoteAsync). */
+  async function offerAddRemote(title) {
+    if (await confirmDialog({ title, glyph: 'cloud', ok: '원격 추가…', message: '등록된 원격이 없어 올릴 곳이 없습니다.\n원격을 추가하거나 GitHub 에 새 레포지토리를 만드세요.' })) addRemote();
+  }
+
   async function pushBranch(branch) {
     const list = remotes();
-    if (!list.length) return ctx.addRemote?.();
+    if (!list.length) return offerAddRemote('브랜치 푸시');
     let remote = branch.upstream?.split('/')[0];
     if (!remote) {
-      remote = list.length > 1 ? await pickDialog({ title: '올릴 원격', glyph: 'push', options: list.map((r) => ({ value: r, label: r })), value: ctx.prefs.get('push.remote') ?? 'origin' }) : list[0];
+      remote = list.length > 1 ? await pickDialog({ title: '브랜치 푸시', message: '어느 원격에 올릴까요?', glyph: 'cloud', options: list.map((r) => ({ value: r, label: r })), value: ctx.prefs.get('push.remote') ?? 'origin' }) : list[0];
       if (!remote) return;
       ctx.prefs.set('push.remote', remote);
     }
@@ -175,19 +217,26 @@ export function createRefs(ctx) {
 
   // ── stash ──
 
+  /** 작업 중인 변경(새 파일 포함)을 바로 stash 한다 — 원본 도구 막대·구역 메뉴처럼 메모를 묻지 않는다. */
   async function stashPush() {
-    const values = await formDialog({
-      title: '스태시', glyph: 'stash',
-      message: '작업 중인 변경(새 파일 포함)을 잠시 치워 둡니다.',
-      fields: [{ name: 'message', label: '메모 (선택)', placeholder: '무엇을 하던 중인지' }],
-      ok: '스태시',
-    });
-    if (values) await run('Stash 하는 중…', 'stashPush', { message: values.message }, 'Stash 했습니다.');
+    if (busy()) return;
+    await run('Stash 하는 중…', 'stashPush', { message: '' }, 'Stash 했습니다.');
+  }
+
+  /** Apply·Pop 이 끝나면 변경이 작업 트리로 돌아온다 — 작업 변경 화면으로 옮기고 커밋 제목에 그 stash 메시지를 적는다(app.js). */
+  const applied = (stash, result) => {
+    if (result !== undefined && stash) ctx.stashApplied?.(stash);
+  };
+
+  async function stashApply(stash) {
+    applied(stash, await run(`${stash.name} Apply 하는 중…`, 'stashApply', { name: stash.name, pop: false }, 'Stash 를 적용했습니다.'));
   }
 
   async function stashPop(name = 'stash@{0}') {
+    // Pop 하면 목록에서 빠지므로 메시지를 먼저 잡아 둔다.
+    const stash = ctx.state.refs?.stashes.find((s) => s.name === name);
     let overlap = null;
-    await act('Stash 를 되돌리는 중…', () => call('stashApply', { name, pop: true }), {
+    const result = await act('Stash 를 되돌리는 중…', () => call('stashApply', { name, pop: true }), {
       success: () => 'Stash 를 되돌리고 지웠습니다.',
       onError: (error) => {
         if (error?.advice?.kind !== 'localChanges') return false;
@@ -195,17 +244,20 @@ export function createRefs(ctx) {
         return true;
       },
     });
-    if (!overlap) return;
+    if (!overlap) {
+      applied(stash, result);
+      return;
+    }
     // Pop 이 로컬 변경과 겹치면: 그 변경을 버리고 다시 Pop 할지 묻는다.
     const files = overlap.advice.files;
     if (await confirmDialog({ title: 'Pop 하려니 로컬 변경이 겹칩니다', danger: true, message: `${files.join(', ')}\n\n이 파일들의 로컬 변경을 버리고 다시 Pop 할까요? 버린 변경은 되살릴 수 없습니다.`, ok: '버리고 Pop' })) {
       await act('버리는 중…', () => call('discard', { paths: files }));
-      await run('Stash 를 되돌리는 중…', 'stashApply', { name, pop: true }, 'Stash 를 되돌리고 지웠습니다.');
+      applied(stash, await run('Stash 를 되돌리는 중…', 'stashApply', { name, pop: true }, 'Stash 를 되돌리고 지웠습니다.'));
     }
   }
 
   async function stashDrop(stash) {
-    if (!(await confirmDialog({ title: 'Stash 지우기', message: `${stash.name}: ${stash.message}\n\n실행 취소로도 되살릴 수 없습니다.`, ok: '지우기', danger: true }))) return;
+    if (!(await confirmDialog({ title: 'Stash 버리기', glyph: 'stash', message: `${stash.name} (${stash.message}) 를 버릴까요?\n\n버린 stash 는 되살리기 어렵습니다.`, ok: '삭제', danger: true }))) return;
     await run('Stash 를 지우는 중…', 'stashDrop', { name: stash.name }, 'Stash 를 지웠습니다.');
   }
 
@@ -225,6 +277,8 @@ export function createRefs(ctx) {
    * stash 는 변경 보기, 워크트리는 열기, 서브모듈은 편집 드로어. 이미 지금 브랜치거나 진행 중인 작업이 있으면 전환하지 않는다.
    */
   function activate(target) {
+    // 다른 작업이 도는 중이면 아무것도 하지 않는다(원본 RunDefault).
+    if (busy()) return;
     const switching = ['local', 'remote', 'tag', 'current'].includes(target.kind);
     if (switching && busyOp()) {
       ctx.notify('진행 중인 작업을 먼저 끝내세요.');
@@ -246,7 +300,8 @@ export function createRefs(ctx) {
         ctx.showCommit(target.stash.hash, `${target.stash.name}: ${target.stash.message}`);
         break;
       case 'worktree':
-        if (!target.worktree.current) ctx.openRepo(target.worktree.path);
+        // 원본처럼 그 워크트리 폴더를 Finder·탐색기로 연다.
+        call('openFolder', { path: target.worktree.path }).catch(ctx.showError);
         break;
       case 'submodule':
         editSubmodule(target.submodule);
@@ -282,57 +337,70 @@ export function createRefs(ctx) {
   }
 
   async function removeRemote(remote) {
-    if (!(await confirmDialog({ title: '원격 지우기', danger: true, message: `원격 '${remote.name}' 와 그 원격 브랜치 표시를 지웁니다. 서버의 저장소는 그대로입니다.`, ok: '지우기' }))) return;
+    if (!(await confirmDialog({ title: '원격 삭제', glyph: 'cloud', danger: true, message: `'${remote.name}' 원격과 그 원격 브랜치 추적 참조를 지울까요?\n원격 레포지토리 자체는 지워지지 않습니다.`, ok: '삭제' }))) return;
     await run('원격을 지우는 중…', 'removeRemote', { name: remote.name }, `원격 '${remote.name}' 를 지웠습니다.`);
   }
 
-  /** 원격 추가 드로어: [URL] 이름·Pull 주소·Push 주소 / [GitHub] 기존 저장소·새로 만들기. 더한 뒤 그 원격만 Fetch. */
+  /** 원격 주소처럼 보이는지(원본 GitRemoteForm.IsPlausibleUrl): https·ssh·git·file 주소, user@host:경로, 또는 폴더 경로. */
+  const plausibleUrl = (value) => {
+    const v = value.trim();
+    return /^(https?|ssh|git|file):\/\/\S+$/i.test(v) || /^[\w.-]+@[\w.-]+:\S+$/.test(v) || /^(\/|~\/|\.{1,2}\/|[a-zA-Z]:[\\/])/.test(v);
+  };
+  const BAD_URL = '원격 주소가 아닙니다. https://…, git@host:owner/repo.git, 또는 있는 폴더 경로를 넣으세요.';
+
+  /**
+   * 원격 추가 드로어(원본 AddRemoteDrawer): 위 탭 [주소 | GitHub]. 주소 탭은 이름·가져올 주소·올릴 주소와 폭을 다 쓰는 초록 [원격 추가].
+   * 더한 뒤 그 원격만 Fetch.
+   */
   function addRemote() {
     openDrawer({
       glyph: 'cloud', title: '원격 추가', anchor: ctx.sidebarElement(),
       build(body, close) {
         let tab = ctx.prefs.get('addRemote.tab') ?? 'url';
-        const tabs = el('div', { class: 'seg drawer-tabs' });
+        const tabs = el('div', { class: 'drawer-tabs' });
         const content = el('div', { class: 'drawer-content' });
+        const tabButton = (key, glyph, label, tip) => el('button', {
+          class: `drawer-tab${tab === key ? ' on' : ''}`, 'data-tip': tip,
+          onclick: () => { tab = key; ctx.prefs.set('addRemote.tab', tab); draw(); },
+        }, icon(glyph, 24), el('span', { text: label }));
         const draw = () => {
           tabs.replaceChildren(
-            el('button', { class: tab === 'url' ? 'on' : '', onclick: () => { tab = 'url'; ctx.prefs.set('addRemote.tab', tab); draw(); } }, icon('globe', 14), ' URL'),
-            el('button', { class: tab === 'github' ? 'on' : '', onclick: () => { tab = 'github'; ctx.prefs.set('addRemote.tab', tab); draw(); } }, icon('github', 14), ' GitHub'));
-          content.replaceChildren(tab === 'url' ? urlForm() : (ctx.githubRemoteForm?.(close) ?? el('div', { class: 'muted small', text: 'GitHub 에 로그인하면 저장소를 고르거나 새로 만들 수 있습니다.' })));
+            tabButton('url', 'globe', '주소', '원격 레포지토리 주소(URL)를 직접 넣습니다.'),
+            tabButton('github', 'github', 'GitHub', 'GitHub 의 레포지토리를 고르거나 새로 만듭니다.'));
+          content.replaceChildren(tab === 'url' ? urlForm() : (ctx.githubRemoteForm?.(close) ?? el('div', { class: 'muted small', text: 'GitHub 에 로그인하면 레포지토리를 고르거나 새로 만들 수 있습니다.' })));
           content.querySelector('input')?.focus();
         };
         const urlForm = () => {
-          const name = el('input', { class: 'field', placeholder: 'origin', spellcheck: 'false' });
+          const name = el('input', { class: 'field', spellcheck: 'false' });
           name.value = remotes().includes('origin') ? '' : 'origin';
-          const url = el('input', { class: 'field', placeholder: 'https://… 또는 git@…', spellcheck: 'false' });
-          const pushUrl = el('input', { class: 'field', placeholder: '비우면 Pull 주소와 같음', spellcheck: 'false' });
-          const problem = el('div', { class: 'modal-error' }, ' ');
-          const ok = el('button', { class: 'btn primary', text: '추가' });
+          const url = el('input', { class: 'field', spellcheck: 'false' });
+          const pushUrl = el('input', { class: 'field', placeholder: '비우면 Pull URL 을 씁니다', spellcheck: 'false' });
+          const problem = drawerProblem();
+          const ok = drawerPrimary('원격 추가');
+          // 비어 있는 칸은 알리지 않고 버튼만 끈다(원본 Validate).
           const check = () => {
-            const p = !name.value.trim() ? '이름을 적어 주세요.' : /\s/.test(name.value) ? '이름에 공백은 쓸 수 없습니다.'
-              : remotes().includes(name.value.trim()) ? '같은 이름의 원격이 있습니다.' : !url.value.trim() ? '주소를 적어 주세요.' : null;
-            problem.textContent = p ?? ' ';
-            ok.disabled = !!p;
-            return p;
+            const n = name.value.trim();
+            const nameProblem = !n ? null : remotes().includes(n) ? '같은 이름의 원격이 이미 있습니다.' : n.includes('/') ? '원격 이름에 / 는 쓸 수 없습니다.' : branchNameProblem(n, []);
+            const badUrl = [url, pushUrl].some((i) => i.value.trim() && !plausibleUrl(i.value));
+            problem.set(nameProblem ?? (badUrl ? BAD_URL : null));
+            ok.disabled = busy() || !n || !!nameProblem || !url.value.trim() || badUrl;
+            return ok.disabled;
           };
           [name, url, pushUrl].forEach((i) => i.addEventListener('input', check));
           const submit = async () => {
             if (check()) return;
             const remoteName = name.value.trim();
-            const added = await act('원격을 추가하는 중…', () => call('addRemote', { name: remoteName, url: url.value, pushUrl: pushUrl.value }).then(() => true));
+            const added = await act('원격을 추가하는 중…', () => call('addRemote', { name: remoteName, url: url.value.trim(), pushUrl: pushUrl.value.trim() }).then(() => true));
             if (added !== true) return;
             close();
-            await act(`${remoteName} 을 페치하는 중…`, () => call('fetchRemote', { name: remoteName }), { success: () => `원격 '${remoteName}' 를 추가했습니다.` });
+            await act(`'${remoteName}' 에서 Fetch 하는 중…`, () => call('fetchRemote', { name: remoteName }), { success: () => `원격 '${remoteName}' 를 추가했습니다.` });
           };
           ok.addEventListener('click', submit);
           for (const i of [name, url, pushUrl]) i.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) submit(); });
           check();
           return el('div', { class: 'drawer-form' },
-            el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: '이름' }), name),
-            el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'Pull 주소' }), url),
-            el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'Push 주소' }), pushUrl),
-            problem,
-            el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '취소', onclick: () => close() }), ok));
+            drawerField('이름', name), drawerField('가져올 주소 (Pull URL)', url), drawerField('올릴 주소 (Push URL)', pushUrl),
+            problem, ok);
         };
         body.append(tabs, content);
         draw();
@@ -342,117 +410,246 @@ export function createRefs(ctx) {
 
   // ── 워크트리·서브모듈 ──
 
+  /** 레포지토리 폴더 옆 "<레포지토리>-<브랜치>" (원본 GitWorktreeForm.SuggestPath). 경로 구분자·공백 등은 '-' 로. */
+  function suggestWorktreePath(name) {
+    if (!name?.trim()) return '';
+    const root = ctx.state.repo.path.replace(/\\/g, '/').replace(/\/+$/, '');
+    const slash = root.lastIndexOf('/');
+    const suffix = name.trim().replace(/[\\/\s<>:"|?*]/g, '-');
+    return `${slash < 0 ? '' : `${root.slice(0, slash)}/`}${root.slice(slash + 1)}-${suffix}`;
+  }
+
+  /** 폴더 상태(있는지·폴더인지·비었는지). 경로가 상대면 레포지토리 기준. */
+  const pathInfo = (path) => call('pathInfo', { path }).catch(() => ({ exists: false, dir: false, empty: true }));
+
+  /**
+   * 워크트리 만들기 드로어(원본 AddWorktreeDrawer): 체크아웃할 참조(로컬·원격·태그) · 새로 만들 브랜치(원격을 고르면 이름을 넣어 준다) ·
+   * 작업 폴더(자동 "<레포지토리>-<브랜치>", [찾아보기]). 이미 다른 워크트리에서 쓰는 브랜치·비어 있지 않은 폴더는 막는다.
+   */
   function addWorktree(reference) {
     openDrawer({
-      glyph: 'worktree', title: '워크트리 추가', anchor: ctx.sidebarElement(),
+      glyph: 'worktree', title: '워크트리 만들기', anchor: ctx.sidebarElement(),
       build(body, close) {
         const refs = ctx.state.refs ?? { local: [], remote: [], tags: [] };
-        const items = [
-          ...refs.local.map((b) => ({ value: b.name, label: b.name, icon: 'laptop' })),
-          ...refs.remote.map((b) => ({ value: b.name, label: b.name, icon: 'cloud' })),
-          ...refs.tags.map((t) => ({ value: t.name, label: t.name, icon: 'tag' })),
+        const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        const choices = [
+          ...[...refs.local].sort(byName).map((b) => ({ value: b.name, label: b.name, hint: '로컬', kind: 'local', icon: 'branch' })),
+          ...refs.remote.filter((b) => !b.name.endsWith('/HEAD')).sort(byName).map((b) => ({ value: b.name, label: b.name, hint: '원격', kind: 'remote', icon: 'cloud' })),
+          ...refs.tags.map((t) => ({ value: t.name, label: t.name, hint: '태그', kind: 'tag', icon: 'tag' })),
         ];
-        const repoPath = ctx.state.repo.path;
-        const sep = repoPath.includes('\\') ? '\\' : '/';
-        const parent = repoPath.slice(0, repoPath.lastIndexOf(sep));
-        const base = repoPath.slice(repoPath.lastIndexOf(sep) + 1);
-        let folderTouched = false;
+        let branchEdited = false;
+        let pathEdited = false;
+        let folderState = { exists: false, dir: false, empty: true };
+        let token = 0;
+        const branch = el('input', { class: 'field', placeholder: '비우면 고른 참조를 그대로 체크아웃합니다', spellcheck: 'false' });
         const folder = el('input', { class: 'field', spellcheck: 'false' });
-        const newBranch = el('input', { type: 'checkbox' });
-        const branchName = el('input', { class: 'field', placeholder: '새 브랜치 이름', spellcheck: 'false', disabled: true });
-        const select = searchSelect({ items, value: reference ?? current()?.name, placeholder: '브랜치·태그', onChange: () => auto() });
-        const auto = () => {
-          if (folderTouched) return;
-          const name = (newBranch.checked && branchName.value.trim() ? branchName.value.trim() : select.value ?? 'worktree').replace(/^[^/]+\//, (m) => (refs.remote.some((b) => b.name === select.value) ? '' : m)).replace(/[\\/]/g, '-');
-          folder.value = `${parent}${sep}${base}-${name}`;
+        const select = searchSelect({ items: choices, value: null, placeholder: '선택…', onChange: () => onChosen() });
+        const chosen = () => choices.find((c) => c.value === select.value) ?? null;
+        const problem = drawerProblem();
+        const ok = drawerPrimary('워크트리 만들기');
+        async function readFolder() {
+          const mine = ++token;
+          const path = folder.value.trim();
+          const info = path ? await pathInfo(path) : { exists: false, dir: false, empty: true };
+          if (mine !== token) return;
+          folderState = info;
           check();
-        };
-        folder.addEventListener('input', () => { folderTouched = true; check(); });
-        newBranch.addEventListener('change', () => { branchName.disabled = !newBranch.checked; if (newBranch.checked) branchName.focus(); auto(); });
-        branchName.addEventListener('input', auto);
-        const problem = el('div', { class: 'modal-error' }, ' ');
-        const ok = el('button', { class: 'btn primary', text: '추가' });
-        function check() {
-          const p = !select.value ? '참조를 고르세요.' : newBranch.checked ? branchNameProblem(branchName.value, localNames()) : !folder.value.trim() ? '폴더를 적어 주세요.' : null;
-          problem.textContent = p ?? ' ';
-          ok.disabled = !!p;
-          return p;
         }
+        const suggestPath = () => {
+          if (pathEdited) return;
+          folder.value = suggestWorktreePath(branch.value.trim() || chosen()?.value);
+          readFolder();
+        };
+        // 원격을 고르면 같은 이름의 로컬 브랜치가 없을 때 그 이름을 새 브랜치로 넣어 둔다(원본 SuggestBranch).
+        function onChosen() {
+          const c = chosen();
+          if (!branchEdited) {
+            const local = c?.kind === 'remote' ? c.value.slice(c.value.indexOf('/') + 1) : null;
+            branch.value = local && !localNames().some((n) => n.toLowerCase() === local.toLowerCase()) ? local : '';
+          }
+          suggestPath();
+          check();
+        }
+        function check() {
+          const c = chosen();
+          const name = branch.value.trim();
+          const path = folder.value.trim();
+          let p = name ? branchNameProblem(name, localNames()) : null;
+          const usedBy = c?.kind === 'local' && !name ? (ctx.state.worktrees ?? []).find((w) => w.branch === c.value)?.path : null;
+          if (!p && usedBy) p = `'${c.value}' 는 이미 ${usedBy} 에서 체크아웃되어 있습니다. 새 브랜치 이름을 적으세요.`;
+          if (!p && path && folderState.exists && (!folderState.dir || !folderState.empty)) p = '이 폴더는 비어 있지 않습니다.';
+          problem.set(p);
+          ok.disabled = busy() || !c || !path || !!p;
+          return ok.disabled;
+        }
+        branch.addEventListener('input', () => { branchEdited = true; suggestPath(); check(); });
+        folder.addEventListener('input', () => { pathEdited = true; readFolder(); check(); });
         ok.addEventListener('click', async () => {
           if (check()) return;
-          const done = await act('워크트리를 만드는 중…', () => call('addWorktree', { path: folder.value.trim(), reference: select.value, newBranch: newBranch.checked ? branchName.value.trim() : undefined }).then(() => true), { success: () => '워크트리를 만들었습니다.' });
+          const name = branch.value.trim();
+          const done = await act(`워크트리 '${name || select.value}' 만드는 중…`, () => call('addWorktree', { path: folder.value.trim(), reference: select.value, newBranch: name || undefined }).then(() => true), { success: () => '워크트리를 만들었습니다.' });
           if (done === true) close();
+          else check();
         });
-        const browse = el('button', { class: 'btn', text: '찾아보기…', onclick: async () => {
-          const picked = await call('pick', { kind: 'folder', start: parent, title: '워크트리를 둘 폴더' });
-          if (picked) { folder.value = `${picked}${sep}${base}-${(select.value ?? '').replace(/[\\/]/g, '-')}`; folderTouched = true; check(); }
+        const browse = el('button', { class: 'btn drawer-secondary', text: '찾아보기', onclick: async () => {
+          const start = folder.value.trim() || ctx.state.repo.path.replace(/[\\/][^\\/]+[\\/]?$/, '');
+          const picked = await call('pick', { kind: 'folder', start, title: '작업 폴더' });
+          if (picked) { folder.value = picked.replace(/\\/g, '/'); pathEdited = true; readFolder(); check(); }
         } });
-        auto();
         body.append(el('div', { class: 'drawer-form' },
-          el('div', { class: 'modal-field' }, el('span', { class: 'modal-label', text: '참조' }), select.element),
-          el('label', { class: 'check' }, newBranch, '새 브랜치 만들기'),
-          branchName,
-          el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: '폴더' }), el('div', { class: 'row' }, folder, browse)),
-          problem,
-          el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '취소', onclick: () => close() }), ok)));
+          drawerField('체크아웃할 참조', select.element),
+          drawerField('새로 만들 브랜치', branch),
+          drawerField('작업 폴더', el('div', { class: 'row' }, folder, browse)),
+          problem, ok));
+        // PR 메뉴의 "워크트리 만들기" 처럼 참조를 정해 열었으면 그것을 골라 둔다.
+        if (reference && choices.some((c) => c.value === reference)) {
+          select.set(reference);
+          onChosen();
+        }
         check();
       },
     });
   }
 
   async function removeWorktree(w) {
-    const values = await formDialog({ title: '워크트리 지우기', danger: true, message: `${w.path}\n\n이 폴더를 지웁니다. 브랜치는 남습니다.`, fields: [{ name: 'force', type: 'checkbox', label: '커밋하지 않은 변경이 있어도 지우기' }], ok: '지우기' });
-    if (values) await run('워크트리를 지우는 중…', 'removeWorktree', { path: w.path, force: values.force }, '워크트리를 지웠습니다.');
+    if (!(await confirmDialog({
+      title: '워크트리 제거', glyph: 'worktree', danger: true, ok: '삭제',
+      message: `워크트리 ${w.path} 를 제거할까요?\n\n그 폴더가 지워집니다. 커밋하지 않은 변경이 있으면 git 이 거부합니다. 브랜치는 그대로 남습니다.`,
+    }))) return;
+    await run('워크트리를 제거하는 중…', 'removeWorktree', { path: w.path, force: false }, '워크트리를 제거했습니다.');
   }
 
-  function submoduleDrawer(existing) {
+  /** 주소에서 서브모듈 경로를 짐작한다(원본 GitSubmoduleForm.PathFromUrl): 마지막 / \ : 뒤, ".git" 은 뗀다. */
+  function pathFromUrl(url) {
+    const trimmed = url.trim().replace(/[\\/]+$/, '');
+    const cut = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'), trimmed.lastIndexOf(':'));
+    const name = cut < 0 ? trimmed : trimmed.slice(cut + 1);
+    return name.toLowerCase().endsWith('.git') ? name.slice(0, -4) : name;
+  }
+
+  /** 서브모듈 추가 드로어(원본 AddSubmoduleDrawer): 원격 URL · 이름/경로(주소에서 자동). 경로는 레포지토리 안 상대 경로, 빈 곳이어야 한다. */
+  function addSubmodule() {
     openDrawer({
-      glyph: 'submodule', title: existing ? `서브모듈 편집: ${existing.path}` : '서브모듈 추가', anchor: ctx.sidebarElement(),
+      glyph: 'submodule', title: '서브모듈 추가', anchor: ctx.sidebarElement(),
       build(body, close) {
-        const url = el('input', { class: 'field', placeholder: 'https://… 또는 git@…', spellcheck: 'false' });
-        const path = el('input', { class: 'field', placeholder: 'Packages/라이브러리', spellcheck: 'false', disabled: !!existing });
-        const branch = el('input', { class: 'field', placeholder: '비우면 기본 브랜치', spellcheck: 'false' });
-        url.value = existing?.url ?? '';
-        path.value = existing?.path ?? '';
-        branch.value = existing?.branch ?? '';
-        let pathTouched = !!existing;
-        path.addEventListener('input', () => { pathTouched = true; check(); });
-        url.addEventListener('input', async () => {
-          if (!pathTouched) path.value = url.value.trim() ? await call('cloneName', { url: url.value }).catch(() => '') : '';
+        const url = el('input', { class: 'field', spellcheck: 'false' });
+        const path = el('input', { class: 'field', placeholder: 'Packages/라이브러리', spellcheck: 'false' });
+        const problem = drawerProblem();
+        const ok = drawerPrimary('서브모듈 추가');
+        let pathEdited = false;
+        let taken = false;
+        let token = 0;
+        function check() {
+          const value = path.value.trim().replace(/\\/g, '/');
+          const p = !value ? null
+            : value.startsWith('/') || /^[a-zA-Z]:/.test(value) ? '레포지토리 루트 기준의 상대 경로를 적으세요.'
+              : value.split('/').includes('..') ? "'..' 로 레포지토리 밖을 가리킬 수 없습니다."
+                : taken ? '그 경로에 이미 파일이나 폴더가 있습니다.' : null;
+          problem.set(p);
+          ok.disabled = busy() || !url.value.trim() || !value || !!p;
+          return ok.disabled;
+        }
+        async function readPath() {
+          const mine = ++token;
+          const value = path.value.trim();
+          const info = value ? await pathInfo(value) : { exists: false };
+          if (mine !== token) return;
+          taken = !!info.exists && (!info.dir || !info.empty);
+          check();
+        }
+        url.addEventListener('input', () => {
+          if (!pathEdited) path.value = pathFromUrl(url.value);
+          readPath();
           check();
         });
-        const problem = el('div', { class: 'modal-error' }, ' ');
-        const ok = el('button', { class: 'btn primary', text: existing ? '저장' : '추가' });
-        function check() {
-          const p = !url.value.trim() ? '주소를 적어 주세요.' : !path.value.trim() ? '경로를 적어 주세요.'
-            : !existing && (ctx.state.submodules ?? []).some((s) => s.path === path.value.trim()) ? '같은 경로의 서브모듈이 있습니다.' : null;
-          problem.textContent = p ?? ' ';
-          ok.disabled = !!p;
-          return p;
-        }
+        path.addEventListener('input', () => { pathEdited = true; readPath(); check(); });
         ok.addEventListener('click', async () => {
           if (check()) return;
-          const done = existing
-            ? await act('서브모듈을 고치는 중…', () => call('editSubmodule', { path: existing.path, url: url.value, branch: branch.value || undefined }).then(() => true), { success: () => '서브모듈을 고쳤습니다.' })
-            : await act('서브모듈을 받는 중…', () => call('addSubmodule', { url: url.value, path: path.value, branch: branch.value || undefined }).then(() => true), { success: () => '서브모듈을 추가했습니다.' });
+          const value = path.value.trim().replace(/\\/g, '/');
+          const done = await act(`서브모듈 '${value}' 추가하는 중…`, () => call('addSubmodule', { url: url.value.trim(), path: value }).then(() => true), { success: () => '서브모듈을 추가했습니다.' });
           if (done === true) close();
         });
-        body.append(el('div', { class: 'drawer-form' },
-          el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: '주소' }), url),
-          el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: '경로' }), path),
-          el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: '브랜치' }), branch),
-          problem,
-          el('div', { class: 'modal-actions' },
-            existing ? el('button', { class: 'btn', text: '열기', onclick: () => { close(); ctx.openRepo(`${ctx.state.repo.path}/${existing.path}`); } }) : null,
-            el('span', { class: 'spacer' }),
-            el('button', { class: 'btn', text: '취소', onclick: () => close() }), ok)));
+        body.append(el('div', { class: 'drawer-form' }, drawerField('원격 URL', url), drawerField('이름/경로', path), problem, ok));
         check();
       },
     });
   }
 
-  const addSubmodule = () => submoduleDrawer(null);
-  const editSubmodule = (s) => submoduleDrawer(s);
+  const SUBMODULE_STATE = {
+    ok: (repo) => `이 서브모듈은 레포지토리(${repo})에 기록된 커밋과 맞습니다.`,
+    modified: (repo) => `이 서브모듈은 레포지토리(${repo})에 기록된 것과 다른 커밋에 있습니다. 커밋하면 레포지토리 기록이 지금 커밋으로 바뀝니다.`,
+    uninitialized: () => '아직 받지 않은 서브모듈입니다. 사이드바 메뉴의 Update 로 받으세요.',
+    conflict: () => '이 서브모듈은 병합 충돌 중입니다.',
+  };
+
+  /**
+   * 서브모듈 편집 드로어(원본 EditSubmoduleDrawer): 원격 URL(바꾸면 [이 서브모듈 고치기]) · 이름/경로(읽기만) · 기록된 커밋과 맞는지 ·
+   * 현재 리비전(커밋·메시지) · [이 서브모듈 열기] [이 서브모듈 지우기].
+   */
+  function editSubmodule(s) {
+    openDrawer({
+      glyph: 'submodule', title: '서브모듈 편집', anchor: ctx.sidebarElement(),
+      build(body, close) {
+        const url = el('input', { class: 'field', spellcheck: 'false' });
+        url.value = s.url ?? '';
+        const path = el('input', { class: 'field', spellcheck: 'false', readonly: true });
+        path.value = s.path;
+        const problem = drawerProblem();
+        const apply = el('button', { class: 'btn drawer-secondary', text: '이 서브모듈 고치기' });
+        let savedUrl = s.url ?? '';
+        const check = () => {
+          const value = url.value.trim();
+          const bad = !!value && !plausibleUrl(value);
+          problem.set(bad ? BAD_URL : null);
+          apply.disabled = busy() || !value || value === savedUrl || bad;
+        };
+        url.addEventListener('input', check);
+        apply.addEventListener('click', async () => {
+          const value = url.value.trim();
+          // 기록된 브랜치는 그대로 둔다(비워 넘기면 기본 브랜치로 바뀐다).
+          const done = await act(`'${s.path}' 주소 바꾸는 중…`, () => call('editSubmodule', { path: s.path, url: value, branch: s.branch || undefined }).then(() => true), { success: () => '서브모듈 주소를 바꿨습니다.' });
+          if (done === true) savedUrl = value;
+          check();
+        });
+        const sync = el('div', { class: `submodule-sync ${s.state}`, text: (SUBMODULE_STATE[s.state] ?? SUBMODULE_STATE.ok)(ctx.state.repo?.name ?? '') });
+        const revisionCaption = el('span', { class: 'drawer-caption', text: '현재 리비전' });
+        const commit = el('div', { class: 'fact-value mono', text: s.hash ?? '' });
+        const message = el('div', { class: 'fact-value', text: '…' });
+        const unknown = () => {
+          message.textContent = '(받지 않아 알 수 없음)';
+          message.classList.add('empty');
+        };
+        call('submoduleInfo', { path: s.path }).then((info) => {
+          if (info?.date) revisionCaption.textContent = `현재 리비전 (${new Date(info.date * 1000).toLocaleString('sv-SE').slice(0, 16)})`;
+          if (info?.message) message.textContent = info.message;
+          else unknown();
+        }).catch(unknown);
+        const open = el('button', {
+          class: 'btn drawer-secondary icon-text', disabled: s.state === 'uninitialized',
+          onclick: () => { close(); ctx.openRepo(`${ctx.state.repo.path}/${s.path}`); },
+        }, icon('folder', 15), el('span', { text: '이 서브모듈 열기' }));
+        const remove = el('button', {
+          class: 'btn drawer-secondary icon-text danger-text', disabled: busy(),
+          onclick: async () => {
+            if (!(await confirmDialog({
+              title: '서브모듈 지우기', glyph: 'submodule', danger: true, ok: '삭제',
+              message: `'${s.path}' 서브모듈을 레포지토리에서 빼고 폴더를 지웁니다. 커밋해야 레포지토리 기록에 반영됩니다.\n\n서브모듈 안에서 커밋하지 않은 변경은 사라집니다.`,
+            }))) return;
+            const done = await act(`서브모듈 '${s.path}' 지우는 중…`, () => call('removeSubmodule', { path: s.path }).then(() => true), { success: () => '서브모듈을 지웠습니다. 커밋해 마무리하세요.' });
+            if (done === true) close();
+          },
+        }, icon('trash', 15), el('span', { text: '이 서브모듈 지우기' }));
+        body.append(el('div', { class: 'drawer-form' },
+          drawerField('원격 URL', url), drawerField('이름/경로', path), problem, el('div', {}, apply),
+          sync,
+          el('div', { class: 'drawer-field' }, revisionCaption,
+            el('div', { class: 'fact' }, el('span', { class: 'fact-name', text: '커밋' }), commit),
+            el('div', { class: 'fact' }, el('span', { class: 'fact-name', text: '커밋 메시지' }), message)),
+          el('div', { class: 'drawer-actions' }, open, remove)));
+        check();
+      },
+    });
+  }
 
   // ── 메뉴 ───────────────────────────────────────────
 
@@ -526,78 +723,102 @@ export function createRefs(ctx) {
   const menus = {
     local: (event, branch) => menuAt(event, localItems(branch)),
     remote: (event, branch) => menuAt(event, remoteItems(branch)),
+    // 원본 RefSidebar.PopulateMenu 의 원격 메뉴. 다른 작업이 도는 중이면 쓰는 항목을 끈다.
     remoteHeader: (event, remote) => menuAt(event, [
-      { label: '이 원격만 Fetch', action: () => run(`${remote.name} 을 페치하는 중…`, 'fetchRemote', { name: remote.name }, `${remote.name} 을 페치했습니다.`) },
-      { label: 'Prune (지워진 원격 브랜치 정리)', action: () => run('정리하는 중…', 'pruneRemote', { name: remote.name }, '정리했습니다.') },
+      { label: `'${remote.name}' 에서 Fetch`, disabled: busy(), action: () => run(`'${remote.name}' 에서 Fetch 하는 중…`, 'fetchRemote', { name: remote.name }, `'${remote.name}' 에서 받았습니다.`) },
+      { label: '지워진 원격 브랜치 정리 (Prune)', disabled: busy(), action: () => run(`'${remote.name}' 정리하는 중…`, 'pruneRemote', { name: remote.name }, '정리했습니다.') },
       '-',
-      { label: '이름 바꾸기…', action: () => renameRemote(remote) },
-      { label: '주소 고치기…', action: () => editRemoteUrl(remote) },
-      { label: '주소 복사', action: () => copy(remote.fetchUrl) },
+      { label: '원격 이름 바꾸기…', disabled: busy(), action: () => renameRemote(remote) },
+      { label: '주소 바꾸기…', disabled: busy(), action: () => editRemoteUrl(remote) },
+      { label: '주소 복사', disabled: !remote.fetchUrl, action: () => copy(remote.fetchUrl) },
       '-',
-      { label: '지우기…', danger: true, action: () => removeRemote(remote) },
+      { label: `'${remote.name}' 원격 삭제…`, danger: true, disabled: busy(), action: () => removeRemote(remote) },
     ]),
-    tag: (event, tag) => menuAt(event, [
-      { label: '이 태그로 전환', disabled: busyOp(), action: () => activate({ kind: 'tag', tag }) },
-      { label: `'${current()?.name ?? 'HEAD'}' 에 병합`, disabled: busyOp(), action: () => merge(tag.name, `태그 ${tag.name}`) },
-      '-',
-      { label: 'Push', disabled: !remotes().length, submenu: remotes().map((r) => ({ label: r, action: () => run('태그를 푸시하는 중…', 'pushTag', { remote: r, name: tag.name }, `태그 '${tag.name}' 를 ${r} 에 올렸습니다.`) })) },
-      {
-        label: '원격 태그 지우기', disabled: !remotes().length,
-        submenu: remotes().map((r) => ({
-          label: r, danger: true,
+    // 원본 PopulateTagMenu: 원격이 여럿이면 원격마다 Push·삭제 항목을 둔다(하나로 정해 올리지 않는다).
+    tag: (event, tag) => {
+      const cur = current()?.name ?? 'HEAD';
+      const list = [...remotes()].sort((a, b) => (a === 'origin' ? -1 : b === 'origin' ? 1 : a.localeCompare(b)));
+      menuAt(event, [
+        { label: `'${tag.name}' 체크아웃 (분리된 HEAD)…`, disabled: busyOp(), action: () => activate({ kind: 'tag', tag }) },
+        { label: `'${tag.name}' 를 '${cur}' 에 Merge…`, disabled: busyOp(), action: () => merge(tag.name, tag.name) },
+        '-',
+        ...list.map((r) => ({
+          label: `'${tag.name}' 를 ${r} 에 Push…`, disabled: busy(),
           action: async () => {
-            if (await confirmDialog({ title: '원격 태그 지우기', danger: true, message: `원격 '${r}' 에서 태그 '${tag.name}' 를 지웁니다.`, ok: '지우기' })) await run('원격 태그를 지우는 중…', 'deleteRemoteTag', { remote: r, name: tag.name }, '원격 태그를 지웠습니다.');
+            if (await confirmDialog({ title: '태그 Push', glyph: 'tag', ok: 'Push', message: `태그 '${tag.name}' 를 ${r} 에 올릴까요?` })) {
+              await run(`태그 '${tag.name}' 올리는 중…`, 'pushTag', { remote: r, name: tag.name }, `태그 '${tag.name}' 를 ${r} 에 올렸습니다.`);
+            }
           },
         })),
-      },
-      '-',
-      { label: '그래프에서 보기', action: () => ctx.reveal(tag.hash) },
-      { label: '이름 복사', action: () => copy(tag.name) },
-      { label: 'SHA 복사', action: () => copy(tag.hash) },
-      '-',
-      {
-        label: '지우기…', danger: true,
-        action: async () => {
-          if (await confirmDialog({ title: '태그 지우기', message: `로컬 태그 '${tag.name}' 를 지웁니다.`, ok: '지우기', danger: true })) await run('태그를 지우는 중…', 'deleteTag', { name: tag.name });
+        {
+          label: `'${tag.name}' 삭제…`, danger: true, disabled: busy(),
+          action: async () => {
+            if (await confirmDialog({ title: '태그 삭제', glyph: 'tag', danger: true, ok: '삭제', message: `로컬 태그 '${tag.name}' 를 삭제할까요? 원격의 태그는 그대로 둡니다.` })) {
+              await run(`태그 '${tag.name}' 지우는 중…`, 'deleteTag', { name: tag.name });
+            }
+          },
         },
-      },
-    ]),
+        ...list.map((r) => ({
+          label: `${r} 에서 '${tag.name}' 삭제…`, danger: true, disabled: busy(),
+          action: async () => {
+            if (await confirmDialog({ title: '태그 삭제', glyph: 'tag', danger: true, ok: '삭제', message: `${r} 에서 태그 '${tag.name}' 를 삭제할까요?\n\n다른 사람에게도 바로 사라집니다. 로컬 태그는 그대로 남습니다.` })) {
+              await run(`원격 태그 '${tag.name}' 지우는 중…`, 'deleteRemoteTag', { remote: r, name: tag.name }, '원격 태그를 지웠습니다.');
+            }
+          },
+        })),
+        '-',
+        { label: '이름 복사', action: () => copy(tag.name) },
+        { label: '커밋 SHA 복사', action: () => copy(tag.hash) },
+      ]);
+    },
+    // 원본 PopulateStashMenu.
     stash: (event, stash) => menuAt(event, [
-      { label: '변경 보기', action: () => activate({ kind: 'stash', stash }) },
-      { label: 'Pop (되돌리고 지우기)', disabled: busyOp(), action: () => stashPop(stash.name) },
-      { label: 'Apply (되돌리고 남겨 두기)', disabled: busyOp(), action: () => run('Stash 를 적용하는 중…', 'stashApply', { name: stash.name, pop: false }, 'Stash 를 적용했습니다.') },
-      { label: '여기서 브랜치 만들기…', disabled: busyOp(), action: () => stashBranch(stash) },
-      { label: '메시지 복사', action: () => copy(stash.message) },
+      { label: 'Apply (목록에 남김)', disabled: busyOp(), action: () => stashApply(stash) },
+      { label: 'Pop (적용하고 목록에서 뺌)', disabled: busyOp(), action: () => stashPop(stash.name) },
+      { label: 'Drop…', danger: true, disabled: busy(), action: () => stashDrop(stash) },
       '-',
-      { label: '지우기…', danger: true, action: () => stashDrop(stash) },
+      { label: '변경 보기', action: () => ctx.showCommit(stash.hash, `${stash.name}: ${stash.message}`) },
+      { label: '여기서 브랜치 만들기…', disabled: busyOp(), action: () => stashBranch(stash) },
+      '-',
+      { label: '메시지 복사', action: () => copy(stash.message) },
     ]),
+    // 원본 PopulateWorktreeMenu: 지금 쓰고 있는 워크트리와 원본(bare) 레포지토리는 지울 수 없다.
     worktree: (event, w) => menuAt(event, [
-      { label: '열기', disabled: w.current, action: () => ctx.openRepo(w.path) },
-      { label: `${fileManager()} 에서 열기`, action: () => call('openFolder', { path: w.path }).catch(ctx.showError) },
-      { label: '터미널', action: () => call('openTerminal', { path: w.path }).catch(ctx.showError) },
+      { label: '폴더 열기', action: () => call('openFolder', { path: w.path }).catch(ctx.showError) },
+      { label: '터미널 열기', action: () => call('openTerminal', { path: w.path }).catch(ctx.showError) },
       { label: '경로 복사', action: () => copy(w.path) },
       '-',
-      { label: '지우기…', danger: true, disabled: w.current, action: () => removeWorktree(w) },
+      { label: '워크트리 제거…', danger: true, disabled: w.current || w.bare || busy(), action: () => removeWorktree(w) },
     ]),
     submodule: (event, s) => {
       const full = `${ctx.state.repo.path}/${s.path}`;
       menuAt(event, [
         { label: '편집…', action: () => editSubmodule(s) },
         { label: '열기', disabled: s.state === 'uninitialized', action: () => ctx.openRepo(full) },
-        { label: s.state === 'uninitialized' ? '받기 (update)' : 'Update (기록된 커밋으로)', action: () => run('서브모듈을 받는 중…', 'updateSubmodules', { path: s.path }, '서브모듈을 받았습니다.') },
-        { label: `${fileManager()} 에서 열기`, disabled: s.state === 'uninitialized', action: () => call('openFolder', { path: full }).catch(ctx.showError) },
-        { label: '터미널', disabled: s.state === 'uninitialized', action: () => call('openTerminal', { path: full }).catch(ctx.showError) },
+        '-',
+        { label: 'Update (받기·체크아웃)', disabled: busy(), action: () => run(`서브모듈 '${s.path}' Update 하는 중…`, 'updateSubmodules', { path: s.path }, '서브모듈을 받았습니다.') },
+        '-',
+        { label: '폴더 열기', action: () => call('openFolder', { path: full }).catch(ctx.showError) },
+        { label: '터미널 열기', action: () => call('openTerminal', { path: full }).catch(ctx.showError) },
         { label: '경로 복사', action: () => copy(s.path) },
       ]);
     },
+    // 원본 PopulateSectionMenu: 구역 머리 우클릭.
     section: (id, event) => {
+      const head = ctx.state.history?.head;
       const items = {
-        local: [{ label: '새 브랜치…', action: () => createBranch('HEAD', '지금 커밋 (HEAD)', { inline: false }) }],
-        remote: [{ label: '원격 추가…', action: addRemote }, { label: '모두 Fetch', disabled: !remotes().length, action: () => ctx.fetch?.() }],
-        tags: [{ label: 'HEAD 에 새 태그…', disabled: !ctx.state.history?.head, action: () => createTag(ctx.state.history.head, 'HEAD') }],
-        stash: [{ label: '지금 스태시…', disabled: !(ctx.state.status?.staged.length + ctx.state.status?.unstaged.length), action: stashPush }],
-        worktrees: [{ label: '워크트리 추가…', action: () => addWorktree() }],
-        submodules: [{ label: '서브모듈 추가…', action: addSubmodule }, { label: '모두 받기 (update)', disabled: !(ctx.state.submodules ?? []).length, action: () => run('서브모듈을 받는 중…', 'updateSubmodules', {}, '서브모듈을 받았습니다.') }],
+        local: [{ label: 'HEAD 에서 새 브랜치…', disabled: !head || busy(), action: () => createBranch('HEAD', undefined, { inline: false }) }],
+        remote: [{ label: '원격 추가…', disabled: busy(), action: addRemote }, { label: 'Fetch', disabled: busy() || !remotes().length, action: () => ctx.fetch?.() }],
+        tags: [{ label: 'HEAD 에 새 태그…', disabled: !head || busy(), action: () => createTag(head, 'HEAD') }],
+        stash: [{ label: '지금 변경을 Stash', disabled: busy() || !(ctx.state.status?.staged.length + ctx.state.status?.unstaged.length), action: stashPush }],
+        worktrees: [
+          { label: '워크트리 만들기…', disabled: busy(), action: () => addWorktree() },
+          { label: '폴더 열기', action: () => call('openFolder', { path: ctx.state.repo.path }).catch(ctx.showError) },
+        ],
+        submodules: [
+          { label: '서브모듈 추가…', disabled: busy(), action: addSubmodule },
+          { label: '모든 서브모듈 Update', disabled: busy() || !(ctx.state.submodules ?? []).length, action: () => run('모든 서브모듈 Update 하는 중…', 'updateSubmodules', {}, '서브모듈을 받았습니다.') },
+        ],
       }[id] ?? ctx.sectionMenu?.(id) ?? [];
       if (items.length) menuAt(event, items);
     },
@@ -666,7 +887,11 @@ export function createRefs(ctx) {
     ctx.notify('커밋 정보를 복사했습니다.');
   }
 
-  function commitMenu(event, commit) {
+  /**
+   * hooks(원본 CommitMenu.Hooks): 화면마다 바꾸는 항목. goToParent 를 넘기면 "부모로 이동" 이 그 화면 안에서 움직이고(null 이면 흐리게),
+   * 그때는 "브랜치 탐색기에서 보기" 를 넣지 않는다(브랜치 탐색기 자신의 메뉴).
+   */
+  function commitMenu(event, commit, hooks = null) {
     const cur = current();
     const curName = cur?.name ?? 'HEAD';
     const isMerge = commit.parents.length > 1;
@@ -732,13 +957,17 @@ export function createRefs(ctx) {
           { label: '비교 기준으로 표시', checked: compareBase?.hash === commit.hash, action: () => { compareBase = commit; } },
         ],
       },
-      { label: '부모로 이동', disabled: !commit.parents.length, action: () => ctx.reveal(commit.parents[0]) },
+      hooks
+        ? { label: '부모로 이동', disabled: !hooks.goToParent, action: () => hooks.goToParent?.() }
+        : { label: '부모로 이동', disabled: !commit.parents.length, action: () => ctx.reveal(commit.parents[0]) },
+      // 원본 GraphWorkspaceView 의 커밋 메뉴: 브랜치 탐색기 탭으로 가서 그 커밋을 보인다.
+      hooks ? null : { label: '브랜치 탐색기에서 보기', disabled: !ctx.showInExplorer, action: () => ctx.showInExplorer?.(commit.hash) },
       '-',
       { label: 'SHA 복사', action: () => copy(commit.hash) },
       { label: '정보 복사', action: () => copyInfo(commit) },
       { label: '메시지 복사', action: () => copy(commit.subject) },
     );
-    showMenu(event.clientX, event.clientY, items);
+    showMenu(event.clientX, event.clientY, items.filter(Boolean));
   }
 
   async function compareWithRevision(commit) {

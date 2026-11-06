@@ -7,8 +7,123 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::thread;
+use std::time::{Duration, Instant};
+
+/// git 이 `--progress` 로 stderr 에 쓰는 진행 한 줄("Receiving objects:  45% (1234/2700), 1.20 MiB | 2.00 MiB/s").
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Progress {
+    /// 원격 서버가 알린 단계면 true("remote: Counting objects: …").
+    pub remote: bool,
+    /// 단계 이름(영어 그대로): "Receiving objects", "Resolving deltas", "Writing objects" 등.
+    pub phase: String,
+    pub percent: Option<u8>,
+    pub current: Option<u64>,
+    pub total: Option<u64>,
+    /// 쉼표 뒤 덧붙임(받은 양·속도). 없으면 빈 글.
+    pub detail: String,
+    pub done: bool,
+}
+
+type ProgressSink = Box<dyn Fn(&Progress) + Send + Sync>;
+static PROGRESS_SINK: OnceLock<ProgressSink> = OnceLock::new();
+
+/// git 진행 줄을 받을 곳을 한 번 정한다(앱이 화면으로 보낸다). 모든 GitRunner 가 함께 쓴다.
+pub fn set_progress_sink(sink: impl Fn(&Progress) + Send + Sync + 'static) {
+    let _ = PROGRESS_SINK.set(Box::new(sink));
+}
+
+/// 진행 줄인지 보고 나눈다. 단계 이름이 objects·deltas·files·content 로 끝나는 "단계: 숫자…" 꼴만 진행으로 친다.
+pub fn parse_progress(line: &str) -> Option<Progress> {
+    let line = line.trim();
+    let (remote, body) = match line.strip_prefix("remote:") {
+        Some(rest) => (true, rest.trim_start()),
+        None => (false, line),
+    };
+    let (phase, rest) = body.split_once(':')?;
+    let phase = phase.trim();
+    let known = ["objects", "deltas", "files", "content"];
+    if phase.is_empty() || !phase.starts_with(|c: char| c.is_ascii_uppercase()) || !known.iter().any(|k| phase.ends_with(k)) {
+        return None;
+    }
+    let rest = rest.trim();
+    if !rest.starts_with(|c: char| c.is_ascii_digit()) {
+        return None;
+    }
+    let done = rest.ends_with(", done.") || rest.ends_with("done.");
+    let (head, detail) = match rest.split_once(", ") {
+        Some((h, d)) => (h.trim(), d.trim_end_matches("done.").trim().trim_end_matches(',').trim().to_string()),
+        None => (rest.trim_end_matches(", done.").trim_end_matches('.'), String::new()),
+    };
+    let mut percent = None;
+    let (mut current, mut total) = (None, None);
+    if let Some((pct, after)) = head.split_once('%') {
+        percent = pct.trim().parse::<u8>().ok();
+        if let Some(inner) = after.trim().strip_prefix('(').and_then(|t| t.split(')').next()) {
+            if let Some((c, t)) = inner.split_once('/') {
+                current = c.trim().parse().ok();
+                total = t.trim().parse().ok();
+            }
+        }
+    } else {
+        current = head.trim().trim_end_matches(',').parse().ok();
+    }
+    Some(Progress { remote, phase: phase.to_string(), percent, current, total, detail, done })
+}
+
+/// stderr 를 흘려 읽으며 진행 줄은 알림으로 보내고(너무 잦지 않게), 나머지만 모아 돌려준다.
+fn drain_stderr(mut stderr: impl Read) -> Vec<u8> {
+    let sink = PROGRESS_SINK.get();
+    let mut kept = Vec::new();
+    let mut line = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut last: Option<(Instant, String)> = None;
+    let mut flush = |line: &mut Vec<u8>, kept: &mut Vec<u8>, ended_by_newline: bool| {
+        if line.is_empty() {
+            if ended_by_newline {
+                kept.push(b'\n');
+            }
+            return;
+        }
+        let text = String::from_utf8_lossy(line).into_owned();
+        match parse_progress(&text) {
+            Some(progress) => {
+                if let Some(sink) = sink {
+                    // 단계가 바뀌거나 끝났거나 0.1초가 지났을 때만 보낸다.
+                    let due = match &last {
+                        Some((at, phase)) => progress.done || *phase != progress.phase || at.elapsed() >= Duration::from_millis(100),
+                        None => true,
+                    };
+                    if due {
+                        sink(&progress);
+                        last = Some((Instant::now(), progress.phase.clone()));
+                    }
+                }
+            }
+            None => {
+                kept.extend_from_slice(line);
+                kept.push(b'\n');
+            }
+        }
+        line.clear();
+    };
+    loop {
+        let n = match stderr.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        for &byte in &chunk[..n] {
+            match byte {
+                b'\r' => flush(&mut line, &mut kept, false),
+                b'\n' => flush(&mut line, &mut kept, true),
+                _ => line.push(byte),
+            }
+        }
+    }
+    flush(&mut line, &mut kept, false);
+    kept
+}
 
 /// git 한 번 실행한 결과.
 #[derive(Debug, Clone)]
@@ -109,12 +224,9 @@ impl GitRunner {
             });
         }
         // stdout·stderr 를 동시에 비우지 않으면 한쪽 파이프 버퍼가 차서 git 이 멈춘다.
-        let mut stderr = child.stderr.take().unwrap();
-        let err_thread = thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = stderr.read_to_end(&mut buf);
-            buf
-        });
+        // `--progress` 로 부른 명령의 진행 줄은 여기서 알림으로 나가고 stderr 글에는 남지 않는다.
+        let stderr = child.stderr.take().unwrap();
+        let err_thread = thread::spawn(move || drain_stderr(stderr));
         let mut out = Vec::new();
         if let Some(mut stdout) = child.stdout.take() {
             let _ = stdout.read_to_end(&mut out);
@@ -151,3 +263,35 @@ fn hide_console(cmd: &mut Command) {
 
 #[cfg(not(windows))]
 fn hide_console(_cmd: &mut Command) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_lines() {
+        let p = parse_progress("Receiving objects:  45% (1234/2700), 1.20 MiB | 2.00 MiB/s").unwrap();
+        assert_eq!((p.remote, p.phase.as_str(), p.percent, p.current, p.total), (false, "Receiving objects", Some(45), Some(1234), Some(2700)));
+        assert_eq!(p.detail, "1.20 MiB | 2.00 MiB/s");
+        assert!(!p.done);
+        let p = parse_progress("remote: Counting objects: 100% (12/12), done.").unwrap();
+        assert!(p.remote && p.done);
+        assert_eq!(p.percent, Some(100));
+        let p = parse_progress("remote: Enumerating objects: 15, done.").unwrap();
+        assert_eq!((p.percent, p.current), (None, Some(15)));
+        let p = parse_progress("Resolving deltas: 100% (3/3), completed with 2 local objects.").unwrap();
+        assert_eq!(p.percent, Some(100));
+        assert!(parse_progress("Updating files:  50% (5/10)").is_some());
+        assert!(parse_progress("error: failed to push some refs").is_none());
+        assert!(parse_progress("To https://github.com/a/b.git").is_none());
+        assert!(parse_progress("fatal: repository 'x' not found").is_none());
+        assert!(parse_progress("Already up to date.").is_none());
+    }
+
+    #[test]
+    fn drain_keeps_messages_and_drops_progress() {
+        let raw = b"remote: Counting objects:  50% (1/2)\rremote: Counting objects: 100% (2/2), done.\nTo origin\n   abc..def  main -> main\n";
+        let kept = String::from_utf8(drain_stderr(&raw[..])).unwrap();
+        assert_eq!(kept, "To origin\n   abc..def  main -> main\n");
+    }
+}

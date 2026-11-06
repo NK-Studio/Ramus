@@ -12,7 +12,7 @@ use gitvcs_core::github;
 use gitvcs_core::ops::MergeMode;
 use gitvcs_core::rewrite::RewriteKind;
 use gitvcs_core::undo::{self, Journal, UndoEntry, UndoKind};
-use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, remote, ssl};
+use gitvcs_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, newrepo, remote, ssl};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -29,7 +29,7 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     settings_path: Option<PathBuf>,
     repo: Mutex<Option<Repository>>,
-    /// 저장소를 바꾸는 작업(Stage·커밋·네트워크)은 한 번에 하나만. 읽기는 함께 돌아도 된다.
+    /// 레포지토리를 바꾸는 작업(Stage·커밋·네트워크)은 한 번에 하나만. 읽기는 함께 돌아도 된다.
     write_lock: Mutex<()>,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
     /// 마지막 자동 페치 시도(실패해도). 실패한 페치를 30초마다 되풀이하지 않게.
@@ -37,11 +37,11 @@ pub struct AppState {
     /// 앱에서 로그인한 SSH 서버와 비밀번호. 앱을 끌 때까지만 기억한다(파일에 쓰지 않는다).
     ssh_login: Mutex<Option<(String, String)>>,
     avatars: AvatarCache,
-    /// 열린 저장소의 원격이 GitHub 면 (소유자, 저장소). 작성자 사진을 GitHub 에 묻는다.
+    /// 열린 레포지토리의 원격이 GitHub 면 (소유자, 레포지토리). 작성자 사진을 GitHub 에 묻는다.
     github_remote: Mutex<Option<(String, String)>>,
-    /// 저장소마다 실행 취소 기록(앱을 끌 때까지).
+    /// 레포지토리마다 실행 취소 기록(앱을 끌 때까지).
     journals: Mutex<std::collections::HashMap<String, Journal>>,
-    /// 앱으로 로그인한 GitHub 계정 (login, token). None 이면 아직 저장소에서 읽지 않았다, Some(None) 이면 없다.
+    /// 앱으로 로그인한 GitHub 계정 (login, token). None 이면 아직 레포지토리에서 읽지 않았다, Some(None) 이면 없다.
     github_login: Mutex<Option<Option<(String, String)>>>,
     emit: Emit,
 }
@@ -106,7 +106,7 @@ impl AppState {
         cached.clone().flatten()
     }
 
-    /// 이 저장소에 고른 GitHub 계정 {source, login}.
+    /// 이 레포지토리에 고른 GitHub 계정 {source, login}.
     fn github_choice(&self) -> Option<(String, String)> {
         let root = self.repo.lock().unwrap().as_ref().map(|r| r.root().display().to_string())?;
         let settings = self.settings.lock().unwrap();
@@ -114,7 +114,7 @@ impl AppState {
         Some((v.get("source")?.as_str()?.to_string(), v.get("login")?.as_str()?.to_string()))
     }
 
-    /// git 이 github.com 에 쓸 토큰: 이 저장소에 앱·gh 계정을 골랐을 때만(아니면 사용자의 자격 증명 도우미 그대로).
+    /// git 이 github.com 에 쓸 토큰: 이 레포지토리에 앱·gh 계정을 골랐을 때만(아니면 사용자의 자격 증명 도우미 그대로).
     fn github_git_token(&self) -> Option<String> {
         match self.github_choice()? {
             (source, _) if source == "app" => self.app_login().map(|(_, t)| t),
@@ -137,8 +137,94 @@ impl AppState {
             .or_else(|| github::credential_account(&self.runner, &dir, None))
     }
 
+    /// git 사용자 이름(라이선스의 저작권자). 모르면 빈 글.
+    fn user_name(&self) -> String {
+        let dir = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
+        self.runner.run(&dir, &["config", "--get", "user.name"]).stdout.trim().to_string()
+    }
+
+    /// GitHub 에 레포지토리를 만든다(POST /user/repos 또는 /orgs/{org}/repos).
+    /// .gitignore·라이선스를 고르면 GitHub 이 첫 커밋(README·.gitignore·LICENSE)을 만든다(auto_init) — 그 기본 브랜치가 고른 이름과
+    /// 다르면 이름을 바꾼다(POST /repos/{o}/{r}/branches/{b}/rename). 고른 것이 없으면 빈 레포지토리로 두고, clone 한 쪽이 HEAD 를 고른 브랜치로 둔다.
+    /// "Copyright (C) [year] [name]" 은 GitHub 틀이 아니라 만든 뒤 LICENSE 파일을 올린다(PUT contents).
+    fn github_create_repo(&self, args: &Value) -> Result<Value> {
+        let a = Args(args);
+        let (login, token) = self.app_login().ok_or_else(|| GitError::new("GitHub 에 로그인해 주세요."))?;
+        let name = a.s("name")?.trim();
+        if name.is_empty() {
+            return Err(GitError::new("레포지토리 이름을 적어 주세요."));
+        }
+        let branch = newrepo::branch_name(&self.runner, a.s("branch").unwrap_or(""))?;
+        if a.b("lfs") && !newrepo::lfs_available(&self.runner) {
+            return Err(newrepo::lfs_missing());
+        }
+        let gitignore = a.s("gitignore").unwrap_or("");
+        let license = a.s("license").unwrap_or("");
+        let copyright = license == newrepo::COPYRIGHT_KEY;
+        let auto_init = !gitignore.is_empty() || !license.is_empty();
+        let mut body = json!({
+            "name": name,
+            "description": a.s("description").unwrap_or("").trim(),
+            "private": a.b("private"),
+            "auto_init": auto_init,
+        });
+        if !gitignore.is_empty() {
+            body["gitignore_template"] = json!(gitignore);
+        }
+        if !license.is_empty() && !copyright {
+            body["license_template"] = json!(license);
+        }
+        let owner = a.s("owner").unwrap_or("").trim();
+        let path = if owner.is_empty() || owner.eq_ignore_ascii_case(&login) { "/user/repos".to_string() } else { format!("/orgs/{owner}/repos") };
+        let created = github::api("POST", &path, Some(&body), Some(&token)).map_err(|e| {
+            let scope_hint = e.message.starts_with("GitHub 403") || e.message.starts_with("GitHub 404") || e.message.contains("scope");
+            if scope_hint {
+                GitError::new(format!("{}\n\n로그인 권한(repo · read:org)이 모자라거나 조직이 이 앱의 접근을 막았을 수 있습니다. 레포지토리 만들기 창에서 다시 로그인해 보세요.", e.message))
+            } else {
+                e
+            }
+        })?;
+        let full_name = created.get("full_name").and_then(Value::as_str).unwrap_or_default().to_string();
+        let mut default_branch = created.get("default_branch").and_then(Value::as_str).unwrap_or(newrepo::DEFAULT_BRANCH).to_string();
+        let mut warnings = Vec::new();
+        if auto_init && default_branch != branch {
+            // 첫 커밋이 막 만들어지는 중이면 브랜치가 아직 없을 수 있다 — 잠깐씩 기다리며 몇 번 더.
+            let rename = format!("/repos/{full_name}/branches/{default_branch}/rename");
+            let mut result = Err(GitError::new(""));
+            for attempt in 0..5 {
+                if attempt > 0 {
+                    std::thread::sleep(Duration::from_millis(800));
+                }
+                result = github::api("POST", &rename, Some(&json!({ "new_name": branch })), Some(&token));
+                if result.is_ok() {
+                    break;
+                }
+            }
+            match result {
+                Ok(_) => default_branch = branch.clone(),
+                Err(e) => warnings.push(format!("기본 브랜치 이름을 {branch} 로 바꾸지 못했습니다({default_branch} 로 남음): {}", e.message)),
+            }
+        }
+        if copyright {
+            let text = newrepo::license_body(newrepo::COPYRIGHT_KEY, newrepo::current_year(), &self.user_name(), None)?;
+            let put = json!({ "message": "Add LICENSE", "content": base64(text.as_bytes()), "branch": default_branch });
+            if let Err(e) = github::api("PUT", &format!("/repos/{full_name}/contents/LICENSE"), Some(&put), Some(&token)) {
+                warnings.push(format!("LICENSE 를 올리지 못했습니다: {}", e.message));
+            }
+        }
+        Ok(json!({
+            "fullName": full_name,
+            "name": created.get("name"),
+            "cloneUrl": created.get("clone_url"),
+            "htmlUrl": created.get("html_url"),
+            "defaultBranch": default_branch,
+            "empty": !auto_init,
+            "warning": (!warnings.is_empty()).then(|| warnings.join("\n")),
+        }))
+    }
+
     fn repo(&self) -> Result<Repository> {
-        self.repo.lock().unwrap().clone().ok_or_else(|| GitError::new("열린 저장소가 없습니다."))
+        self.repo.lock().unwrap().clone().ok_or_else(|| GitError::new("열린 레포지토리가 없습니다."))
     }
 
     fn open_repo(self: &std::sync::Arc<Self>, path: &Path, effects: &mut Vec<SideEffect>) -> Result<Value> {
@@ -208,7 +294,7 @@ impl AppState {
         match cmd {
             "init" => {
                 let last = self.settings.lock().unwrap().last_repo.clone();
-                // 마지막 저장소를 다시 연다. 지워졌으면 시작 화면.
+                // 마지막 레포지토리를 다시 연다. 지워졌으면 시작 화면.
                 let repo = last.and_then(|p| self.open_repo(Path::new(&p), effects).ok());
                 Ok(json!({ "settings": self.settings_json(), "repo": repo, "platform": std::env::consts::OS, "version": env!("CARGO_PKG_VERSION") }))
             }
@@ -216,11 +302,79 @@ impl AppState {
                 let a: PathArg = parse(args)?;
                 self.open_repo(Path::new(&a.path), effects)
             }
-            "initRepo" => {
+            // ── 레포지토리 만들기 창(원본에 없음 · 확장) ──
+            "newRepoTemplates" => {
+                let token = self.app_login().map(|(_, t)| t);
+                to_json(newrepo::templates(token.as_deref()))
+            }
+            "newRepoPath" => to_json(newrepo::path_state(Path::new(Args(&args).s("path")?))),
+            "createLocalRepo" => {
                 let a = Args(&args);
-                let path = PathBuf::from(a.s("path")?);
-                remote::init(&self.runner, &path, a.s("gitignore").unwrap_or(""))?;
-                self.open_repo(&path, effects)
+                let path = PathBuf::from(a.s("path")?.trim());
+                let token = self.app_login().map(|(_, t)| t);
+                let request = newrepo::LocalRepo {
+                    branch: a.s("branch").unwrap_or("").to_string(),
+                    gitignore: match a.s("gitignore").unwrap_or("") {
+                        "" => None,
+                        name => Some(newrepo::gitignore_body(name, token.as_deref())?),
+                    },
+                    license: match a.s("license").unwrap_or("") {
+                        "" => None,
+                        key => Some(newrepo::license_body(key, newrepo::current_year(), &self.user_name(), token.as_deref())?),
+                    },
+                    lfs: a.b("lfs"),
+                    allow_existing: a.b("allowExisting"),
+                };
+                let outcome = newrepo::create_local(&self.runner, &path, &request)?;
+                let mut info = self.open_repo(&path, effects)?;
+                info["warning"] = json!(outcome.warning);
+                Ok(info)
+            }
+            "githubCreateInfo" => {
+                let Some((login, token)) = self.app_login() else { return Ok(json!({ "signedIn": false })) };
+                let user = github::api("GET", "/user", None, Some(&token))?;
+                let orgs = github::api("GET", "/user/orgs?per_page=100", None, Some(&token)).unwrap_or(json!([]));
+                let orgs: Vec<Value> = orgs
+                    .as_array()
+                    .map(|list| list.iter().map(|o| json!({ "login": o.get("login"), "avatarUrl": o.get("avatar_url") })).collect())
+                    .unwrap_or_default();
+                let missing = github::token_scopes(&token).map(|granted| github::missing_scopes(&granted, &github::CREATE_SCOPES)).unwrap_or_default();
+                Ok(json!({ "signedIn": true, "login": login, "avatarUrl": user.get("avatar_url"), "orgs": orgs, "missingScopes": missing }))
+            }
+            "githubCreateRepo" => self.github_create_repo(&args),
+            "githubCloneNew" => {
+                let a = Args(&args);
+                let (login, token) = self.app_login().ok_or_else(|| GitError::new("GitHub 에 로그인해 주세요."))?;
+                let dest = PathBuf::from(a.s("dest")?.trim());
+                if a.b("lfs") && !newrepo::lfs_available(&self.runner) {
+                    return Err(newrepo::lfs_missing());
+                }
+                // 비공개 레포지토리도 받게 앱 로그인 토큰을 이번 clone 에만 붙인다(설정 파일·주소에는 남기지 않는다).
+                let mut globals = self.runner.globals();
+                globals.env.extend(github::token_environment(&token));
+                let repo = remote::clone(&GitRunner::new(globals), a.s("url")?, &dest)?;
+                if a.b("empty") {
+                    // 빈 레포지토리: 첫 푸시가 고른 기본 브랜치를 만들게 HEAD 를 돌려 둔다(GitHub 은 처음 받은 브랜치를 기본으로 삼는다).
+                    let branch = newrepo::branch_name(&self.runner, a.s("branch").unwrap_or(""))?;
+                    let out = self.runner.run(repo.root(), &["symbolic-ref", "HEAD", &format!("refs/heads/{branch}")]);
+                    if !out.success() {
+                        return Err(GitError::new(out.message()));
+                    }
+                }
+                if a.b("lfs") {
+                    newrepo::lfs_install(&self.runner, repo.root())?;
+                }
+                let root = repo.root().display().to_string();
+                {
+                    let mut settings = self.settings.lock().unwrap();
+                    // 이 레포지토리는 만든 계정(앱 로그인)으로 푸시·풀 한다.
+                    settings.ui.insert(format!("github.account:{root}"), json!({ "source": "app", "login": login }));
+                    if let Some(parent) = dest.parent() {
+                        settings.clone_dir = parent.display().to_string();
+                    }
+                    self.save_settings(&settings);
+                }
+                self.open_repo(repo.root(), effects)
             }
             "getSettings" => Ok(self.settings_json()),
             "setUi" => {
@@ -269,7 +423,7 @@ impl AppState {
             "testConnection" => {
                 let url = match Args(&args).s("url").ok().filter(|u| !u.trim().is_empty()) {
                     Some(url) => url.to_string(),
-                    None => self.repo()?.default_remote_url().ok_or_else(|| GitError::new("열린 저장소에 원격이 없습니다. 시험할 주소를 적어 주세요."))?,
+                    None => self.repo()?.default_remote_url().ok_or_else(|| GitError::new("열린 레포지토리에 원격이 없습니다. 시험할 주소를 적어 주세요."))?,
                 };
                 let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| dirs::home_dir().unwrap_or_else(std::env::temp_dir));
                 remote::test_connection(&self.runner, &dir, &url).map(|count| json!({ "url": url, "branches": count }))
@@ -375,6 +529,7 @@ impl AppState {
                 value["undo"] = self.undo_titles(&repo);
                 value["template"] = json!(repo.commit_template());
                 value["mergeMessage"] = json!(repo.merge_message());
+                value["mergeConflicts"] = json!(repo.merge_conflicts());
                 Ok(value)
             }
             "commitDetail" => {
@@ -433,6 +588,7 @@ impl AppState {
                     Ok(json!({ "status": "done", "login": login, "avatarUrl": user.get("avatar_url") }))
                 }
             },
+            "githubStatus" => Ok(json!({ "signedIn": self.app_login().is_some(), "login": self.app_login().map(|(l, _)| l) })),
             "githubLogout" => {
                 if let Some((login, _)) = self.app_login() {
                     github::forget_app_token(&self.runner, &dirs::home_dir().unwrap_or_else(std::env::temp_dir), &login);
@@ -461,8 +617,13 @@ impl AppState {
                 }
                 let accounts: Vec<github::Account> = list
                     .into_iter()
-                    .map(|(login, source, token)| github::Account {
-                        current: choice.as_ref().is_some_and(|(s, l)| *s == source && (source == "app" || l.eq_ignore_ascii_case(&login))),
+                    .map(|(login, source, token)| {
+                        let current = choice.as_ref().is_some_and(|(s, l)| *s == source && (source == "app" || l.eq_ignore_ascii_case(&login)));
+                        (login, source, token, current)
+                    })
+                    .map(|(login, source, token, current)| github::Account {
+                        in_use: current || (choice.is_none() && source == "credential"),
+                        current,
                         can_access: match (&repo_ids, token) {
                             (Some((o, r)), Some(t)) => Some(github::can_access(o, r, &t)),
                             _ => None,
@@ -477,7 +638,16 @@ impl AppState {
                 let a = Args(&args);
                 let root = self.repo()?.root().display().to_string();
                 let mut settings = self.settings.lock().unwrap();
-                settings.ui.insert(format!("github.account:{root}"), json!({ "source": a.s("source")?, "login": a.s("login").unwrap_or("") }));
+                // 고른 계정이 없으면(source 가 비면) git 기본(자격 증명 도우미)으로 돌아간다.
+                let key = format!("github.account:{root}");
+                match a.s("source").unwrap_or("") {
+                    "" => {
+                        settings.ui.remove(&key);
+                    }
+                    source => {
+                        settings.ui.insert(key, json!({ "source": source, "login": a.s("login").unwrap_or("") }));
+                    }
+                }
                 self.save_settings(&settings);
                 drop(settings);
                 self.apply_globals();
@@ -516,7 +686,8 @@ impl AppState {
                 let a = Args(&args);
                 let original: gitvcs_core::history::TextFile = serde_json::from_value(args.get("original").cloned().unwrap_or_default())
                     .map_err(|_| GitError::new("파일 정보가 잘못되었습니다."))?;
-                self.repo()?.write_text(a.s("path")?, a.s("text")?, &original, a.b("force")).map(|m| json!(m))
+                // 방금 쓴 판(줄 끝 목록·수정 시각)을 돌려준다. 다음 저장은 이 판과 견준다.
+                to_json(self.repo()?.write_text_file(a.s("path")?, a.s("text")?, &original, a.b("force"))?)
             }
             "createFile" => {
                 let repo = self.repo()?;
@@ -554,6 +725,20 @@ impl AppState {
                 let bytes = self.repo()?.file_bytes(a.s("revision")?, a.s("path")?)?;
                 std::fs::write(a.s("dest")?, bytes).map(|_| Value::Null).map_err(|e| GitError::new(format!("파일을 쓰지 못했습니다: {e}")))
             }
+            // 서브모듈 편집 드로어의 "현재 리비전": 그 커밋의 시각·메시지(받지 않았으면 null).
+            "submoduleInfo" => {
+                let info = self.repo()?.submodule_revision(Args(&args).s("path")?);
+                Ok(info.map_or(Value::Null, |(date, message)| json!({ "date": date, "message": message })))
+            }
+            // 드로어가 고른 폴더가 비었는지 본다(워크트리·서브모듈 경로 검사). 상대 경로는 레포지토리 기준.
+            "pathInfo" => {
+                let a = Args(&args);
+                let path = Path::new(a.s("path")?);
+                let full = if path.is_absolute() { path.to_path_buf() } else { self.repo()?.root().join(path) };
+                let dir = full.is_dir();
+                let empty = !dir || std::fs::read_dir(&full).map(|mut d| d.next().is_none()).unwrap_or(true);
+                Ok(json!({ "exists": full.exists(), "dir": dir, "empty": empty }))
+            }
             "reveal" => {
                 let a: PathArg = parse(args)?;
                 reveal(&self.repo()?, &a.path).map(|_| Value::Null)
@@ -572,7 +757,7 @@ impl AppState {
                             .map_err(|_| GitError::new("고를 쪽이 잘못되었습니다."))?;
                         repo.resolve(a.s("path")?, side).map(|_| Value::Null)
                     }
-                    "saveResolution" => repo.save_resolution(a.s("path")?, a.s("text")?).map(|_| Value::Null),
+                    "saveResolution" => repo.save_resolution_with(a.s("path")?, a.s("text")?, a.b("force")).map(|_| Value::Null),
                     "continueOperation" => repo.continue_with_message(a.s("message").ok()).map(|t| json!(t.trim())),
                     "skipOperation" => repo.skip_operation().map(|t| json!(t.trim())),
                     _ => repo.abort_operation().map(|_| Value::Null),
@@ -624,7 +809,7 @@ impl AppState {
             | "cherryPick" | "revert" | "reset" | "createTag" | "deleteTag" | "pushTag" | "deleteRemoteTag" | "stashPush" | "stashApply"
             | "stashDrop" | "stashBranch" | "addRemote" | "renameRemote" | "setRemoteUrl" | "removeRemote" | "pruneRemote" | "fetchRemote"
             | "pushBranch" | "setUpstream" | "fastForward" | "addWorktree" | "removeWorktree" | "addSubmodule" | "updateSubmodules"
-            | "editSubmodule" => {
+            | "editSubmodule" | "removeSubmodule" => {
                 let repo = self.repo()?;
                 let _guard = self.write_lock.lock().unwrap();
                 let a = Args(&args);
@@ -735,6 +920,7 @@ impl AppState {
                     "addSubmodule" => done(repo.add_submodule(a.s("url")?, a.s("path")?, a.s("branch").ok())),
                     "updateSubmodules" => done(repo.update_submodules(a.s("path").ok())),
                     "editSubmodule" => done(repo.edit_submodule(a.s("path")?, a.s("url")?, a.s("branch").ok())),
+                    "removeSubmodule" => done(repo.remove_submodule(a.s("path")?)),
                     _ => done(repo.stash_drop(a.s("name")?)),
                 }
             }
@@ -748,7 +934,12 @@ impl AppState {
                     "unstage" => repo.unstage(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
                     "stageAll" => repo.stage_all().map(|_| Value::Null),
                     "unstageAll" => repo.unstage_all().map(|_| Value::Null),
-                    "discard" => repo.discard(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
+                    // worktreeOnly: Unstaged 목록의 버리기 — Stage 한 내용은 남긴다. 아니면 HEAD 상태로(Stage 한 것까지).
+                    "discard" => {
+                        let worktree_only = Args(&args).b("worktreeOnly");
+                        let paths = parse::<PathsArg>(args)?.paths;
+                        if worktree_only { repo.discard_worktree(&paths) } else { repo.discard(&paths) }.map(|_| Value::Null)
+                    }
                     "applyLines" => {
                         let a: LinesArg = parse(args)?;
                         repo.apply_lines_with(a.action, &a.path, a.untracked, &a.fingerprint, &a.lines, a.context.unwrap_or(3)).map(|_| Value::Null)
@@ -897,7 +1088,7 @@ pub fn globals_for(settings: &Settings) -> GitGlobals {
 fn reveal(repo: &Repository, path: &str) -> Result<()> {
     let relative = Path::new(path);
     if relative.is_absolute() || relative.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-        return Err(GitError::new("저장소 밖의 경로입니다."));
+        return Err(GitError::new("레포지토리 밖의 경로입니다."));
     }
     let full = repo.root().join(relative);
     // 지운 파일이면 그 폴더를 연다.
@@ -980,7 +1171,7 @@ fn open_folder(path: &Path) -> Result<()> {
     spawned.map(|_| ()).map_err(|e| GitError::new(format!("파일 관리자를 열지 못했습니다: {e}")))
 }
 
-/// 저장소 폴더에서 터미널을 연다.
+/// 레포지토리 폴더에서 터미널을 연다.
 fn open_terminal(root: &Path) -> Result<()> {
     #[cfg(target_os = "macos")]
     let spawned = std::process::Command::new("/usr/bin/open").args(["-a", "Terminal"]).arg(root).spawn();

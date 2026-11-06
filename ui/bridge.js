@@ -1,9 +1,10 @@
 // Rust 와 주고받는 통로. 요청마다 번호를 붙여 보내고, Rust 가 같은 번호로 답하면 기다리던 Promise 를 푼다.
-// Rust 가 요청 없이 알리는 일(파일 변경·자동 페치)은 on() 으로 받는다.
+// Rust 가 요청 없이 알리는 일(파일 변경·자동 페치)은 on() 으로, 메뉴 막대 항목은 onMenu() 로 받는다.
 
 const pending = new Map();
 const listeners = new Map();
 let nextId = 1;
+let menuHandler = null;
 
 window.__gitvcs = {
   reply(message) {
@@ -15,6 +16,10 @@ window.__gitvcs = {
   },
   event(message) {
     for (const handler of listeners.get(message.event) ?? []) handler(message.data);
+  },
+  /** 메뉴 막대 항목 id(예: "fetch"). Rust 의 이벤트 루프가 부른다. */
+  menu(id) {
+    menuHandler?.(id);
   },
 };
 
@@ -31,4 +36,9 @@ export function call(cmd, args = {}) {
 export function on(event, handler) {
   if (!listeners.has(event)) listeners.set(event, []);
   listeners.get(event).push(handler);
+}
+
+/** 메뉴 막대 항목을 받는다(한 곳만). */
+export function onMenu(handler) {
+  menuHandler = handler;
 }

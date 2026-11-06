@@ -61,7 +61,7 @@ fn undo_and_redo_commit_and_branch() {
     assert_eq!(repo.undo_snapshot().branch, "main");
     assert!(repo.branch_tip("feat").is_empty());
 
-    // 기록 뒤 저장소가 바뀌면 되돌리지 않고 기록을 뺀다.
+    // 기록 뒤 레포지토리가 바뀌면 되돌리지 않고 기록을 뺀다.
     let mut stale = Journal::default();
     let mut e = UndoEntry::new(UndoKind::Commit, "x");
     e.head_before = first.clone();
@@ -121,6 +121,17 @@ fn remotes_worktrees_and_merge_modes() {
     assert_eq!(subs.len(), 1);
     assert_eq!(subs[0].path, "vendor/lib");
     assert_eq!(subs[0].state, gitvcs_core::ops::SubmoduleState::Ok);
+    // 편집 드로어의 현재 리비전: 그 서브모듈 커밋의 메시지.
+    let (time, message) = repo.submodule_revision("vendor/lib").unwrap();
+    assert!(time > 0);
+    assert_eq!(message, "lib");
+
+    // 서브모듈 지우기: 목록·폴더·.git/modules 가 모두 사라진다.
+    repo.remove_submodule("vendor/lib").unwrap();
+    assert!(repo.submodules().unwrap().is_empty());
+    assert!(!d.join("vendor/lib").exists());
+    assert!(!d.join(".git/modules/vendor/lib").exists());
+    assert!(repo.submodule_revision("vendor/lib").is_none());
 }
 
 #[test]

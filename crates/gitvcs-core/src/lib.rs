@@ -9,6 +9,7 @@ pub mod history;
 pub mod diff;
 pub mod files;
 pub mod log;
+pub mod newrepo;
 pub mod login;
 pub mod ops;
 pub mod patch;
@@ -23,5 +24,5 @@ pub mod status;
 pub mod undo;
 
 pub use repo::{GitError, Repository};
-pub use runner::{GitGlobals, GitRunner};
+pub use runner::{GitGlobals, GitRunner, Progress, set_progress_sink};
 pub use settings::Settings;

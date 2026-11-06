@@ -22,7 +22,7 @@ pub struct Worktree {
     pub bare: bool,
     pub locked: bool,
     pub prunable: bool,
-    /// 지금 연 저장소의 워크트리.
+    /// 지금 연 레포지토리의 워크트리.
     pub current: bool,
 }
 
@@ -192,12 +192,12 @@ impl Repository {
     }
 
     pub fn fetch_remote(&self, name: &str) -> Result<()> {
-        self.git_run(&["fetch", "--prune", "--quiet", name]).map(|_| ())
+        self.git_run(&["fetch", "--prune", "--progress", name]).map(|_| ())
     }
 
     /// 브랜치 하나를 원격에 올린다. upstream 이 없으면 걸어 준다.
     pub fn push_branch(&self, branch: &str, remote: &str, set_upstream: bool, force: bool) -> Result<String> {
-        let mut args = vec!["push"];
+        let mut args = vec!["push", "--progress"];
         if set_upstream {
             args.push("-u");
         }
@@ -314,6 +314,34 @@ impl Repository {
         }
     }
 
+    /// 서브모듈을 레포지토리에서 뺀다(원본 GitSubmodules.RemoveAsync): deinit → rm → `.git/modules/<이름>` 지우기.
+    /// 마지막 단계가 실패해도 레포지토리는 멀쩡하다(다시 같은 이름으로 추가할 때 git 이 재사용 여부를 묻는다).
+    pub fn remove_submodule(&self, path: &str) -> Result<()> {
+        let path = path.trim();
+        let name = self.submodules().ok().and_then(|subs| subs.into_iter().find(|s| s.path == path).map(|s| s.name));
+        self.git_run(&["submodule", "deinit", "-f", "--", path])?;
+        self.git_run(&["rm", "-f", "--", path])?;
+        if let Some(name) = name.filter(|n| !n.is_empty()) {
+            // worktree 에서도 맞는 곳을 가리키도록 git 에게 경로를 묻는다.
+            if let Ok(modules) = self.git_run(&["rev-parse", "--git-path", &format!("modules/{name}")]) {
+                let modules = std::path::PathBuf::from(modules.trim());
+                let modules = if modules.is_absolute() { modules } else { self.root().join(modules) };
+                let _ = std::fs::remove_dir_all(modules);
+            }
+        }
+        Ok(())
+    }
+
+    /// 서브모듈이 지금 보고 있는 커밋의 시각(unix 초)과 메시지. 받지 않았으면 None.
+    pub fn submodule_revision(&self, path: &str) -> Option<(i64, String)> {
+        if !self.root().join(path.trim()).join(".git").exists() {
+            return None;
+        }
+        let out = self.git_run(&["-C", path.trim(), "log", "-1", "--format=%ct%x1f%B"]).ok()?;
+        let (time, message) = out.split_once('\x1f')?;
+        Some((time.trim().parse().ok()?, message.trim().to_string()))
+    }
+
     /// `commit.template` 파일 내용(없으면 None).
     pub fn commit_template(&self) -> Option<String> {
         let path = self.git_run(&["config", "--path", "--get", "commit.template"]).ok()?;
@@ -328,11 +356,41 @@ impl Repository {
         let text = text.lines().filter(|l| !l.starts_with('#')).collect::<Vec<_>>().join("\n");
         Some(text.trim().to_string()).filter(|t| !t.is_empty())
     }
+
+    /// MERGE_MSG 의 "# Conflicts:" 아래 경로들 — 충돌이 났던 파일. 앱을 다시 열어도 "해결한 파일" 을 남기는 데 쓴다.
+    pub fn merge_conflicts(&self) -> Vec<String> {
+        std::fs::read_to_string(self.git_dir().join("MERGE_MSG")).map(|t| parse_merge_conflicts(&t)).unwrap_or_default()
+    }
+}
+
+/// "# Conflicts:\n#\ta.txt\n#\tb/c.txt" → [a.txt, b/c.txt]
+pub fn parse_merge_conflicts(text: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    let mut inside = false;
+    for line in text.lines() {
+        let line = line.trim_end_matches('\r');
+        if line.trim() == "# Conflicts:" {
+            inside = true;
+        } else if inside {
+            match line.strip_prefix("#\t") {
+                Some(path) if !path.trim().is_empty() => paths.push(path.trim().to_string()),
+                _ => inside = false,
+            }
+        }
+    }
+    paths
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_merge_conflicts() {
+        let text = "Merge branch 'f'\n\n# Conflicts:\n#\ta.txt\n#\tdir/b c.txt\n#\n# It looks like you may be committing a merge.\n";
+        assert_eq!(parse_merge_conflicts(text), vec!["a.txt".to_string(), "dir/b c.txt".to_string()]);
+        assert!(parse_merge_conflicts("Merge branch 'f'\n").is_empty());
+    }
 
     #[test]
     fn parses_remote_urls() {

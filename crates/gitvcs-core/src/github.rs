@@ -17,7 +17,10 @@ use crate::runner::GitRunner;
 
 /// NK-Studio 이름으로 등록한 OAuth App(Device Flow 켬). 공개 값이다.
 pub const CLIENT_ID: &str = "Ov23liwBBq0RMqbmU44U";
-pub const SCOPE: &str = "repo";
+/// repo: 비공개 레포지토리 읽기·쓰기·만들기, read:org: 속한 조직 목록(레포지토리 만들기 창의 계정 고르기).
+pub const SCOPE: &str = "repo read:org";
+/// 레포지토리 만들기에 필요한 scope.
+pub const CREATE_SCOPES: [&str; 2] = ["repo", "read:org"];
 const USER_AGENT: &str = "GitVcs-Desktop";
 /// 앱 로그인 토큰을 넣어 둘 자격 증명 저장소의 이름(실제 git 접속에는 쓰지 않는 호스트).
 const STORE_HOST: &str = "gitvcs-desktop.github.com";
@@ -29,9 +32,11 @@ pub struct Account {
     pub login: String,
     /// app | gh | credential
     pub source: String,
-    /// 이 저장소에 지금 쓰는 계정.
+    /// 이 레포지토리에 고른 계정.
     pub current: bool,
-    /// 이 저장소를 읽을 수 있는가(모르면 None).
+    /// git 이 이 레포지토리에 지금 쓰는 계정(고른 계정, 없으면 자격 증명 도우미의 계정).
+    pub in_use: bool,
+    /// 이 레포지토리를 읽을 수 있는가(모르면 None).
     pub can_access: Option<bool>,
 }
 
@@ -44,7 +49,7 @@ fn credential(git: &GitRunner, dir: &Path, action: &str, input: &str) -> Option<
     out.success().then(|| out.stdout.lines().filter_map(|l| l.split_once('=')).map(|(k, v)| (k.to_string(), v.to_string())).collect())
 }
 
-/// 앱 로그인 토큰 (login, token). 저장소에 없으면 None.
+/// 앱 로그인 토큰 (login, token). 레포지토리에 없으면 None.
 pub fn load_app_token(git: &GitRunner, dir: &Path) -> Option<(String, String)> {
     let c = credential(git, dir, "fill", &format!("protocol=https\nhost={STORE_HOST}\n\n"))?;
     let (login, token) = (c.get("username")?.clone(), c.get("password")?.clone());
@@ -137,6 +142,26 @@ pub fn api(method: &str, path: &str, body: Option<&Value>, token: Option<&str>) 
     }
 }
 
+/// 토큰이 받은 scope(X-OAuth-Scopes). OAuth·클래식 토큰만 알려 준다 — 세분화 토큰·GitHub App 이면 None.
+pub fn token_scopes(token: &str) -> Option<Vec<String>> {
+    let response = agent("GET", &format!("{API}/user"), Some(token)).call().ok()?;
+    let header = response.header("X-OAuth-Scopes")?;
+    Some(header.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+}
+
+/// `needed` 중 `granted` 에 없는 scope. 상위 scope 가 하위를 품는다(admin:org·write:org ⊃ read:org).
+pub fn missing_scopes(granted: &[String], needed: &[&str]) -> Vec<String> {
+    let has = |s: &str| granted.iter().any(|g| g == s);
+    needed
+        .iter()
+        .filter(|&&n| match n {
+            "read:org" => !(has("read:org") || has("write:org") || has("admin:org")),
+            other => !has(other),
+        })
+        .map(|s| s.to_string())
+        .collect()
+}
+
 /// GraphQL(초안 전환 등 REST 에 없는 것).
 pub fn graphql(query: &str, variables: Value, token: &str) -> Result<Value> {
     let value = api("POST", "/graphql", Some(&json!({ "query": query, "variables": variables })), Some(token))?;
@@ -185,7 +210,7 @@ pub fn device_poll(device_code: &str) -> Result<Poll> {
     }
 }
 
-/// 이 토큰으로 이 저장소를 읽을 수 있는가.
+/// 이 토큰으로 이 레포지토리를 읽을 수 있는가.
 pub fn can_access(owner: &str, repo: &str, token: &str) -> bool {
     api("GET", &format!("/repos/{owner}/{repo}"), None, Some(token)).is_ok()
 }
@@ -210,6 +235,14 @@ mod tests {
     fn rejects_foreign_urls() {
         assert!(api("GET", "https://evil.example/x", None, None).is_err());
         assert!(api("GET", "repos/x", None, None).is_err());
+    }
+
+    #[test]
+    fn finds_missing_scopes() {
+        let granted = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(missing_scopes(&granted(&["repo"]), &CREATE_SCOPES), ["read:org"]);
+        assert!(missing_scopes(&granted(&["repo", "admin:org"]), &CREATE_SCOPES).is_empty());
+        assert_eq!(missing_scopes(&granted(&[]), &CREATE_SCOPES), ["repo", "read:org"]);
     }
 
     #[test]

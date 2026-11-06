@@ -16,7 +16,7 @@
 | 중 | 테마를 따르는 즉시 말풍선 툴팁(HoverCallout) — 지금은 브라우저 기본 title | Elements/HoverCallout.cs |
 | 중 | 창 ⋮ 메뉴(언어·배치·탐색기 모양·테마·배율·Finder 열기·터미널·GitHub) | GitWindow.cs:591-640 |
 | 중 | 테마 "시스템 따르기" | GitTheme.cs:46 |
-| 중 | 저장소가 아님 / git 없음 안내 띠와 `git init`(.gitignore 포함) | GitWindow.cs:922-975 |
+| 중 | 레포지토리가 아님 / git 없음 안내 띠와 `git init`(.gitignore 포함) | GitWindow.cs:922-975 |
 | 하 | 글꼴: IBM Plex Sans KR(UI) · Jetendard(코드) | Fonts/ |
 | 하 | 배치 바꿀 때 "다시 그리는 중" 덮개, 연결 화면 전환 연출 | GitWindow.cs:418-588 |
 
@@ -26,13 +26,13 @@
 |---|---|---|
 | 상 | 실행 취소 · 다시 실행 버튼("실행 취소: 작업명") | GitToolbar.cs:90-91, Core/GitUndo.cs |
 | 상 | 브랜치 이름 ▾ → 브랜치 고르기 팝업(검색 · 현재/로컬/원격 · 키보드) | Window/GitBranchPicker.cs |
-| 상 | 저장소 이름 ▾ → 저장소·서브모듈 고르기 팝업 | Window/GitRepositoryPicker.cs |
+| 상 | 레포지토리 이름 ▾ → 레포지토리·서브모듈 고르기 팝업 | Window/GitRepositoryPicker.cs |
 | 상 | 아이콘이 원본 벡터 그림(ActionGlyph · Undo/Redo PNG)이 아니라 유니코드 글자 | Elements/ActionGlyph.cs |
 | 중 | Pop 버튼 stash 수 배지, 자동 페치 인증 실패 시 Fetch 에 빨간 "!" | GitToolbar.cs:172-189 |
 | 중 | 병합·rebase 중 Pull·Push 끄고 까닭 툴팁, detached 일 때 Push 끄기 | GitToolbar.cs:175-184 |
 | 중 | 오른쪽 진행 상태 글자(지금은 가운데 알약) | GitToolbar.cs:156-157 |
 | 중 | 좁은 창(840 미만)에서 글자 숨기고 아이콘만 | GitToolbar.cs:14-19 |
-| 하 | 버튼 순서(저장소 · 브랜치 · 실행취소 · Fetch/Pull/Push · 브랜치 · Stash/Pop · 상태 · 터미널/새로고침, 설정·테마는 ⋮ 메뉴) | GitWindow.uxml:13-48 |
+| 하 | 버튼 순서(레포지토리 · 브랜치 · 실행취소 · Fetch/Pull/Push · 브랜치 · Stash/Pop · 상태 · 터미널/새로고침, 설정·테마는 ⋮ 메뉴) | GitWindow.uxml:13-48 |
 | 하 | 배지 99 초과면 "99+" | GitToolbar.cs:340-345 |
 
 ## 3. 사이드바
@@ -144,7 +144,7 @@
 | 중 | 충돌 줄 hover = "해결됨으로 표시", 충돌 메뉴(우리 쪽 / 상대 쪽) | FileRowBinder.cs:47-50 |
 | 중 | 키보드: Delete=버리기, Enter=Stage/Unstage | StagingLists.cs:313-323 |
 | 중 | 누르자마자 목록을 옮겨 보이기(낙관적 갱신), 바쁠 때 "모두 Stage" 대기열 | StagingLists.cs:47-60, 523-550 |
-| 중 | Stage 전 확인(충돌 표시 남은 파일 · 안에 git 저장소 있는 폴더) | StagingLists.cs:1161-1185 |
+| 중 | Stage 전 확인(충돌 표시 남은 파일 · 안에 git 레포지토리 있는 폴더) | StagingLists.cs:1161-1185 |
 | 중 | 커밋 상자 배치: 아래 한 줄 [Amend][중단][건너뛰기] … [커밋 후 푸시][커밋 (n)] | CommitBox.uxml:5-17 |
 | 중 | 커밋 템플릿(commit.template) | CommitBox.cs:76-135 |
 | 중 | 병합/rebase 중에도 커밋 상자 유지 + MERGE_MSG 채움 + [병합 마치기]·[중단]·[건너뛰기] 링크 | CommitBox.cs:198-265 |

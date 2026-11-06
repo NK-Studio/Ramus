@@ -4,6 +4,9 @@
 //! - Rust → 화면: 작업 스레드가 결과를 이벤트 루프에 넘기면(`UserEvent`) `window.__gitvcs.reply({...})` 를 실행한다.
 //!
 //! git 은 모두 작업 스레드에서 돈다. 폴더 고르기 창만 이벤트 루프(메인 스레드)에서 띄운다 — macOS 는 창을 메인 스레드에서만 만든다.
+//!
+//! 메뉴 막대(menu.rs)를 누르면 `UserEvent::Menu(id)` 로 이벤트 루프에 오고, `window.__gitvcs.menu("<id>")` 로 화면에 넘긴다.
+//! 화면은 상태가 바뀌면 `menuState` 로 항목을 켜고 끈다.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -11,6 +14,7 @@ mod assets;
 mod commands;
 #[cfg(debug_assertions)]
 mod devtools;
+mod menu;
 mod watcher;
 
 use std::path::Path;
@@ -28,13 +32,14 @@ use tao::window::WindowBuilder;
 use wry::WebViewBuilder;
 
 const PROTOCOL: &str = "gitvcs";
-const MIN_WIDTH: f64 = 900.0;
-const MIN_HEIGHT: f64 = 560.0;
+/// 창을 이보다 좁게 줄이지 못한다(원본 GitWindow.MinLayoutSize). UI 배율을 곱한다.
+const MIN_WIDTH: f64 = 640.0;
+const MIN_HEIGHT: f64 = 360.0;
 
 enum UserEvent {
     /// 요청 `id` 에 대한 응답(이미 JSON 글자로 만든 것).
     Reply(String),
-    /// 폴더 고르기 창을 띄우고 고른 저장소를 연다.
+    /// 폴더 고르기 창을 띄우고 고른 레포지토리를 연다.
     PickRepo(u64),
     /// 폴더·파일 고르기(저장 포함) 창을 띄우고 고른 경로를 돌려준다.
     Pick(u64, PickRequest),
@@ -46,6 +51,16 @@ enum UserEvent {
     /// 개발 빌드 점검 통로: 이 JS 를 실행한다.
     #[allow(dead_code)]
     Eval(String),
+    /// 메뉴 막대 항목을 눌렀다(또는 macOS 에서 그 단축키를 눌렀다).
+    Menu(String),
+    /// 화면이 알린 메뉴 항목 켜기·끄기: (id, 켬).
+    MenuState(Vec<(String, bool)>),
+    /// 전체 화면을 켜고 끈다(Windows: 메뉴 항목·F11).
+    ToggleFullscreen,
+    /// 탭 막대 빈 곳을 끌기 시작했다 — 창을 옮긴다(macOS).
+    WindowDrag,
+    /// 탭 막대 빈 곳을 두 번 눌렀다 — 창을 키우거나 되돌린다(macOS).
+    WindowZoom,
 }
 
 /// 고르기 창 하나. kind: folder | file | save.
@@ -103,9 +118,21 @@ fn dispatch(state: Arc<AppState>, proxy: EventLoopProxy<UserEvent>, request: Ipc
     });
 }
 
+/// 전체 화면(테두리 없이 그 화면 가득)을 켜고 끈다.
+fn toggle_fullscreen(window: &tao::window::Window) {
+    let next = if window.fullscreen().is_some() { None } else { Some(tao::window::Fullscreen::Borderless(None)) };
+    window.set_fullscreen(next);
+}
+
 fn main() -> wry::Result<()> {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
+    // git 진행 줄(받는 중 45% 등)을 화면에 알린다 — 오래 걸리는 Pull·Push 가 멈춘 것처럼 보이지 않게.
+    let progress_proxy = Mutex::new(proxy.clone());
+    gitvcs_core::set_progress_sink(move |progress| {
+        let body = json!({ "event": "progress", "data": progress }).to_string();
+        let _ = progress_proxy.lock().unwrap().send_event(UserEvent::Emit(body));
+    });
     let emit_proxy = Mutex::new(proxy.clone());
     let state = Arc::new(AppState::load(Box::new(move |name, data| {
         let body = json!({ "event": name, "data": data }).to_string();
@@ -124,13 +151,53 @@ fn main() -> wry::Result<()> {
         }
     });
 
-    let dark = state.settings.lock().unwrap().theme != "light";
-    let window = WindowBuilder::new()
+    let theme = state.settings.lock().unwrap().theme.clone();
+    // 첫 화면 스켈레톤이 쓸 힌트: 화면이 그려지기 전에 window.__boot 로 넘긴다(테마·배치·칸 폭·다시 열 레포지토리).
+    let boot = {
+        let settings = state.settings.lock().unwrap();
+        let repo = settings.last_repo.as_ref().filter(|p| Path::new(p).is_dir());
+        json!({
+            "theme": settings.theme,
+            "platform": std::env::consts::OS,
+            "layout": settings.ui.get("layout"),
+            "sidebar": settings.ui.get("split.sidebar"),
+            "detail": settings.ui.get("split.detail"),
+            "repo": repo.and_then(|p| Path::new(p).file_name()).map(|n| n.to_string_lossy().into_owned()),
+            "tabs": settings.open_tabs.len(),
+        })
+    };
+    let dark = theme != "light";
+    let builder = WindowBuilder::new()
         .with_title("GitVcs")
         .with_inner_size(LogicalSize::new(1440.0, 900.0))
-        .with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT))
-        .build(&event_loop)
-        .expect("창을 만들지 못했습니다");
+        .with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
+    // macOS 는 화면의 탭 막대가 제목 막대를 겸한다(GitKraken 처럼): 제목 막대를 비우고 웹뷰를 창 꼭대기까지 펴며,
+    // 신호등 버튼은 38px 높이 탭 막대의 가운데에 오게 내린다.
+    #[cfg(target_os = "macos")]
+    let builder = {
+        use tao::platform::macos::WindowBuilderExtMacOS;
+        builder
+            .with_titlebar_transparent(true)
+            .with_title_hidden(true)
+            .with_fullsize_content_view(true)
+            .with_traffic_light_inset(tao::dpi::LogicalPosition::new(14.0, 21.0))
+    };
+    let window = builder.build(&event_loop).expect("창을 만들지 못했습니다");
+
+    // 메뉴 막대. 항목을 누르면(macOS 는 단축키도) 이벤트 루프로 id 를 보낸다.
+    let app_menu = menu::AppMenu::build();
+    let menu_proxy = Mutex::new(proxy.clone());
+    muda::MenuEvent::set_event_handler(Some(move |event: muda::MenuEvent| {
+        let _ = menu_proxy.lock().unwrap().send_event(UserEvent::Menu(event.id().0.clone()));
+    }));
+    let menu_theme = match theme.as_str() {
+        "light" => Some(false),
+        "system" => None,
+        _ => Some(true),
+    };
+    // Windows 는 웹뷰를 붙이기 전에 메뉴 막대를 붙인다 — 메뉴 높이만큼 줄어든 창 안쪽에 웹뷰가 맞춰지게.
+    #[cfg(not(target_os = "macos"))]
+    app_menu.attach(&window, menu_theme);
 
     #[cfg(debug_assertions)]
     let dev_pending = devtools::Pending::default();
@@ -148,6 +215,7 @@ fn main() -> wry::Result<()> {
     let webview = WebViewBuilder::new()
         .with_custom_protocol(PROTOCOL.into(), |_id, request| assets::respond(request))
         .with_url(start_url())
+        .with_initialization_script(format!("window.__boot = {boot};"))
         .with_background_color(background)
         .with_devtools(cfg!(debug_assertions) || std::env::var_os("GITVCS_DEVTOOLS").is_some())
         // 외부 주소는 웹뷰 안에서 열지 않는다(화면 파일만).
@@ -170,6 +238,23 @@ fn main() -> wry::Result<()> {
                 let scale = request.args.get("scale").and_then(Value::as_f64).unwrap_or(1.0).clamp(0.6, 2.0);
                 let _ = ipc_proxy.send_event(UserEvent::Zoom(scale));
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "menuState" {
+                // {items: {id: 켬}} — 메뉴 항목은 이벤트 루프(메인 스레드)에서만 만진다.
+                let states = request
+                    .args
+                    .get("items")
+                    .and_then(Value::as_object)
+                    .map(|items| items.iter().map(|(id, on)| (id.clone(), on.as_bool().unwrap_or(false))).collect())
+                    .unwrap_or_default();
+                let _ = ipc_proxy.send_event(UserEvent::MenuState(states));
+                let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "toggleFullscreen" {
+                let _ = ipc_proxy.send_event(UserEvent::ToggleFullscreen);
+                let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "windowDrag" || request.cmd == "windowZoom" {
+                let event = if request.cmd == "windowDrag" { UserEvent::WindowDrag } else { UserEvent::WindowZoom };
+                let _ = ipc_proxy.send_event(event);
+                let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
             } else if request.cmd == "pickRepo" {
                 let _ = ipc_proxy.send_event(UserEvent::PickRepo(request.id));
             } else if request.cmd == "pick" {
@@ -181,10 +266,36 @@ fn main() -> wry::Result<()> {
         })
         .build(&window)?;
 
+    let mut was_fullscreen = false;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
+            // macOS 는 NSApp 이 다 뜬 뒤에 앱 메뉴를 붙인다.
+            #[cfg(target_os = "macos")]
+            Event::NewEvents(tao::event::StartCause::Init) => app_menu.attach(&window, menu_theme),
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *control_flow = ControlFlow::Exit,
+            #[cfg(not(target_os = "macos"))]
+            Event::UserEvent(UserEvent::Menu(id)) if id == menu::QUIT => *control_flow = ControlFlow::Exit,
+            #[cfg(not(target_os = "macos"))]
+            Event::UserEvent(UserEvent::Menu(id)) if id == menu::FULLSCREEN => toggle_fullscreen(&window),
+            Event::UserEvent(UserEvent::Menu(id)) => {
+                let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.menu && window.__gitvcs.menu({})", json!(id)));
+            }
+            Event::UserEvent(UserEvent::MenuState(states)) => app_menu.set_enabled(&states),
+            Event::UserEvent(UserEvent::ToggleFullscreen) => toggle_fullscreen(&window),
+            Event::UserEvent(UserEvent::WindowDrag) => {
+                let _ = window.drag_window();
+            }
+            Event::UserEvent(UserEvent::WindowZoom) => window.set_maximized(!window.is_maximized()),
+            // 전체 화면이 바뀌면 화면에 알린다(macOS 탭 막대가 신호등 자리 여백을 거두게).
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
+                let fullscreen = window.fullscreen().is_some();
+                if was_fullscreen != fullscreen {
+                    was_fullscreen = fullscreen;
+                    let body = json!({ "event": "window", "data": { "fullscreen": fullscreen } });
+                    let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.event({body})"));
+                }
+            }
             Event::UserEvent(UserEvent::Reply(body)) => {
                 let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.reply({body})"));
             }
@@ -219,7 +330,7 @@ fn main() -> wry::Result<()> {
                 let value = picked.map(|p| json!(p.display().to_string())).unwrap_or(Value::Null);
                 let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(value))));
             }
-            Event::UserEvent(UserEvent::PickRepo(id)) => match rfd::FileDialog::new().set_title("Git 저장소 폴더 열기").pick_folder() {
+            Event::UserEvent(UserEvent::PickRepo(id)) => match rfd::FileDialog::new().set_title("Git 레포지토리 폴더 열기").pick_folder() {
                 Some(folder) => dispatch(
                     state.clone(),
                     proxy.clone(),

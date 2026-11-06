@@ -23,6 +23,19 @@ const LANE_BAR_WIDTH = 3;
 const NODE_BAR_GAP = 7;
 const PUSHED_NODE_OPACITY = 0.45;
 
+// ── stash(점선 상자 안 받은편지함 그림, 만든 자리까지 점선) ──
+// 아바타를 보일 때 상자는 줄 띠(.band: 줄 높이 34 에서 위아래 3 씩 띄운 28)와 같은 높이다. 띠는 상자 오른쪽 끝에서 시작한다(paintBand).
+// step 은 변 하나의 점 수(점 사이 간격)가 반올림 경계에 걸리지 않게 잡는다(원본 C# 과 같은 수가 나오게).
+const STASH = { half: 14, dot: 2, step: 4.33, icon: 16, iconLine: 1.5 };
+const STASH_SMALL = { half: 7, dot: 1.5, step: 3, icon: 9, iconLine: 1.1 };
+const STASH_DASH = [2, 2];
+/** 받은편지함 그림(20 칸): 위가 좁은 상자와 가운데가 파인 받침. */
+const INBOX = typeof Path2D === 'function'
+  ? new Path2D('M3 11L5.6 5Q6 4.2 6.8 4.2L13.2 4.2Q14 4.2 14.4 5L17 11L17 15Q17 16 16 16L4 16Q3 16 3 15Z M3 11L7 11L8.3 13L11.7 13L13 11L17 11')
+  : null;
+/** stash 메시지 앞의 "WIP on main: "·"On main: " 를 뗀다(사이드바와 같은 글). */
+export const stashLabel = (message) => message.replace(/^(WIP on|On) [^:]+: /, '');
+
 // ── 칸 ──
 const DEFAULT_ORDER = ['refs', 'graph', 'message'];
 const DEFAULT_REFS_WIDTH = 170;
@@ -37,8 +50,23 @@ const DETAIL_WIDTHS = { author: 150, sha: 84, date: 150 };
 const HEADER = {
   refs: { text: '브랜치 / 태그', icon: 'branch' },
   graph: { text: '그래프', icon: 'hierarchy' },
-  message: { text: '커밋 메시지', icon: 'comment' },
+  message: { text: '메시지', icon: 'comment' },
 };
+
+// ── 머리 줄 끌기(원본 ColumnReorderer·ColumnResizer) ──
+const DRAG_THRESHOLD = 4;
+const MIN_GHOST_WIDTH = 60;
+const MAX_GHOST_WIDTH = 260;
+/** 경계 손잡이를 이 시간·거리 안에서 두 번 누르면 기본 폭. */
+const DOUBLE_PRESS_MS = 400;
+
+// ── 작업 중 줄 입력란 폭(원본 .commit-graph-wip__input) ──
+const WIP_INPUT_MIN = 80;
+const WIP_INPUT_MAX = 260;
+
+/** 이름표 이름이 이 폭 + NAME_FADE_WIDTH 밑으로 깎이면 흐려지기 시작해 이 폭에서 사라진다(원본 NameFadeStart·NameFadeWidth). */
+const NAME_FADE_START = 2;
+const NAME_FADE_WIDTH = 10;
 
 // ── 이름표 진하기(원본 CommitGraphList) ──
 const REF_ALPHA = { current: 0.7, local: 0.35, remote: 0.2 };
@@ -46,7 +74,10 @@ const LANE_TINT_ALPHA = 0.1;
 const SELECTED_LANE_TINT_ALPHA = 0.45;
 
 // 원본 GraphStyle.LaneColors 와 같은 여덟 색.
-const LANE_COLORS = ['#599eff', '#59cc73', '#ff9e40', '#b885ff', '#ff73a6', '#4dcccc', '#f2cc4d', '#f26659'];
+// 세로 그래프: GitKraken 과 같은 열 번호 순 색(Rust 가 lane.color 에 열 번호를 넣는다).
+const LANE_COLORS = ['#15a0bf', '#0669f7', '#8e00c2', '#c517b6', '#d90171', '#cd0101', '#f25d2e', '#f2ca33', '#7bd938', '#2ece9d'];
+// 가로 탐색기: 브랜치 이름에서 정한 색 번호용.
+const NAMED_LANE_COLORS = ['#599eff', '#59cc73', '#ff9e40', '#b885ff', '#ff73a6', '#4dcccc', '#f2cc4d', '#f26659'];
 
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -55,10 +86,16 @@ function hexToRgb(hex) {
 
 const rgba = ([r, g, b], a = 1) => `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
 
-/** 가지 하나의 색(rgb). 이름 없는 가지(지워진 브랜치)는 회색 쪽으로 반 섞는다. */
+/** 세로 그래프 가지 하나의 색(rgb). GitKraken 처럼 열 번호로만 정한다. */
 export function laneRgb(lane) {
   if (!lane) return [128, 131, 138];
-  const base = hexToRgb(LANE_COLORS[lane.color % LANE_COLORS.length]);
+  return hexToRgb(LANE_COLORS[lane.color % LANE_COLORS.length]);
+}
+
+/** 가로 탐색기 가지 색(rgb). 브랜치 이름에서 정한 번호, 이름 없는 가지(지워진 브랜치)는 회색 쪽으로 반 섞는다. */
+export function namedLaneRgb(lane) {
+  if (!lane) return [128, 131, 138];
+  const base = hexToRgb(NAMED_LANE_COLORS[lane.color % NAMED_LANE_COLORS.length]);
   return lane.anonymous ? base.map((c) => (c + 128) / 2) : base;
 }
 
@@ -176,7 +213,10 @@ export function createAvatars(load) {
       const answer = await load(email, hash).catch(() => null);
       return answer?.url ?? (answer?.ai ? AI_LOGOS[answer.ai] : null);
     },
-    onLoad(fn) { listeners.add(fn); },
+    onLoad(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
   };
 }
 
@@ -196,7 +236,8 @@ export function branchNameProblem(name, existing = []) {
 /**
  * 그래프를 만든다.
  * opts: { pane, header, scroll, sizer, canvas, rows, onSelect(key), onContextMenu(key, event, commit, ref?), onRefActivate(ref, commit),
- *         onWipSubject(text), onWipFocus(), onNeedMore(), avatars, prefs:{get(key), set(key, value)} }
+ *         onWipSubject(text), onWipFocus(), onNeedMore(), avatars, prefs:{get(key), set(key, value)},
+ *         toggleOff(기본 true — 고른 줄을 다시 누르면 선택을 푼다) }
  */
 export function createGraph(opts) {
   const { pane, header, scroll, sizer, canvas, rows } = opts;
@@ -219,7 +260,15 @@ export function createGraph(opts) {
   let wipSubject = '';
   let branchInput = null; // {hash, element, validate, submit}
   let searchMatches = null; // Set of row indexes (커밋 번호) — 검색 중이면 안 맞는 줄을 흐린다
+  let resizing = null; // 경계를 끄는 중인 칸(머리 줄을 다시 그려도 손잡이 강조를 남긴다)
+  let lastResizePress = null; // 두 번 누르기 판정 {column, time, x}
   const rendered = new Map(); // key → row element
+
+  // 그래프 위 요약 줄(원본 GraphWorkspaceView 의 도구 막대): "커밋 n개 · 줄 n개 (최근 n개까지)", 읽는 동안 "불러오는 중…".
+  // Fork 탐색기(세부 칸 모양)는 탐색 머리 줄에 요약이 따로 있어 숨긴다.
+  const summary = el('div', { class: 'graph-summary' }, el('span', { class: 'graph-summary-text', text: '불러오는 중…' }));
+  header.before(summary);
+  const measure = document.createElement('canvas').getContext('2d');
 
   // 칸 설정(저장)
   let order = parseOrder(opts.prefs.get('graph.order'));
@@ -307,6 +356,7 @@ export function createGraph(opts) {
     pane.classList.toggle('message-first', order[0] === 'message');
     pane.classList.toggle('graph-last', isLast('graph'));
     pane.classList.toggle('details', detailColumns);
+    summary.hidden = detailColumns;
     // 브랜치/태그 칸이 최소 폭이면 이름표를 아이콘 하나로 줄인다.
     pane.classList.toggle('refs-centered', width.refs <= minColumnWidth('refs') + 1);
     renderHeader();
@@ -359,12 +409,14 @@ export function createGraph(opts) {
       else if (state === 'deleted') wip.deleted++;
       else wip.modified++;
     }
-    // 커밋이 하나도 없는 저장소도 WIP 줄은 둔다(첫 커밋을 만들 수 있게).
+    // 커밋이 하나도 없는 레포지토리도 WIP 줄은 둔다(첫 커밋을 만들 수 있게).
     hasWip = wip.total > 0 || commits.length === 0;
     headRow = history.head ? commits.findIndex((c) => c.hash === history.head) : -1;
     headLane = headRow >= 0 ? laneOf(headRow) : null;
-    mergeIncoming = status?.mergeHead ? commits.findIndex((c) => c.hash === status.mergeHead) : -1;
-    conflicts = status?.operation ? status.conflicted : 0;
+    // 멈춘 병합만 본다(원본 UpdateMergeState): rebase·cherry-pick·revert 충돌은 작업 중 줄을 경고 줄로 바꾸지 않는다.
+    const merging = status?.operation === 'merge' && !!status?.mergeHead;
+    mergeIncoming = merging ? commits.findIndex((c) => c.hash === status.mergeHead) : -1;
+    conflicts = merging ? status.conflicted : 0;
     conflictTarget = status?.branch?.detached ? 'HEAD' : status?.branch?.name ?? 'HEAD';
     if (selected && selected !== 'wip' && !commits.some((c) => c.hash === selected)) selected = null;
     if (selected === 'wip' && !hasWip) selected = null;
@@ -380,6 +432,9 @@ export function createGraph(opts) {
       rendered.get('wip').remove();
       rendered.delete('wip');
     }
+    const commitCount = commits.filter((c) => !c.stash).length;
+    const laneTotal = lanes.filter((l) => !l.stash).length;
+    summary.firstChild.textContent = `커밋 ${commitCount}개 · 줄 ${laneTotal}개${truncatedHistory ? ` (최근 ${commitCount}개까지)` : ''}`;
     computeLayout();
     render();
   }
@@ -402,15 +457,29 @@ export function createGraph(opts) {
     if (notify) opts.onSelect(key);
   }
 
-  /** 그 커밋 줄로 스크롤해 목록 가운데쯤에 둔다(CM-04). */
+  /**
+   * 그 커밋 줄을 보이게 한다(CM-04, 원본 RevealRow). 이미 다 보이면 스크롤하지 않는다.
+   * center 면 목록 가운데쯤에 줄 높이 단위로 맞춰 두고(맨 위 줄이 머리 밑에서 반쯤 잘리지 않게), 아니면 가장자리까지만 옮긴다(↑↓).
+   */
   function reveal(hash, center = true) {
     const index = hash === 'wip' ? -1 : commits.findIndex((c) => c.hash === hash);
     if (hash !== 'wip' && index < 0) return false;
     const row = hash === 'wip' ? 0 : index + offset();
     const top = row * ROW_HEIGHT;
-    if (center) scroll.scrollTop = Math.max(0, top - scroll.clientHeight / 2 + ROW_HEIGHT / 2);
-    else if (top < scroll.scrollTop) scroll.scrollTop = top;
-    else if (top + ROW_HEIGHT > scroll.scrollTop + scroll.clientHeight) scroll.scrollTop = top + ROW_HEIGHT - scroll.clientHeight;
+    const viewport = scroll.clientHeight;
+    const y = scroll.scrollTop;
+    if (top < y || top + ROW_HEIGHT > y + viewport) {
+      if (center && viewport >= ROW_HEIGHT) {
+        const rowsAbove = Math.floor((viewport / ROW_HEIGHT - 1) / 2);
+        const max = Math.max(0, rowCount() * ROW_HEIGHT - viewport);
+        let target = Math.min(max, Math.max(0, (row - rowsAbove) * ROW_HEIGHT));
+        // 목록 끝이라 끝 위치가 줄 높이로 나누어떨어지지 않으면, 고른 줄이 다 보이는 한 줄 단위로 내려 맞춰 잘리는 줄을 맨 아래로 보낸다.
+        const aligned = Math.floor(target / ROW_HEIGHT) * ROW_HEIGHT;
+        if (aligned < target && top + ROW_HEIGHT <= aligned + viewport) target = aligned;
+        scroll.scrollTop = target;
+      } else if (top < y) scroll.scrollTop = top;
+      else scroll.scrollTop = top + ROW_HEIGHT - viewport;
+    }
     render();
     return true;
   }
@@ -429,19 +498,16 @@ export function createGraph(opts) {
       }, iconOnly ? icon(HEADER[column].icon, 14) : el('span', { class: 'gh-text', text: HEADER[column].text }));
       cell.addEventListener('pointerdown', (event) => startReorder(event, column, cell));
       if (!isLast(column)) {
-        const handle = el('div', { class: 'gh-resize', 'data-tip': '끌어서 폭 바꾸기 · 두 번 누르면 기본 폭' });
+        // 경계 손잡이: 칸 오른쪽 끝 8px, 경계에 머리 높이 세로선(끄는 동안·마우스를 올리면 강조색 2px).
+        const handle = el('div', { class: `gh-resize${resizing === column ? ' dragging' : ''}`, 'data-tip': '끌어서 폭 바꾸기 · 두 번 누르면 기본 폭' });
         handle.addEventListener('pointerdown', (event) => startResize(event, column));
-        handle.addEventListener('dblclick', () => {
-          widths[column] = column === 'graph' ? 0 : column === 'refs' ? DEFAULT_REFS_WIDTH : DEFAULT_MESSAGE_WIDTH;
-          saveWidths();
-        });
         cell.append(handle);
       }
       return cell;
     });
     const details = detailColumns
       ? [el('div', { class: 'gh-cell gh-author', style: { width: `${DETAIL_WIDTHS.author}px` }, text: '작성자' }),
-        el('div', { class: 'gh-cell gh-sha', style: { width: `${DETAIL_WIDTHS.sha}px` }, text: 'SHA' }),
+        el('div', { class: 'gh-cell gh-sha', style: { width: `${DETAIL_WIDTHS.sha}px` }, text: '해시' }),
         el('div', { class: 'gh-cell gh-date', style: { width: `${DETAIL_WIDTHS.date}px` }, text: '날짜' })]
       : [];
     header.replaceChildren(...cells, ...details);
@@ -453,15 +519,32 @@ export function createGraph(opts) {
     render();
   }
 
+  /** 칸 경계 끌기(원본 ColumnResizer). 두 번 누르면 기본 폭(그래프는 가지 수에 맞춘 폭)으로 돌리고 저장한다. */
   function startResize(event, column) {
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
+    const now = performance.now();
+    const twice = lastResizePress && lastResizePress.column === column && now - lastResizePress.time < DOUBLE_PRESS_MS
+      && Math.abs(event.clientX - lastResizePress.x) < DRAG_THRESHOLD;
+    lastResizePress = twice ? null : { column, time: now, x: event.clientX };
+    if (twice) {
+      widths[column] = column === 'graph' ? 0 : column === 'refs' ? DEFAULT_REFS_WIDTH : DEFAULT_MESSAGE_WIDTH;
+      saveWidths();
+      return;
+    }
     const startX = event.clientX;
     const startWidth = layout.width[column];
-    const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
+    resizing = column;
+    event.currentTarget.classList.add('dragging');
     document.body.classList.add('resizing-col');
+    // 끄는 동안 머리 줄을 다시 그려 손잡이 요소가 바뀌므로 이동·뗌은 문서에서 받는다(붙잡은 요소가 빠지면 포인터를 놓친다).
     const move = (e) => {
+      // 창 밖에서 버튼을 놓아 뗌을 놓친 경우: 다음 이동에서 끝낸다.
+      if ((e.buttons & 1) === 0) {
+        up();
+        return;
+      }
       // 맨 오른쪽 칸이 최소 폭으로 남을 때까지만 넓힌다.
       let room = rowsWidth() - detailsWidth() - minColumnWidth(order[order.length - 1]);
       for (const c of order) if (c !== column && !isLast(c)) room -= layout.width[c];
@@ -471,59 +554,87 @@ export function createGraph(opts) {
       computeLayout();
       render();
     };
-    const up = () => {
-      target.removeEventListener('pointermove', move);
+    function up() {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      resizing = null;
+      header.querySelector('.gh-resize.dragging')?.classList.remove('dragging');
       document.body.classList.remove('resizing-col');
       opts.prefs.set('graph.widths', { ...widths });
-    };
-    target.addEventListener('pointermove', move);
-    target.addEventListener('pointerup', up, { once: true });
+    }
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
   }
 
+  /**
+   * 머리 칸을 좌우로 끌어 순서를 바꾼다(원본 ColumnReorderer). 끄는 동안 칸 이름 유령이 잡은 자리 그대로 포인터를 따라오고,
+   * 끄는 칸은 흐려지며, 놓일 자리에 머리 줄부터 목록 끝까지 세로선을 긋는다. Esc 면 옮기지 않고 끝낸다.
+   */
   function startReorder(event, column, cell) {
     if (event.button !== 0 || event.target.closest('.gh-resize')) return;
     const startX = event.clientX;
+    const cellRect = cell.getBoundingClientRect();
+    const grab = { x: event.clientX - cellRect.left, y: event.clientY - cellRect.top };
     let ghost = null;
     let marker = null;
-    let to = -1;
-    const headerRect = header.getBoundingClientRect();
+    let target = -1;
+    const cellOf = (c) => header.querySelector(`.gh-cell[data-column="${c}"]`);
     const move = (e) => {
-      if (!ghost && Math.abs(e.clientX - startX) < 4) return;
+      if ((e.buttons & 1) === 0) {
+        end(false);
+        return;
+      }
       if (!ghost) {
-        ghost = el('div', { class: 'gh-ghost', text: HEADER[column].text });
+        if (Math.abs(e.clientX - startX) < DRAG_THRESHOLD) return;
+        // 아이콘으로 바뀐 머리는 글자가 없으므로 유령도 비어 있다(원본과 같다).
+        ghost = el('div', { class: 'gh-ghost', text: cell.classList.contains('icon-only') ? '' : HEADER[column].text });
+        ghost.style.width = `${Math.min(MAX_GHOST_WIDTH, Math.max(MIN_GHOST_WIDTH, cellRect.width))}px`;
+        ghost.style.height = `${header.offsetHeight}px`;
         marker = el('div', { class: 'gh-marker' });
-        header.append(ghost, marker);
+        marker.style.top = `${header.offsetTop}px`;
+        pane.append(marker, ghost);
+        cell.classList.add('source');
+        document.body.classList.add('reordering-col');
       }
-      ghost.style.left = `${e.clientX - headerRect.left - 30}px`;
-      // 놓일 자리: 각 칸 가운데를 기준으로 고른다.
-      const x = e.clientX - headerRect.left;
-      to = order.length;
-      for (let i = 0; i < order.length; i++) {
-        if (x < layout.start[order[i]] + layout.width[order[i]] / 2) {
-          to = i;
-          break;
-        }
-      }
-      const markX = to < order.length ? layout.start[order[to]] : layout.start[order[order.length - 1]] + layout.width[order[order.length - 1]];
-      marker.style.left = `${markX - 1}px`;
+      const paneRect = pane.getBoundingClientRect();
+      ghost.style.left = `${e.clientX - paneRect.left - grab.x}px`;
+      ghost.style.top = `${e.clientY - paneRect.top - grab.y}px`;
+      // 끄는 칸을 뺀 나머지 가운데 포인터보다 왼쪽에 가운데가 있는 수 = 끼울 자리.
+      const others = order.filter((c) => c !== column).map(cellOf).filter(Boolean);
+      const rects = others.map((c) => c.getBoundingClientRect());
+      target = rects.filter((r) => r.left + r.width / 2 < e.clientX).length;
+      const lineX = !rects.length ? cellRect.left : target === 0 ? rects[0].left : rects[target - 1].right;
+      marker.style.left = `${lineX - paneRect.left - 1}px`;
     };
-    const up = () => {
+    const up = () => end(!!ghost);
+    const key = (e) => {
+      if (e.key === 'Escape' && ghost) {
+        e.preventDefault();
+        e.stopPropagation();
+        end(false);
+      }
+    };
+    function end(apply) {
       document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      window.removeEventListener('keydown', key, true);
       ghost?.remove();
       marker?.remove();
-      if (!ghost || to < 0) return;
+      cell.classList.remove('source');
+      document.body.classList.remove('reordering-col');
       const from = order.indexOf(column);
+      if (!apply || target < 0 || from === target) return;
       const next = order.filter((c) => c !== column);
-      next.splice(to > from ? to - 1 : to, 0, column);
-      if (next.join() === order.join()) return;
+      next.splice(Math.min(target, next.length), 0, column);
       order = next;
       opts.prefs.set('graph.order', order);
       hideRefsPopup();
       computeLayout();
       render();
-    };
+    }
     document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up, { once: true });
+    document.addEventListener('pointerup', up);
+    window.addEventListener('keydown', key, true);
     cell.addEventListener('dragstart', (e) => e.preventDefault(), { once: true });
   }
 
@@ -565,6 +676,7 @@ export function createGraph(opts) {
     input.value = wipSubject;
     input.addEventListener('input', () => {
       wipSubject = input.value;
+      sizeWipInput(input);
       opts.onWipSubject?.(wipSubject);
     });
     input.addEventListener('focus', () => {
@@ -594,16 +706,27 @@ export function createGraph(opts) {
     row.classList.toggle('wip-conflict', conflict);
     row.querySelector('.wip-slot').replaceChildren(conflict ? '' : wipCounts());
     row.querySelector('.subject').textContent = conflict ? `충돌 파일 ${conflicts}개가 있어 ${conflictTarget} 에 병합하지 못했습니다` : '';
-    row.querySelector('.gc-message').dataset.tip = conflict ? '' : `${conflictTarget} 의 변경 ${wip.total}개`;
     if (document.activeElement !== row.wipInput && row.wipInput.value !== wipSubject) row.wipInput.value = wipSubject;
+    sizeWipInput(row.wipInput);
     const band = row.querySelector('.band');
     if (headLane) paintBand(band, headLane, headRow >= 0 ? headLane.column : 0);
     else band.style.display = 'none';
   }
 
-  function paintBand(band, lane, column) {
+  /** 작업 중 줄 입력란 폭: 글(비면 자리표시) 길이에 맞추되 80~260 사이(원본 TextField 가 글 길이만큼 늘어난다). */
+  function sizeWipInput(input) {
+    if (!input.isConnected) return;
+    const style = getComputedStyle(input);
+    measure.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const chrome = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((sum, k) => sum + (parseFloat(style[k]) || 0), 0);
+    const text = measure.measureText(input.value || input.placeholder).width;
+    input.style.width = `${Math.min(WIP_INPUT_MAX, Math.max(WIP_INPUT_MIN, Math.ceil(text + chrome + 2)))}px`;
+  }
+
+  /** 줄 띠. 커밋 원 가운데에서 시작하고(원이 덮는다), 속이 빈 stash 상자 줄은 상자 오른쪽 끝에서 시작해 상자 안으로 들어오지 않는다. */
+  function paintBand(band, lane, column, stash = false) {
     band.style.display = '';
-    band.style.left = `${laneOffset(column)}px`;
+    band.style.left = `${laneOffset(column) + (stash ? stashSize().half : 0)}px`;
     band.style.background = laneColor(lane, LANE_TINT_ALPHA);
     band.style.borderRightColor = laneColor(lane);
     band.firstChild.style.background = laneColor(lane, SELECTED_LANE_TINT_ALPHA);
@@ -620,12 +743,13 @@ export function createGraph(opts) {
       if (refs.length > 1) refsCell.append(el('span', { class: 'ref-more', text: `+${refs.length - 1}`, style: { background: laneColor(lane, REF_ALPHA.local) } }));
     }
     const band = el('div', { class: 'band' }, el('div', { class: 'band-glow' }));
-    paintBand(band, lane, lane.column);
-    const tip = `${commit.shortHash}  ${commit.subject}\n${commit.authorName}  ·  ${formatDate(commit.time, true)}`;
-    const row = el('div', { class: `grow${index === headRow ? ' head' : ''}`, 'data-key': commit.hash, 'data-index': index },
+    paintBand(band, lane, lane.column, !!commit.stash);
+    const tip = `${commit.stash ?? commit.shortHash}  ${commit.subject}\n${commit.authorName}  ·  ${formatDate(commit.time, true)}`;
+    const subject = commit.stash ? stashLabel(commit.subject) : commit.subject;
+    const row = el('div', { class: `grow${index === headRow ? ' head' : ''}${commit.stash ? ' stash' : ''}`, 'data-key': commit.hash, 'data-index': index },
       refsCell,
       el('div', { class: 'gc gc-graph' }, band),
-      el('div', { class: 'gc gc-message', 'data-tip': tip }, el('div', { class: 'msg-hl' }), el('span', { class: 'subject', text: commit.subject })),
+      el('div', { class: 'gc gc-message', 'data-tip': tip }, el('div', { class: 'msg-hl' }), el('span', { class: 'subject', text: subject })),
       detailColumns ? el('div', { class: 'gc gc-details' },
         el('span', { class: 'gd-author', style: { width: `${DETAIL_WIDTHS.author}px` }, text: commit.authorName, 'data-tip': commit.authorEmail }),
         el('span', { class: 'gd-sha mono', style: { width: `${DETAIL_WIDTHS.sha}px` }, text: commit.shortHash }),
@@ -653,7 +777,7 @@ export function createGraph(opts) {
       if (key === 'wip') bindWipRow(element);
       else {
         const lane = laneOf(row - offset());
-        paintBand(element.querySelector('.band'), lane, lane.column);
+        paintBand(element.querySelector('.band'), lane, lane.column, !!commits[row - offset()]?.stash);
       }
       element.style.top = `${row * ROW_HEIGHT}px`;
       element.classList.toggle('selected', key === selected);
@@ -665,10 +789,22 @@ export function createGraph(opts) {
         rendered.delete(key);
       }
     }
+    fadeRefNames();
     placeBranchInput();
     draw();
     // 끝에 닿으면 더 읽는다(무한 스크롤).
     if (truncatedHistory && last >= rowCount() - 40) opts.onNeedMore?.();
+  }
+
+  /**
+   * 이름표 이름이 몇 px 만 남으면 말줄임표가 잘려 점만 보이므로, 남은 폭에 따라 글자를 서서히 흐려 0 에서 사라지게 한다(원본 CreateRefPill).
+   * 펼친 목록의 이름은 자르지 않으므로 줄 이름표만 본다.
+   */
+  function fadeRefNames() {
+    for (const name of rows.querySelectorAll('.gc-refs .ref-name')) {
+      const width = name.getBoundingClientRect().width;
+      name.style.opacity = String(Math.min(1, Math.max(0, (width - NAME_FADE_START) / NAME_FADE_WIDTH)));
+    }
   }
 
   // ── 그리기 ──
@@ -745,20 +881,25 @@ export function createGraph(opts) {
       const xc = edgeX(childLane.column);
       const xp = edgeX(parentLane.column);
       const dim = searchMatches && !(searchMatches.has(edge.child) && searchMatches.has(edge.parent)) ? 0.28 : 1;
+      // stash 는 상자 밑에서 만든 자리까지 점선.
+      const stash = !!commits[edge.child].stash;
+      const ys = stash ? yc + stashSize().half : yc;
       // 병합으로 들어오는 선은 들어오는 가지(부모) 색, 나머지는 새 커밋 쪽 가지 색.
       ctx.strokeStyle = laneColor(edge.merge ? parentLane : childLane, alpha * dim);
+      if (stash) setStashDash(ctx, true);
       ctx.beginPath();
-      ctx.moveTo(xc, yc);
+      ctx.moveTo(xc, ys);
       if (Math.abs(xc - xp) < 0.5) {
         ctx.lineTo(xp, yp);
       } else {
         // 가로로 나가 둥근 모서리에서 세로로 꺾는다. 병합은 병합 커밋 줄에서 옆 가지로, 갈라짐은 부모 줄에서 부모로.
-        const radius = Math.min(EDGE_CORNER_RADIUS, Math.abs(xp - xc), yp - yc);
-        const [cx, cy] = edge.merge ? [xp, yc] : [xc, yp];
+        const radius = Math.max(0, Math.min(EDGE_CORNER_RADIUS, Math.abs(xp - xc), yp - ys));
+        const [cx, cy] = edge.merge ? [xp, ys] : [xc, yp];
         ctx.arcTo(cx, cy, xp, yp, radius);
         ctx.lineTo(xp, yp);
       }
       ctx.stroke();
+      if (stash) setStashDash(ctx, false);
     }
     // 읽은 범위 밖으로 이어지는 히스토리: 아래로 짧게 흐린 선.
     ctx.strokeStyle = colors.truncated;
@@ -766,11 +907,52 @@ export function createGraph(opts) {
       if (!nodes[i].truncated) continue;
       const x = X(laneOf(i).column);
       const y = Y(i + offset());
+      const stash = !!commits[i].stash;
+      if (stash) setStashDash(ctx, true);
       ctx.beginPath();
-      ctx.moveTo(x, y);
+      ctx.moveTo(x, stash ? y + stashSize().half : y);
       ctx.lineTo(x, y + ROW_HEIGHT * 0.8);
       ctx.stroke();
+      if (stash) setStashDash(ctx, false);
     }
+  }
+
+  const stashSize = () => (showAvatars ? STASH : STASH_SMALL);
+
+  /** stash 선: 끝이 둥글면 점이 이어 붙으므로 각진 점선으로 긋고, 끝나면 되돌린다. */
+  function setStashDash(ctx, on) {
+    ctx.setLineDash(on ? STASH_DASH : []);
+    ctx.lineCap = on ? 'butt' : 'round';
+  }
+
+  /**
+   * stash 하나: 점선 상자 안에 받은편지함 그림. 점은 네 모서리에 하나씩 오도록 변마다 고르게 놓는다.
+   * 안은 칠하지 않는다(줄 띠 색이 비쳐 보이게) — 선은 상자 밑에서 시작한다.
+   */
+  function drawStash(ctx, x, y, color) {
+    const { half, dot, step, icon: size, iconLine } = stashSize();
+    const run = half * 2 - dot;
+    const count = Math.max(1, Math.round(run / step));
+    const gap = run / count;
+    const [left, top, right, bottom] = [x - half, y - half, x + half - dot, y + half - dot];
+    ctx.fillStyle = color;
+    for (let i = 0; i < count; i++) {
+      const d = i * gap;
+      ctx.fillRect(left + d, top, dot, dot);
+      ctx.fillRect(right, top + d, dot, dot);
+      ctx.fillRect(right - d, bottom, dot, dot);
+      ctx.fillRect(left, bottom - d, dot, dot);
+    }
+    if (!INBOX) return;
+    ctx.save();
+    ctx.translate(x - size / 2, y - size / 2);
+    ctx.scale(size / 20, size / 20);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = (iconLine * 20) / size;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.stroke(INBOX);
+    ctx.restore();
   }
 
   function nodeTopRadius(index) {
@@ -859,6 +1041,10 @@ export function createGraph(opts) {
       const laneRgbNow = laneRgb(lane);
       const isHead = i === headRow;
       const isMerge = commit.parents.length > 1;
+      if (commit.stash) {
+        drawStash(ctx, x, y, dim(laneRgbNow));
+        continue;
+      }
       if (showAvatars && !isMerge) {
         if (isHead) {
           fillCircle(ctx, x, y, AVATAR_RADIUS + 4, dim(colors.head));
@@ -887,8 +1073,10 @@ export function createGraph(opts) {
       }
       if (isHead) fillCircle(ctx, x, y, 8, dim(colors.head));
       fillCircle(ctx, x, y, 6.5, rgba(colors.bg));
-      fillCircle(ctx, x, y, 5, isMerge ? rgba(colors.bg) : dim(laneRgbNow));
-      if (isMerge) {
+      // 아바타를 보일 때 병합 커밋은 GitKraken 처럼 열 색으로 채운 작은 점. 아바타가 없으면 일반 커밋 점과 가르게 속이 빈 고리.
+      const ring = isMerge && !showAvatars;
+      fillCircle(ctx, x, y, 5, ring ? rgba(colors.bg) : dim(laneRgbNow));
+      if (ring) {
         ctx.strokeStyle = dim(laneRgbNow);
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -1000,7 +1188,7 @@ export function createGraph(opts) {
   function beginBranchInput(hash, { validate, submit }) {
     cancelBranchInput();
     hideRefsPopup();
-    if (!reveal(hash, false)) return false;
+    if (!reveal(hash)) return false;
     const input = el('input', { class: 'branch-input field', placeholder: '브랜치 이름', spellcheck: 'false', autocomplete: 'off' });
     branchInput = { hash, element: input, validate, submit };
     const check = () => {
@@ -1089,9 +1277,15 @@ export function createGraph(opts) {
   rows.addEventListener('click', (event) => {
     const row = event.target.closest('.grow');
     if (!row || event.target.closest('input')) return;
-    // 고른 줄을 다시 누르면 선택을 푼다(오른쪽 패널을 접는다).
-    if (row.dataset.key === selected && event.detail === 1) select(null);
-    else if (row.dataset.key !== selected) select(row.dataset.key);
+    if (row.dataset.key !== selected) {
+      select(row.dataset.key);
+      return;
+    }
+    // 고른 줄을 다시 누르면(빠르게 이어 눌러도) 선택을 풀고 오른쪽 패널을 접는다(원본 OnListPointerDown).
+    // 이름표 칸(두 번 눌러 전환한다)과 수식키(Shift·Ctrl·Alt·⌘)를 누른 채 누르면 풀지 않는다.
+    // toggleOff 가 false 면(Fork 탐색기 — 아래 상세 칸이 늘 있다) 풀지 않는다.
+    const modified = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
+    if (opts.toggleOff !== false && !modified && !event.target.closest('.gc-refs')) select(null);
   });
   scroll.addEventListener('keydown', (event) => {
     if (event.target !== scroll) return;
@@ -1123,7 +1317,14 @@ export function createGraph(opts) {
     setWipSubject(text) {
       wipSubject = text ?? '';
       const row = rendered.get('wip');
-      if (row && document.activeElement !== row.wipInput) row.wipInput.value = wipSubject;
+      if (row && document.activeElement !== row.wipInput) {
+        row.wipInput.value = wipSubject;
+        sizeWipInput(row.wipInput);
+      }
+    },
+    /** 다시 읽기 시작할 때 요약 줄을 "불러오는 중…" 으로(원본 GraphWorkspaceView.Load). 다 읽으면 setData 가 바꾼다. */
+    setLoading() {
+      summary.firstChild.textContent = '불러오는 중…';
     },
     focusWip() {
       reveal('wip', false);

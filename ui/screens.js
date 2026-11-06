@@ -1,6 +1,8 @@
 // 큰 창들: clone, 설정(일반·SSL 인증서·로그인), GitHub 가 아닌 서버 로그인.
 
 import { el } from './util.js';
+import { icon } from './icons.js';
+import { onProgress, progressText } from './progress.js';
 import { showMenu } from './dialogs.js';
 
 /** 빈 모달 틀. close(value) 로 닫으면 그 값으로 풀린다. */
@@ -42,7 +44,7 @@ function checkbox(checked, label, hint) {
   return { box, row: el('label', { class: 'check modal-check' }, box, label, hint ? el('span', { class: 'muted small', text: ` ${hint}` }) : null) };
 }
 
-/** clone 창. 받으면 열린 저장소 정보, 취소하면 null. */
+/** clone 창. 받으면 열린 레포지토리 정보, 취소하면 null. */
 export function cloneDialog({ call, cloneDir, withLogin, showError }) {
   return modal('wide', (dialog, close) => {
     const url = input('', { placeholder: 'https://git.company.com/team/game.git 또는 user@nas.local:repos/game.git' });
@@ -68,6 +70,15 @@ export function cloneDialog({ call, cloneDir, withLogin, showError }) {
 
     for (const n of [url, parent, name]) n.addEventListener('input', updateTarget);
     const error = el('div', { class: 'modal-error', hidden: true });
+    // 받는 동안 git 진행(받기 45% 등)을 보인다 — 큰 레포지토리는 오래 걸린다.
+    const meterFill = el('div', { class: 'tb-progress-fill' });
+    const meterText = el('div', { class: 'clone-progress-text', text: '서버에 연결하는 중…' });
+    const meter = el('div', { class: 'clone-progress', hidden: true }, meterText, el('div', { class: 'clone-progress-bar tb-progress' }, meterFill));
+    const showProgress = (p) => {
+      meterText.textContent = progressText(p);
+      meter.querySelector('.clone-progress-bar').classList.toggle('known', p.percent != null);
+      meterFill.style.width = p.percent != null ? `${p.percent}%` : '';
+    };
     const ok = el('button', { class: 'btn primary', text: 'Clone' });
     ok.addEventListener('click', async () => {
       if (!url.value.trim() || !name.value.trim() || !parent.value.trim()) {
@@ -78,6 +89,11 @@ export function cloneDialog({ call, cloneDir, withLogin, showError }) {
       ok.disabled = true;
       ok.textContent = '받는 중…';
       error.hidden = true;
+      meterText.textContent = '서버에 연결하는 중…';
+      meterFill.style.width = '';
+      meter.querySelector('.clone-progress-bar').classList.remove('known');
+      meter.hidden = false;
+      const stop = onProgress(showProgress);
       try {
         const dest = `${parent.value.replace(/[\\/]$/, '')}${sep}${name.value.trim()}`;
         const repo = await withLogin(() => call('clone', { url: url.value.trim(), dest }));
@@ -86,14 +102,18 @@ export function cloneDialog({ call, cloneDir, withLogin, showError }) {
         showError(e);
         ok.disabled = false;
         ok.textContent = 'Clone';
+        meter.hidden = true;
+      } finally {
+        stop();
       }
     });
     dialog.append(
-      el('div', { class: 'modal-title', text: '저장소 Clone' }),
-      field('저장소 주소', url),
+      el('div', { class: 'modal-title', text: '레포지토리 Clone' }),
+      field('레포지토리 주소', url),
       el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: '받을 폴더' }), el('div', { class: 'row' }, parent, browse)),
       field('폴더 이름', name),
       target,
+      meter,
       error,
       el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '취소', onclick: () => close(null) }), ok));
     url.focus();
@@ -174,7 +194,8 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
 
     // ── 동기화
     const autoFetchOn = checkbox(s.autoFetchMinutes > 0, '자동 페치');
-    const autoFetch = input(String(s.autoFetchMinutes || 10), { type: 'number', min: 1, max: 1440 });
+    // 원본 GitAutoFetch: 1~120분.
+    const autoFetch = input(String(Math.min(120, s.autoFetchMinutes || 10)), { type: 'number', min: 1, max: 120 });
     autoFetchOn.box.addEventListener('change', () => { autoFetch.disabled = !autoFetchOn.box.checked; });
     autoFetch.disabled = !autoFetchOn.box.checked;
     const pullMode = select(PULL_MODES, s.pullMode);
@@ -183,7 +204,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
 
     // ── diff
     const diffView = select([{ value: 'hunk', label: 'Hunk — 바뀐 곳과 앞뒤 몇 줄' }, { value: 'inline', label: 'Inline — 파일 전체' }, { value: 'split', label: 'Split — 파일 전체를 나란히' }], p('diff.view', 'hunk'));
-    const context = input(String(p('diff.context', 3)), { type: 'number', min: 0, max: 50 });
+    const context = input(String(p('diff.context', 3)), { type: 'number', min: 0, max: 100 });
     const ignoreWs = checkbox(p('diff.ignoreWhitespace', false), '공백 바뀜 무시', '(켜면 줄 단위 Stage 를 끕니다)');
     const algorithm = select([{ value: '', label: 'git 기본값' }, { value: 'myers', label: 'Myers' }, { value: 'minimal', label: 'Minimal' }, { value: 'patience', label: 'Patience' }, { value: 'histogram', label: 'Histogram' }], p('diff.algorithm', ''));
     const editor = input(p('editor', ''), { placeholder: 'code -g {file}:{line}  (비우면 VS Code, 없으면 기본 프로그램)' });
@@ -227,7 +248,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
         }
       },
     }) : null;
-    const testUrl = input('', { placeholder: '비우면 열린 저장소의 원격' });
+    const testUrl = input('', { placeholder: '비우면 열린 레포지토리의 원격' });
     const testResult = el('div', { class: 'small' });
     const sslState = () => ({ verify: verify.box.checked, caFile: caFile.value.trim(), useSystemStore: systemStore.box.checked, skipRevocationCheck: skipRevoke.box.checked });
     function updateSsl() {
@@ -285,7 +306,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     renderGithub();
 
     const save = async () => {
-      const minutes = autoFetchOn.box.checked ? Math.max(1, Math.min(1440, parseInt(autoFetch.value, 10) || 10)) : 0;
+      const minutes = autoFetchOn.box.checked ? Math.max(1, Math.min(120, parseInt(autoFetch.value, 10) || 10)) : 0;
       try {
         const saved = await call('setSettings', {
           theme: theme.value, pullMode: pullMode.value, diffLayout: diffView.value === 'split' ? 'split' : 'inline', autoFetchMinutes: minutes, gitPath: gitPath.value, ssl: sslState(),
@@ -293,7 +314,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
         const values = {
           layout: layout.value, explorer: explorer.value, language: language.value, 'ui.scale': Number(scale.value), 'ui.fontSize': Number(fontSize.value),
           'sync.focusRefresh': focusRefresh.box.checked, 'sync.watch': watch.box.checked,
-          'diff.view': diffView.value, 'diff.context': Math.max(0, Math.min(50, parseInt(context.value, 10) || 3)), 'diff.ignoreWhitespace': ignoreWs.box.checked,
+          'diff.view': diffView.value, 'diff.context': Math.max(0, Math.min(100, Number.isNaN(parseInt(context.value, 10)) ? 3 : parseInt(context.value, 10))), 'diff.ignoreWhitespace': ignoreWs.box.checked,
           'diff.algorithm': algorithm.value, editor: editor.value.trim(), difftool: difftool.value.trim(),
           'graph.avatars': avatars.box.checked, 'graph.count': Math.max(500, parseInt(count.value, 10) || 5000), 'rebase.stop': stopRebase.box.checked, 'error.mode': errorMode.value,
         };
@@ -309,7 +330,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     const sectionEl = (id, title, ...children) => el('section', { class: 'settings-section', 'data-section': id }, el('h3', { text: title }), children);
     const sections = [
       sectionEl('general', '일반', field('테마', theme), field('배치', layout), field('탐색기 모양', explorer), field('언어', language), el('div', { class: 'row' }, field('UI 배율', scale), field('글꼴 크기', fontSize))),
-      sectionEl('sync', '동기화', autoFetchOn.row, field('자동 페치 간격 (분)', autoFetch, '다른 곳에서 푸시한 커밋을 미리 받아 와 ↓ 로 보여 줍니다.'), field('풀 방식', pullMode), focusRefresh.row, watch.row),
+      sectionEl('sync', '동기화', autoFetchOn.row, field('자동 페치 간격 (분)', autoFetch, '자동 fetch 사이의 시간(1~120분). 손으로 Fetch 하면 그때부터 다시 셉니다.'), field('풀 방식', pullMode), focusRefresh.row, watch.row),
       sectionEl('diff', 'diff', field('기본 보기', diffView), field('Hunk 보기의 문맥 줄 수', context), ignoreWs.row, field('diff 알고리즘', algorithm), field('외부 편집기', editor, '{file} 과 {line} 은 파일 경로와 줄 번호로 바뀝니다.'), field('외부 diff 도구', difftool)),
       sectionEl('graph', '그래프', avatars.row, field('처음 읽는 커밋 수', count, '끝에 닿으면 더 읽습니다.'), stopRebase.row),
       sectionEl('errors', '오류 표시', field('오류 대화상자 기본값', errorMode)),
@@ -323,31 +344,55 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
         el('div', { class: 'muted small', text: 'https 서버(사내 GitLab 등)의 계정은 이 PC 의 자격 증명 저장소에 들어갑니다. 지우려면 키체인 접근·자격 증명 관리자에서 지워 주세요.' })),
     ];
     const body = el('div', { class: 'settings-body' }, sections);
-    const nav = el('nav', { class: 'settings-nav' }, sections.map((sec) => el('button', {
+    // 왼쪽 목록: 누른 칸을 고른 채로 둔다. 맨 아래의 짧은 칸(git·로그인)은 머리가 위에 닿을 만큼 스크롤되지 않으므로
+    // 스크롤 위치만으로 고르면 앞 칸이 계속 골라진다 — 누른 뒤에는 사용자가 직접 스크롤할 때까지 누른 칸을 지킨다.
+    let picked = null;
+    const mark = (active) => nav.querySelectorAll('.settings-tab').forEach((b, i) => b.classList.toggle('on', i === active));
+    const nav = el('nav', { class: 'settings-nav' }, sections.map((sec, i) => el('button', {
       class: 'settings-tab', text: sec.querySelector('h3').textContent,
-      onclick: () => sec.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+      onclick: () => {
+        picked = i;
+        mark(i);
+        sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      },
     })));
+    const release = () => { picked = null; };
+    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) body.addEventListener(type, release, { passive: true });
     body.addEventListener('scroll', () => {
+      if (picked != null) return;
       const top = body.scrollTop;
       let active = 0;
       sections.forEach((sec, i) => { if (sec.offsetTop - body.offsetTop - 20 <= top) active = i; });
-      nav.querySelectorAll('.settings-tab').forEach((b, i) => b.classList.toggle('on', i === active));
+      // 끝까지 내렸으면 마지막 칸.
+      if (top + body.clientHeight >= body.scrollHeight - 2) active = sections.length - 1;
+      mark(active);
     });
     dialog.append(
       el('div', { class: 'modal-title', text: '설정' }),
       el('div', { class: 'settings-layout' }, nav, body),
       el('div', { class: 'modal-actions' }, el('button', { class: 'btn', text: '취소', onclick: () => close(null) }), el('button', { class: 'btn primary', text: '저장', onclick: save })));
-    if (section) requestAnimationFrame(() => body.querySelector(`[data-section="${section}"]`)?.scrollIntoView({ block: 'start' }));
+    if (section) {
+      const at = sections.findIndex((sec) => sec.dataset.section === section);
+      if (at >= 0) {
+        picked = at;
+        mark(at);
+        requestAnimationFrame(() => sections[at].scrollIntoView({ block: 'start' }));
+      }
+    }
     body.dispatchEvent(new Event('scroll'));
   });
 }
 
-/** 탭 막대. tabs: [{path, name}], active: 지금 열린 경로(없으면 null). */
-export function renderTabs(container, { tabs, active, onOpen, onClose, onNew }) {
+/**
+ * 탭 막대(GitKraken 모양). tabs: [{path, name}], active: 지금 열린 경로(없으면 null).
+ * macOS 는 이 막대가 창 제목 막대를 겸한다 — 빈 곳을 끌면 창이 움직이고, 두 번 누르면 창을 키운다.
+ */
+export function renderTabs(container, { tabs, active, onOpen, onClose, onNew, onBrowse }) {
   container.replaceChildren(
+    el('button', { class: 'tab-folder', 'data-tip': '레포지토리 열기…', onclick: onBrowse }, icon('folder', 16)),
     ...tabs.map((tab) => el('div', {
       class: `tab${tab.path === active ? ' active' : ''}`,
-      title: tab.path,
+      'data-tip': tab.path,
       onclick: () => tab.path !== active && onOpen(tab.path),
       onauxclick: (event) => { if (event.button === 1) onClose(tab.path); },
       oncontextmenu: (event) => {
@@ -357,7 +402,21 @@ export function renderTabs(container, { tabs, active, onOpen, onClose, onNew }) 
           { label: '경로 복사', action: () => navigator.clipboard?.writeText(tab.path) },
         ]);
       },
-    }, el('span', { class: 'tab-name', text: tab.name }),
-    el('button', { class: 'tab-close', title: '탭 닫기', text: '×', onclick: (event) => { event.stopPropagation(); onClose(tab.path); } }))),
-    el('button', { class: `tab-new${active ? '' : ' active'}`, title: '저장소 열기·Clone', text: '+', onclick: onNew }));
+    }, icon('branch', 14, 'tab-icon'),
+    el('span', { class: 'tab-name', text: tab.name }),
+    el('button', { class: 'tab-close', 'data-tip': '탭 닫기', onclick: (event) => { event.stopPropagation(); onClose(tab.path); } }, icon('close', 10)))),
+    el('button', { class: `tab-new${active ? '' : ' active'}`, 'data-tip': '새 탭 — 레포지토리 열기·Clone', onclick: onNew }, icon('plus', 16)),
+    el('div', { class: 'tabs-drag' }));
+}
+
+/** macOS: 탭 막대의 빈 곳(막대 자체·끝의 여백)을 끌면 창을 옮기고, 두 번 누르면 창을 키운다. */
+export function bindTitlebar(container, call) {
+  const empty = (event) => event.target === container || event.target.classList?.contains('tabs-drag');
+  container.addEventListener('mousedown', (event) => {
+    if (event.button !== 0 || event.detail > 1 || !empty(event)) return;
+    call('windowDrag').catch(() => {});
+  });
+  container.addEventListener('dblclick', (event) => {
+    if (empty(event)) call('windowZoom').catch(() => {});
+  });
 }

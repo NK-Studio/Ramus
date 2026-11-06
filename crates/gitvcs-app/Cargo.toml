@@ -17,6 +17,7 @@ wry = "0.57"
 rfd = "0.17"
 notify = "8"
 dirs = "7"
+muda = "0.21"
 
 [dev-dependencies]
 tempfile = "3"

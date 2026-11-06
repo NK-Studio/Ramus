@@ -80,12 +80,107 @@ pub struct TextFile {
     /// utf-8, utf-16le, utf-16be
     pub encoding: String,
     pub bom: bool,
-    /// "\n" 또는 "\r\n"
+    /// 가장 흔한 줄 끝("\n"·"\r\n"·"\r"). 새로 생긴 줄에 쓴다.
     pub eol: String,
+    /// 줄마다 원래 줄 끝(줄 수 − 1 개). 저장할 때 고치지 않은 줄은 이 줄 끝을 그대로 쓴다(원본 GitTextFile.Separators).
+    #[serde(default)]
+    pub separators: Vec<String>,
     /// 저장할 때 다른 곳에서 바뀌었는지 확인한다(밀리초).
     pub modified: u64,
     /// 들여쓰기 짐작: "\t" 또는 공백 n개.
     pub indent: String,
+}
+
+/// 글을 줄과 줄 끝으로 나눈다. \r\n · \n · 홀로 있는 \r 을 모두 줄 끝으로 본다(원본 GitTextFile.Split).
+pub fn split_lines(raw: &str) -> (Vec<String>, Vec<String>) {
+    let mut lines = Vec::new();
+    let mut separators = Vec::new();
+    let bytes = raw.as_bytes();
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c != b'\n' && c != b'\r' {
+            i += 1;
+            continue;
+        }
+        lines.push(raw[start..i].to_string());
+        if c == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+            separators.push("\r\n".to_string());
+            i += 1;
+        } else {
+            separators.push(if c == b'\r' { "\r" } else { "\n" }.to_string());
+        }
+        i += 1;
+        start = i;
+    }
+    lines.push(raw[start..].to_string());
+    (lines, separators)
+}
+
+/// 가장 흔한 줄 끝. 줄 끝이 없으면 "\n".
+fn most_common(separators: &[String]) -> String {
+    let count = |s: &str| separators.iter().filter(|x| x.as_str() == s).count();
+    let (crlf, lf, cr) = (count("\r\n"), count("\n"), count("\r"));
+    if crlf == 0 && lf == 0 && cr == 0 {
+        "\n".into()
+    } else if crlf >= lf && crlf >= cr {
+        "\r\n".into()
+    } else if lf >= cr {
+        "\n".into()
+    } else {
+        "\r".into()
+    }
+}
+
+/// 고친 줄들의 줄 끝: 앞·뒤로 그대로인 줄은 원래 줄 끝을, 새로 쓴 줄은 가장 흔한 줄 끝을 쓴다(원본 GitTextFile.ComposeSeparators).
+pub fn compose_separators(old_lines: &[&str], old_separators: &[String], new_lines: &[&str], default: &str) -> Vec<String> {
+    let (old_count, new_count) = (old_lines.len(), new_lines.len());
+    let limit = old_count.min(new_count);
+    let mut prefix = 0;
+    while prefix < limit && old_lines[prefix] == new_lines[prefix] {
+        prefix += 1;
+    }
+    let mut suffix = 0;
+    while suffix < limit - prefix && old_lines[old_count - 1 - suffix] == new_lines[new_count - 1 - suffix] {
+        suffix += 1;
+    }
+    let shift = new_count as isize - old_count as isize;
+    (0..new_count.saturating_sub(1))
+        .map(|j| {
+            let kept = if j < prefix {
+                old_separators.get(j)
+            } else if j + 1 >= new_count - suffix {
+                // 다음 줄(j + 1)이 뒤쪽의 같은 줄이면 원래 그 줄 앞의 줄 끝.
+                let old = j as isize - shift;
+                if old >= 0 { old_separators.get(old as usize) } else { None }
+            } else {
+                None
+            };
+            kept.cloned().unwrap_or_else(|| default.to_string())
+        })
+        .collect()
+}
+
+/// 편집기 글(\n 으로 나눈 줄)을 원래 줄 끝을 살려 다시 잇는다.
+pub fn join_with_separators(text: &str, original: &TextFile) -> String {
+    let old_lines: Vec<&str> = original.text.split('\n').collect();
+    let new_lines: Vec<&str> = text.split('\n').collect();
+    // 예전 형식(줄 끝 목록 없음)이면 모든 줄에 eol 을 쓴다.
+    let old_separators: Vec<String> = if original.separators.is_empty() && old_lines.len() > 1 {
+        vec![original.eol.clone(); old_lines.len() - 1]
+    } else {
+        original.separators.clone()
+    };
+    let separators = compose_separators(&old_lines, &old_separators, &new_lines, &original.eol);
+    let mut out = String::with_capacity(text.len() + new_lines.len());
+    for (i, line) in new_lines.iter().enumerate() {
+        out.push_str(line);
+        if let Some(sep) = separators.get(i) {
+            out.push_str(sep);
+        }
+    }
+    out
 }
 
 pub fn decode(bytes: &[u8]) -> Option<(String, String, bool)> {
@@ -113,6 +208,11 @@ pub fn decode(bytes: &[u8]) -> Option<(String, String, bool)> {
 
 pub fn encode(text: &str, encoding: &str, bom: bool, eol: &str) -> Vec<u8> {
     let text = if eol == "\r\n" { text.replace("\r\n", "\n").replace('\n', "\r\n") } else { text.replace("\r\n", "\n") };
+    encode_bytes(&text, encoding, bom)
+}
+
+/// 줄 끝까지 다 들어간 글을 인코딩·BOM 대로 바이트로.
+pub fn encode_bytes(text: &str, encoding: &str, bom: bool) -> Vec<u8> {
     let mut out = Vec::new();
     match encoding {
         "utf-16le" | "utf-16be" => {
@@ -132,6 +232,13 @@ pub fn encode(text: &str, encoding: &str, bom: bool, eol: &str) -> Vec<u8> {
         }
     }
     out
+}
+
+/// 읽은 글(줄 끝 그대로)로 편집기에 줄 판을 만든다.
+pub fn text_file(raw: &str, encoding: String, bom: bool, modified: u64) -> TextFile {
+    let (lines, separators) = split_lines(raw);
+    let text = lines.join("\n");
+    TextFile { indent: guess_indent(&text), eol: most_common(&separators), text, encoding, bom, separators, modified }
 }
 
 /// 들여쓰기 규칙 짐작: 탭으로 시작하는 줄이 더 많으면 탭, 아니면 가장 흔한 공백 수(2·4).
@@ -221,23 +328,26 @@ impl Repository {
         let full = self.safe_path(path)?;
         let bytes = std::fs::read(&full).map_err(|e| GitError::new(format!("{path} 를 읽지 못했습니다: {e}")))?;
         let (raw, encoding, bom) = decode(&bytes).ok_or_else(|| GitError::new("UTF-8·UTF-16 이 아닌 파일입니다. 외부 편집기로 열어 주세요."))?;
-        let crlf = raw.matches("\r\n").count();
-        let lf = raw.matches('\n').count() - crlf;
-        let eol = if crlf > lf { "\r\n" } else { "\n" };
-        let text = raw.replace("\r\n", "\n");
-        Ok(TextFile { indent: guess_indent(&text), text, encoding, bom, eol: eol.into(), modified: modified_ms(&full) })
+        Ok(text_file(&raw, encoding, bom, modified_ms(&full)))
     }
 
-    /// 편집한 글을 원래 인코딩·BOM·줄 끝으로 쓴다. `expected` 와 지금 수정 시각이 다르면(다른 곳에서 바뀜) `force` 가 아니면 거절한다.
+    /// 편집한 글을 쓰고 새 수정 시각을 돌려준다([`Self::write_text_file`] 참고).
     pub fn write_text(&self, path: &str, text: &str, original: &TextFile, force: bool) -> Result<u64> {
+        self.write_text_file(path, text, original, force).map(|f| f.modified)
+    }
+
+    /// 편집한 글을 원래 인코딩·BOM 과 줄마다의 줄 끝으로 쓴다. `original` 과 지금 수정 시각이 다르면(다른 곳에서 바뀜) `force` 가 아니면 거절한다.
+    /// 방금 쓴 판을 돌려준다 — 다음 저장은 이 판과 견준다(원본 GitDiffPanel.WriteEditAsync).
+    pub fn write_text_file(&self, path: &str, text: &str, original: &TextFile, force: bool) -> Result<TextFile> {
         let full = self.safe_path(path)?;
         if !force && modified_ms(&full) != original.modified {
             return Err(GitError::new("CHANGED_ON_DISK"));
         }
-        let bytes = encode(text, &original.encoding, original.bom, &original.eol);
+        let joined = join_with_separators(text, original);
+        let bytes = encode_bytes(&joined, &original.encoding, original.bom);
         let tmp = full.with_extension("gitvcs-save");
         std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &full)).map_err(|e| GitError::new(format!("{path} 를 쓰지 못했습니다: {e}")))?;
-        Ok(modified_ms(&full))
+        Ok(text_file(&joined, original.encoding.clone(), original.bom, modified_ms(&full)))
     }
 }
 
@@ -254,6 +364,38 @@ mod tests {
             assert_eq!(text, "가나\r\n다\r\n");
         }
         assert!(decode(&[0x41, 0x00, 0x42]).is_none());
+    }
+
+    #[test]
+    fn keeps_mixed_line_endings() {
+        // 줄마다 다른 줄 끝: 고친 줄 둘레만 바뀌고 나머지는 원래 줄 끝 그대로.
+        let file = text_file("a\r\nb\nc\rd\r\ne", "utf-8".into(), false, 0);
+        assert_eq!(file.text, "a\nb\nc\nd\ne");
+        assert_eq!(file.separators, ["\r\n", "\n", "\r", "\r\n"]);
+        assert_eq!(file.eol, "\r\n");
+        assert_eq!(join_with_separators("a\nb\nc\nd\ne", &file), "a\r\nb\nc\rd\r\ne");
+        assert_eq!(join_with_separators("a\nB\nc\nd\ne", &file), "a\r\nB\nc\rd\r\ne");
+        // 가운데에 줄을 넣으면 앞·뒤 줄은 원래 줄 끝, 새 줄은 뒤따르는 원래 줄 앞의 줄 끝(\n)을 받는다.
+        assert_eq!(join_with_separators("a\nb\nnew\nc\nd\ne", &file), "a\r\nb\nnew\nc\rd\r\ne");
+        // 앞·뒤와 겹치지 않는 새 줄들은 가장 흔한 줄 끝(\r\n).
+        assert_eq!(join_with_separators("X\nY\nZ", &file), "X\r\nY\r\nZ");
+        // 줄을 지워도 뒤쪽 줄 끝은 따라간다.
+        assert_eq!(join_with_separators("a\nc\nd\ne", &file), "a\r\nc\rd\r\ne");
+    }
+
+    #[test]
+    fn line_ending_edge_cases() {
+        let lone = text_file("x\ry\r", "utf-8".into(), false, 0);
+        assert_eq!(lone.text, "x\ny\n");
+        assert_eq!(lone.eol, "\r");
+        assert_eq!(join_with_separators("x\ny\nz", &lone), "x\ry\rz");
+        let none = text_file("only", "utf-8".into(), false, 0);
+        assert!(none.separators.is_empty());
+        assert_eq!(none.eol, "\n");
+        assert_eq!(join_with_separators("only\nmore", &none), "only\nmore");
+        // 줄 끝 목록이 없는 예전 형식은 eol 하나로.
+        let old = TextFile { text: "a\nb".into(), encoding: "utf-8".into(), bom: false, eol: "\r\n".into(), separators: Vec::new(), modified: 0, indent: "    ".into() };
+        assert_eq!(join_with_separators("a\nb\nc", &old), "a\r\nb\r\nc");
     }
 
     #[test]
@@ -286,6 +428,8 @@ pub struct WorkspaceEntry {
     pub size: Option<u64>,
     /// 유닉스 초.
     pub modified: Option<i64>,
+    /// 만든 날짜(유닉스 초). 파일 시스템이 모르면 없다.
+    pub created: Option<i64>,
 }
 
 /// 탐색 화면에 쓸 히스토리 범위.
@@ -316,7 +460,8 @@ impl Repository {
             args.push(format!("--since={}", q.since));
         }
         if q.all {
-            args.extend(["--exclude=refs/stash".into(), "--all".into()]);
+            // 원본처럼 --all 그대로(refs/stash 도 든다).
+            args.push("--all".into());
         }
         args.push("HEAD".into());
         args.push("--".into());
@@ -334,7 +479,7 @@ impl Repository {
         Ok(crate::repo::History { commits, graph, head, truncated })
     }
 
-    /// 저장소의 파일 표: 추적 중·새 파일(무시한 파일은 `ignored` 일 때), 상태·크기·수정 시각.
+    /// 레포지토리의 파일 표: 추적 중·새 파일(무시한 파일은 `ignored` 일 때), 상태·크기·수정 시각.
     pub fn workspace(&self, ignored: bool) -> Result<Vec<WorkspaceEntry>> {
         let st = self.status()?;
         let mut state_of: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -360,6 +505,7 @@ impl Repository {
                 let meta = self.root().join(&path).metadata().ok();
                 WorkspaceEntry {
                     size: meta.as_ref().filter(|m| m.is_file()).map(|m| m.len()),
+                    created: meta.as_ref().and_then(|m| m.created().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64),
                     modified: meta.and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64),
                     path,
                     state,

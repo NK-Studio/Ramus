@@ -4,18 +4,21 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --git-bg: #191a1c;
-  --git-sidebar-bg: #26282c;
+  /* 가운데(그래프·목록) 값. 양쪽 패널(사이드바·오른쪽 패널)은 아래 .sidebar·.detail 에서 한 단계 밝게 덮어쓴다(원본과 같다). */
+  --git-sidebar-bg: #191a1c;
   --git-toolbar-bg: #191a1c;
-  --git-header-bg: #26282c;
-  --git-list-bg: #26282c;
+  --git-header-bg: #191a1c;
+  --git-list-bg: #191a1c;
   --git-text: #d1d3d9;
   --git-text-strong: #ffffff;
   --git-text-muted: #80838a;
   --git-text-secondary: #a8abb2;
   --git-border: #33353b;
-  --git-divider: #33353b;
-  --git-hover: #33353b;
-  --git-pressed: #3c3f45;
+  --git-titlebar-bg: #0f1012;
+  --git-titlebar-hover: #1d1e21;
+  --git-divider: #26282c;
+  --git-hover: #26282c;
+  --git-pressed: #33353b;
   --git-selected: #2a4371;
   --git-selected-text: #d1d3d9;
   --git-current-row: #303238;
@@ -32,14 +35,14 @@
   --git-danger-soft: rgba(219, 92, 92, 0.26);
   --git-warning-soft: rgba(214, 174, 88, 0.22);
   --git-badge-bg: #33353b;
-  --git-field-bg: #26282c;
+  --git-field-bg: #191a1c;
   --git-field-border: #40434a;
-  --git-button-bg: #26282c;
+  --git-button-bg: #191a1c;
   --git-button-border: #40434a;
-  --git-button-hover: #33353b;
+  --git-button-hover: #26282c;
   --git-state-modified: #70aeff;
   --git-state-added: #73bd79;
-  --git-state-deleted: #80838a;
+  --git-state-deleted: #db5c5c;
   --git-state-renamed: #6abec2;
   --git-state-untracked: #e88f89;
   --git-state-conflicted: #f75464;
@@ -56,15 +59,15 @@
   --git-diff-bg: #191a1c;
   --git-diff-added-line: #22352a;
   --git-diff-added-change: #33573c;
-  --git-diff-removed-line: #3f2c2c;
-  --git-diff-removed-change: #683837;
+  --git-diff-removed-line: #4a1d23;
+  --git-diff-removed-change: #7d2630;
   --git-diff-hunk: #233042;
   --git-diff-hunk-text: #6f96f0;
   --git-diff-number: #4c4f56;
   --git-diff-text: #bcbec4;
   --git-diff-empty: #202124;
   --git-diff-added-sign: #73bd79;
-  --git-diff-removed-sign: #f75464;
+  --git-diff-removed-sign: #ff5c6c;
   --git-diff-split-border: #26282c;
   --git-count-added: #73bd79;
   --git-count-deleted: #e88f89;
@@ -113,6 +116,11 @@
   --git-code-number: #2aacb8;
   --git-code-comment: #7a7e85;
   --git-code-key: #c77dbb;
+  --git-code-tag: #569cd6;
+  --git-code-attribute: #9cdcfe;
+  --git-code-punctuation: #808080;
+  --git-code-type: #c191ff;
+  --git-code-function: #56a8f5;
   --git-editor-current-line: rgba(255,255,255,0.045);
   --git-editor-indent-guide: rgba(255,255,255,0.09);
   --git-editor-caret: #cecfd2;
@@ -131,6 +139,8 @@
   --git-text-muted: #6c707e;
   --git-text-secondary: #4e5260;
   --git-border: #ebecf0;
+  --git-titlebar-bg: #e4e6ea;
+  --git-titlebar-hover: #eceef1;
   --git-divider: #ebecf0;
   --git-hover: #dfe1e5;
   --git-pressed: #d3d5db;
@@ -157,7 +167,7 @@
   --git-button-hover: #f0f1f3;
   --git-state-modified: #3574f0;
   --git-state-added: #208a3c;
-  --git-state-deleted: #6c707e;
+  --git-state-deleted: #db3b4b;
   --git-state-renamed: #078080;
   --git-state-untracked: #db3b4b;
   --git-state-conflicted: #d81b60;
@@ -174,8 +184,8 @@
   --git-diff-bg: #ffffff;
   --git-diff-added-line: #eaf5ea;
   --git-diff-added-change: #bee6c1;
-  --git-diff-removed-line: #fbebeb;
-  --git-diff-removed-change: #f5c2c2;
+  --git-diff-removed-line: #ffe1e3;
+  --git-diff-removed-change: #ffb8bf;
   --git-diff-hunk: #edf3ff;
   --git-diff-hunk-text: #3574f0;
   --git-diff-number: #a8adbd;
@@ -231,10 +241,30 @@
   --git-code-number: #1750eb;
   --git-code-comment: #8c8c8c;
   --git-code-key: #871094;
+  --git-code-tag: #0033b3;
+  --git-code-attribute: #174ad4;
+  --git-code-punctuation: #8c8c8c;
+  --git-code-type: #7a3e9d;
+  --git-code-function: #00627a;
   --git-editor-current-line: rgba(0,0,0,0.045);
   --git-editor-indent-guide: rgba(0,0,0,0.10);
   --git-editor-caret: #000000;
   --git-editor-number-current: #767a8a;
+}
+
+/* 다크: 양쪽 사이드 패널(왼쪽 사이드바, 오른쪽 작업 패널)은 가운데보다 한 단계 밝은 바탕. 안쪽 목록·머리 줄·입력 칸도 같은 바탕을 쓰고,
+   호버·눌림은 한 단계씩 올린다(원본 JetBrainsDark.tss 의 .git-sidebar·.graph-workspace__side). 라이트는 나누지 않는다. */
+:root:not([data-theme="light"]) .sidebar,
+:root:not([data-theme="light"]) .detail {
+  --git-sidebar-bg: #26282c;
+  --git-header-bg: #26282c;
+  --git-list-bg: #26282c;
+  --git-field-bg: #26282c;
+  --git-button-bg: #26282c;
+  --git-hover: #33353b;
+  --git-button-hover: #33353b;
+  --git-pressed: #3c3f45;
+  --git-divider: #33353b;
 }
 
 :root {
@@ -325,7 +355,7 @@ input, textarea { font: inherit; user-select: text; -webkit-user-select: text; }
 .recent-item:hover .recent-remove { visibility: visible; }
 .recent-remove:hover { background: var(--git-pressed); color: var(--git-text); }
 
-/* ── 저장소 화면 배치 ───────────────────────────────── */
+/* ── 레포지토리 화면 배치 ───────────────────────────────── */
 
 .main { height: 100%; display: flex; flex-direction: column; }
 
@@ -338,22 +368,34 @@ input, textarea { font: inherit; user-select: text; -webkit-user-select: text; }
 /* ── 커밋 그래프(원본 GitStaging.uss 의 commit-graph) ─────── */
 
 .graph-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--git-graph-bg); position: relative; }
-.graph-header { height: 28px; flex: none; display: flex; align-items: stretch; position: relative; background: var(--git-graph-header-bg); border-bottom: 1px solid var(--git-graph-header-border); font-size: 11.5px; color: var(--git-text-muted); padding-right: 14px; }
+/* 그래프 위 요약 줄(원본 GraphWorkspaceView 도구 막대 26px · .view__toolbar-label 10px). */
+.graph-summary { height: 26px; flex: none; display: flex; align-items: center; padding: 0 4px; background: var(--git-toolbar-bg); border-bottom: 1px solid var(--git-border); }
+.graph-summary-text { margin: 0 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--git-text-muted); }
+/* 그래프 칸의 diff·병합 화면은 요약 줄 아래를 덮는다(원본은 요약 줄이 diff 위에 남는다). */
+.graph-pane:has(> .graph-summary:not([hidden])) > .diff-view:not(.docked) { top: 26px; }
+/* 머리 줄(원본 .list-header: JetBrains 24px · 글자 10px · 아래 구분선 --git-border). */
+.graph-header { height: 24px; flex: none; display: flex; align-items: stretch; position: relative; background: var(--git-graph-header-bg); border-bottom: 1px solid var(--git-border); font-size: 10px; color: var(--git-text-muted); padding-right: 14px; }
 .gh-cell { position: relative; display: flex; align-items: center; padding: 0 6px; min-width: 0; overflow: hidden; white-space: nowrap; cursor: grab; }
 .gh-cell.first { padding-left: 20px; }
 .gh-cell.gh-refs:not(.first) { padding-left: 13px; }
 .gh-cell.icon-only { justify-content: center; padding: 0; }
+.gh-cell.source { opacity: 0.35; }
 .gh-text { overflow: hidden; text-overflow: ellipsis; }
-.gh-resize { position: absolute; top: 0; bottom: 0; right: -3px; width: 7px; cursor: col-resize; z-index: 2; }
-.gh-resize::after { content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 1px; background: var(--git-graph-header-border); }
-.gh-ghost { position: absolute; top: 3px; height: 22px; padding: 0 10px; display: flex; align-items: center; border-radius: 4px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); color: var(--git-text); opacity: 0.9; pointer-events: none; z-index: 5; }
-.gh-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--git-accent); pointer-events: none; z-index: 5; }
-.gh-author, .gh-sha, .gh-date { flex: none; cursor: default; }
+/* 경계 손잡이: 칸 오른쪽 끝 8px, 경계에 머리 높이 세로선. 마우스를 올리거나 끄는 동안 강조색 2px(원본 .column-resizer). */
+.gh-resize { position: absolute; top: 0; bottom: 0; right: 0; width: 8px; cursor: col-resize; z-index: 2; }
+.gh-resize::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px; background: var(--git-border); }
+.gh-resize:hover::after, .gh-resize.dragging::after { width: 2px; background: var(--git-accent); }
+/* 칸 순서 끌기: 잡은 자리 그대로 따라오는 칸 이름 유령과, 머리 줄부터 목록 끝까지 놓일 자리 세로선(원본 .column-reorder__*). */
+.gh-ghost { position: absolute; display: flex; align-items: center; padding: 0 4px; overflow: hidden; white-space: nowrap; font-size: 10px; color: var(--git-text-muted); background: var(--git-header-bg); border: 1px solid var(--git-border); opacity: 0.85; box-shadow: 0 2px 6px var(--git-graph-shadow); pointer-events: none; z-index: 6; }
+.gh-marker { position: absolute; bottom: 0; width: 2px; background: var(--git-accent); pointer-events: none; z-index: 6; }
+.gh-author, .gh-sha, .gh-date { flex: none; padding: 0 0 0 10px; cursor: default; }
 body.resizing-col, body.resizing-col * { cursor: col-resize !important; }
+body.reordering-col, body.reordering-col * { cursor: grab !important; }
 
 .graph-scroll { flex: 1; overflow: auto; position: relative; outline: none; }
 .graph-sizer { position: relative; min-height: 100%; }
-#graph-canvas { position: sticky; top: 0; left: 0; display: block; pointer-events: none; z-index: 1; }
+/* 선·원 canvas 는 보이는 칸에 붙어 있다(스크롤해도 제자리, graph.js 가 scrollTop 만큼 옮겨 그린다). Fork 탐색기 목록도 같다. */
+.graph-sizer > canvas { position: sticky; top: 0; left: 0; display: block; pointer-events: none; z-index: 1; }
 .graph-rows { position: absolute; inset: 0; }
 .graph-empty { position: absolute; top: 120px; left: 0; right: 0; text-align: center; color: var(--git-graph-empty); pointer-events: none; }
 
@@ -362,13 +404,15 @@ body.resizing-col, body.resizing-col * { cursor: col-resize !important; }
 .gc-refs { order: var(--gc-refs-o, 0); width: var(--gc-refs-w); flex: none; padding-left: 6px; border-right: 6px solid transparent; overflow: hidden; gap: 0; }
 .gc-graph { order: var(--gc-graph-o, 1); width: var(--gc-graph-w); flex: none; }
 .gc-message { order: var(--gc-message-o, 2); width: var(--gc-message-w); flex: none; padding-left: 10px; overflow: hidden; gap: 0; }
-.gc-details { order: 9; flex: none; display: flex; height: 100%; align-items: center; color: var(--git-text-muted); font-size: 12px; }
-.gc-details > span { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Fork 탐색기의 [작성자][해시][날짜]: 마우스·고른 줄 바탕을 메시지 칸처럼 이 묶음에도 깐다(줄 전체가 한 줄로 보이게, 원본 .commit-graph-row__details). */
+.gc-details { order: 9; flex: none; display: flex; align-self: stretch; height: auto; margin: 3px 0; align-items: center; color: var(--git-text-muted); font-size: 12px; }
+.gc-details > span { padding: 0 0 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grow:hover .gc-details { background: var(--git-hover); }
+.grow.selected .gc-details { background: rgba(59, 130, 196, 0.3); color: var(--git-text); }
 .graph-pane.last-refs .gc-refs, .graph-pane.last-graph .gc-graph, .graph-pane.last-message .gc-message { flex: 1 1 0; width: auto; min-width: 40px; }
 .graph-pane.refs-first .gc-refs { padding-left: 13px; border-right-width: 13px; }
 .graph-pane.message-first .gc-message { padding-left: 20px; }
-.grow .subject { position: relative; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--git-graph-subject); }
-.grow.head .subject, .grow.selected .subject { color: var(--git-text); }
+.grow .subject { position: relative; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--git-text); }
 .grow.dimmed .subject, .grow.dimmed .gc-refs, .grow.dimmed .gc-details { opacity: 0.3; }
 
 /* 가지 색 띠: 커밋 원 가운데부터 칸 끝까지 옅게, 끝에 3px 막대. 고른 줄은 진하게. */
@@ -381,15 +425,19 @@ body.resizing-col, body.resizing-col * { cursor: col-resize !important; }
 .grow:hover .msg-hl { display: block; background: var(--git-hover); }
 .grow.selected .msg-hl { display: block; background: rgba(59, 130, 196, 0.3); }
 
-/* 작업 중 줄 */
-.wip-editor { position: relative; flex: 0 1 auto; min-width: 40px; display: flex; }
-.wip-input { width: 220px; max-width: 100%; height: 24px; padding: 0 6px; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--git-text); font-size: 13px; outline: none; cursor: text; }
-.wip-input::placeholder { color: var(--git-text-muted); font-style: italic; }
-.wip-input:hover { border-color: var(--git-field-border); }
+/* 작업 중 줄(원본 .commit-graph-wip*): 제목 입력란은 글 길이만큼(80~260, 폭은 graph.js 가 잰다) 늘어나고 칸이 좁아져도 줄지 않는다 —
+   뒤의 개수와 함께 칸 경계가 오른쪽부터 가린다. 쓰는 동안에는 칸 안에 맞춰 줄여(개수부터 가린다) 방금 쓴 글자가 보이게 한다. */
+.wip-editor { position: relative; flex: none; display: flex; margin-right: 10px; }
+.wip-input { flex: none; min-width: 80px; max-width: 260px; height: 24px; padding: 0 8px; border: 1px solid var(--git-border); border-radius: 4px; background: transparent; color: var(--git-text); font-family: inherit; font-size: 13px; outline: none; cursor: text; }
+.wip-input::placeholder { color: var(--git-text-muted); }
+.wip-input:hover { border-color: var(--git-field-border); background: var(--git-field-bg); }
 .wip-input:focus { border-color: var(--git-accent); background: var(--git-field-bg); }
-.wip-slot { position: relative; display: flex; }
-.wip-counts { display: flex; align-items: center; margin-left: 10px; }
-.wip-count { display: flex; align-items: center; margin-right: 12px; font-size: 12px; color: var(--git-text); }
+.grow.wip:focus-within .wip-editor { flex: 0 1 auto; min-width: 0; margin-right: 0; }
+.grow.wip:focus-within .wip-input { flex: 0 1 auto; min-width: 0; padding: 0 4px; }
+.grow.wip:focus-within .wip-slot { flex-shrink: 1000; min-width: 0; overflow: hidden; }
+.wip-slot { position: relative; display: flex; flex: none; }
+.wip-counts { display: flex; align-items: center; }
+.wip-count { display: flex; align-items: center; margin-right: 12px; font-size: 13px; color: var(--git-text); }
 .wip-icon { width: 14px; height: 14px; margin-right: 4px; flex: none; }
 .wip-icon-modified { background: url(icons/Modified.png) center / contain no-repeat; }
 .wip-icon-added { background: var(--git-count-added); -webkit-mask: url(icons/Added.png) center / contain no-repeat; mask: url(icons/Added.png) center / contain no-repeat; }
@@ -429,35 +477,107 @@ body.resizing-col, body.resizing-col * { cursor: col-resize !important; }
 /* ── 오른쪽 패널: 스테이징(원본 StagingLists·FileRow·CommitBox) ── */
 
 .detail { min-width: 0; }
-.panel-title { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--git-divider); }
-.panel-title-text { font-weight: 700; color: var(--git-text-strong); white-space: nowrap; }
-.panel-branch { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.view-switch button { height: 22px; padding: 0 7px; }
-.detail .seg-text { font-size: 11px; }
-.filter-row { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--git-divider); color: var(--git-text-muted); }
-.filter-row .field { padding: 4px 6px; }
+
+/* GitKraken 작업 패널 머리 줄(원본 graph-workspace__panel-header): 왼쪽 휴지통(모든 변경 버리기), 줄 가운데 제목. */
+.wip-header { flex: none; display: flex; align-items: center; height: 32px; padding: 0 6px; border-bottom: 1px solid var(--git-border); }
+.wip-title { flex: 1 1 auto; min-width: 0; margin-right: 24px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-weight: 700; color: var(--git-text); }
+.wip-header.merging .wip-warning { margin-left: auto; margin-right: 6px; display: flex; color: var(--git-warning); }
+.wip-header.merging .wip-title { flex: 0 1 auto; margin: 0 auto 0 0; padding-right: 30px; }
+.wip-discard { flex: none; width: 22px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--git-danger); border-radius: var(--git-radius); background: var(--git-danger-soft); color: var(--git-text); cursor: pointer; }
+.wip-discard:hover:not(:disabled) { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.wip-discard:disabled { border-color: var(--git-border); opacity: 0.5; cursor: default; }
+.wip-merge-info { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; padding: 6px 8px; }
+.merge-ref { padding: 1px 6px; margin: 1px 0; border-radius: 3px; font-weight: 700; color: var(--git-on-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.merge-ref.incoming { background: #2f5fa8; }
+.merge-ref.target { background: #1f7a74; }
+.merge-text { margin: 0 6px; color: var(--git-text-secondary); }
+
+/* 경로/트리 전환(원본 view-mode-switch): 테두리로 묶은 두 칸, 고른 칸을 칠한다. large 는 스테이징 맨 위 줄. */
+.view-switch { flex: none; display: flex; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); overflow: hidden; margin-left: 4px; }
+.view-switch button { display: inline-flex; align-items: center; height: 18px; margin: 0; padding: 0 8px; border: 0; border-radius: 0; background: transparent; color: var(--git-text-muted); cursor: pointer; }
+.view-switch button + button { border-left: 1px solid var(--git-field-border); }
+.view-switch button:hover { background: var(--git-hover); }
+.view-switch button.on, .view-switch button.on:hover { background: var(--git-selected); color: var(--git-selected-text); }
+.view-switch svg { width: 13px; height: 13px; margin-right: 5px; }
+.view-switch .seg-text { font-size: 11px; }
+.view-switch button.on .seg-text { font-weight: 700; }
+.view-switch.large button { height: 20px; padding: 0 10px; }
+.view-switch.large .seg-text { font-size: 12px; }
+
+/* 경로/트리를 가운데 두는 맨 위 줄(원본 staging__toolbar). Fork 배치는 왼쪽 끝에 돋보기. */
+.staging-toolbar { position: relative; flex: none; display: flex; align-items: center; justify-content: center; height: 32px; border-bottom: 1px solid var(--git-border); }
+.staging-filter-btn { position: absolute; left: 6px; width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); cursor: pointer; }
+.staging-filter-btn:hover { background: var(--git-hover); color: var(--git-text); }
+.staging-filter-btn.on { color: var(--git-accent); }
+.staging-filter-row { flex: none; height: 38px; padding: 6px 8px; overflow: hidden; border-bottom: 1px solid var(--git-border); }
+.staging-filter-row.opening { animation: filter-open 180ms cubic-bezier(0.33, 1, 0.68, 1); }
+@keyframes filter-open { from { height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; } }
+.staging-filter { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px; border: 1px solid var(--git-field-border); border-radius: 5px; background: var(--git-field-bg); color: var(--git-text-muted); }
+.staging-filter:focus-within { border-color: var(--git-accent); }
+.filter-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--git-text); font-size: 12px; }
+
+/* Unstaged(위)·Staged(아래). 경계를 끌어 Staged 높이를 바꾼다(첫 높이 200px). */
 .staging-lists { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.stage-section { flex: 1; min-height: 80px; display: flex; flex-direction: column; border-bottom: 1px solid var(--git-divider); }
-.stage-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px 6px 12px; }
-.stage-title { font-weight: 700; font-size: 12px; color: var(--git-text-secondary); }
-.file-list { flex: 1; min-height: 0; overflow: auto; outline: none; padding-bottom: 4px; }
-.file-list:focus .file-row.selected { background: var(--git-selected); }
+.stage-section { min-height: 60px; display: flex; flex-direction: column; }
+.stage-section.unstaged { flex: 1 1 0; }
+.stage-section.staged { flex: none; }
+.stage-split { flex: none; height: 1px; background: var(--git-border); cursor: row-resize; position: relative; }
+.stage-split::after { content: ""; position: absolute; inset: -3px 0; }
+.list-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.stage-header { flex: none; display: flex; align-items: center; height: 34px; padding: 0 8px; background: var(--git-header-bg); border-bottom: 1px solid var(--git-border); }
+.stage-title { flex: 1; min-width: 0; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; font-size: 12px; color: var(--git-text); }
+
+/* 머리 줄 버튼(원본 staging__button): Stage 는 초록·Unstage 는 빨강 테두리에 옅은 바탕, 올리면 꽉 채운다. Fork 배치는 무채색. */
+.staging-btn { flex: none; height: 22px; margin-left: 6px; padding: 0 12px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); background: transparent; color: var(--git-text); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.staging-btn.stage { border-color: var(--git-success); background: var(--git-success-soft); }
+.staging-btn.stage:hover:not(:disabled) { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
+.staging-btn.stage:active:not(:disabled) { background: var(--git-success-strong-pressed); border-color: var(--git-success-strong-pressed); }
+.staging-btn.unstage { border-color: var(--git-danger); background: var(--git-danger-soft); }
+.staging-btn.unstage:hover:not(:disabled) { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.staging-btn.unstage:active:not(:disabled) { background: var(--git-danger-strong-pressed); border-color: var(--git-danger-strong-pressed); }
+.staging-btn.resolve { border-color: var(--git-warning); background: var(--git-warning-soft); }
+.staging-btn.resolve:hover:not(:disabled) { background: var(--git-warning-strong); border-color: var(--git-warning-strong); color: var(--git-on-strong); }
+.staging-btn.resolve:active:not(:disabled) { background: var(--git-warning-strong-pressed); border-color: var(--git-warning-strong-pressed); }
+.staging-btn:disabled { opacity: 0.5; cursor: default; }
+.staging-btn.fork-head { padding: 0 10px; border-color: var(--git-field-border); background: transparent; }
+.staging-btn.fork-head:hover:not(:disabled) { background: var(--git-hover); border-color: var(--git-field-border); color: var(--git-text); }
+.staging-btn.fork-head:active:not(:disabled) { background: var(--git-pressed); }
+body:not(.shift-held) .staging-btn.fork-head.no-pick, body.shift-held .staging-btn.fork-head.empty { opacity: 0.5; pointer-events: none; }
+body[data-layout="fork"] .staging-btn.resolve { border-color: var(--git-button-border); background: var(--git-pressed); }
+/* git 작업이 도는 동안(원본 Runner.IsBusy) 머리 줄·줄 버튼·커밋 버튼을 끈다. */
+body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn, body.git-busy .commit-push, body.git-busy .commit-link, body.git-busy .wip-discard, body.git-busy .hunk-btn, body.git-busy .gut-btn, body.git-busy .diff-actions button { opacity: 0.45; pointer-events: none; }
+
+/* 파일 목록·줄(원본 FileRow.uxml·GitRows.uss): 20px, 줄 안쪽 왼쪽 4px·오른쪽 8px. */
+.file-list { flex: 1; min-height: 0; overflow: auto; outline: none; background: var(--git-list-bg); }
+.file-browser { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.file-tree-toolbar { flex: none; display: flex; align-items: center; height: 26px; padding: 0 4px; background: var(--git-list-bg); border-bottom: 1px solid var(--git-divider); }
+.expand-toggle { height: 20px; padding: 0 6px; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); font-size: 11px; cursor: pointer; }
+.expand-toggle:hover { background: var(--git-hover); color: var(--git-text); }
 .empty { padding: 8px 12px; }
-.file-row { position: relative; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px 0 12px; white-space: nowrap; cursor: default; }
+.file-row { position: relative; display: flex; align-items: center; height: 20px; padding: 0 8px 0 4px; white-space: nowrap; cursor: default; }
 .file-row:hover { background: var(--git-hover); }
-.file-row.selected { background: var(--git-current-row); }
-.file-row.active { background: var(--git-selected); color: var(--git-selected-text); }
+.file-row.selected, .file-row.active { background: var(--git-selected); color: var(--git-selected-text); }
 .file-row.folder .file-name { font-weight: 700; }
-.folder-icon { color: var(--git-text-muted); }
-.file-count { color: var(--git-text-muted); font-size: 11px; }
-.state-icon { width: 12px; height: 12px; flex: none; display: flex; align-items: center; justify-content: center; }
+.file-row .side-chev { flex: none; display: flex; width: 16px; justify-content: center; color: var(--git-text-muted); }
+.folder-icon { flex: none; margin-right: 3px; color: var(--git-text-muted); }
+/* 접힌 폴더 이름 옆 상태별 수(원본 .file-row__summary): 이름과 10px, 그림과 수 사이 4px, 묶음 사이 10px, 수는 진한 글자·중간 굵기.
+   폴더 이름은 글자 길이만큼만 차지해 수가 이름 바로 옆에 붙는다. */
+.file-row.folder .file-name { flex: 0 1 auto; }
+.file-summary { flex: none; display: flex; align-items: center; height: 100%; padding-left: 10px; }
+.file-summary > .state-icon { margin: 0 4px 0 0; }
+.file-summary-count { margin-right: 10px; color: var(--git-text-strong); font-size: 12px; font-weight: 500; }
+.file-badges { flex: none; display: flex; align-items: center; }
+.state-icon { width: 12px; height: 12px; margin: 0 4px 0 1px; flex: none; display: flex; align-items: center; justify-content: center; }
 .st-modified { background: url(icons/Modified.png) center / contain no-repeat; }
 .st-added, .st-untracked { background: var(--git-state-added); -webkit-mask: url(icons/Added.png) center / contain no-repeat; mask: url(icons/Added.png) center / contain no-repeat; }
-.st-untracked { background: var(--git-state-untracked); }
 .st-deleted { background: var(--git-state-deleted); -webkit-mask: url(icons/Deleted.png) center / contain no-repeat; mask: url(icons/Deleted.png) center / contain no-repeat; }
-.st-renamed { color: var(--git-state-renamed); }
-.st-conflicted { color: var(--git-state-conflicted); }
-.file-kind { display: flex; flex: none; color: var(--git-text-muted); }
+/* 이름 변경·충돌: 원본이 쓰는 UVCS 오버레이 그림(16px, 그림은 가운데 약 10px). 어두운 테마는 d_ 판. */
+.st-renamed, .st-conflicted { width: 16px; height: 16px; margin: 0 3px 0 -1px; background: center / contain no-repeat; }
+.st-renamed { background-image: url(icons/status/moved.png); }
+.st-conflicted { background-image: url(icons/status/conflicted.png); }
+:root:not([data-theme="light"]) .st-renamed { background-image: url(icons/status/d_moved.png); }
+:root:not([data-theme="light"]) .st-conflicted { background-image: url(icons/status/d_conflicted.png); }
+.file-kind { display: flex; flex: none; margin-right: 3px; color: var(--git-text-muted); }
 .fk-image { color: #b885ff; }
 .fk-code { color: #599eff; }
 .fk-data { color: #f2cc4d; }
@@ -465,68 +585,97 @@ body.resizing-col, body.resizing-col * { cursor: col-resize !important; }
 .fk-asset { color: #4dcccc; }
 .fk-media { color: #ff73a6; }
 .fk-binary { color: #ff9e40; }
-.file-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.file-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--git-text); }
+.file-row.selected .file-name, .file-row.active .file-name { color: var(--git-selected-text); }
 .file-dir { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--git-text-muted); font-size: 11.5px; direction: rtl; text-align: left; }
-.file-orig { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--git-state-renamed); font-size: 11.5px; }
-.file-note { flex: none; color: var(--git-warning); font-size: 11px; }
-/* visibility 로 숨기면 마우스가 막 올라온 첫 클릭이 버튼에 닿지 않는다 — 투명하게만 둔다. */
-.row-action { opacity: 0; flex: none; margin-left: auto; height: 20px; padding: 0 8px; border-radius: var(--radius-small); border: 1px solid transparent; cursor: pointer; font-size: 11px; }
-.row-action.success { background: var(--git-success-soft); border-color: var(--git-success); color: var(--git-success); }
-.row-action.success:hover { background: var(--git-success-strong); color: var(--git-on-strong); }
-.row-action.danger { background: var(--git-danger-soft); border-color: var(--git-danger); color: var(--git-danger); }
-.row-action.danger:hover { background: var(--git-danger-strong); color: var(--git-on-strong); }
-.row-action.resolve { background: var(--git-warning-soft); border-color: var(--git-warning); color: var(--git-warning); }
-.file-row:hover .row-action, .row-action:focus-visible { opacity: 1; }
-body[data-layout="fork"] .row-action { display: none; }
+.file-orig { flex: 0 2 auto; min-width: 0; margin-left: 8px; overflow: hidden; text-overflow: ellipsis; color: var(--git-text-muted); font-size: 10px; }
+.file-note { flex: none; padding-left: 8px; color: var(--git-warning); font-size: 10px; font-weight: 700; }
+/* 줄에 마우스를 올리면 오른쪽에 나오는 버튼(원본 file-row__action): 평소엔 자리도 차지하지 않는다. 옅은 바탕 + 상태 색 테두리, 올리면 꽉 채운다. */
+.row-action { display: none; flex: none; height: 18px; margin: 0 2px 0 6px; padding: 0 8px; border: 1px solid transparent; border-radius: 3px; color: var(--git-text); font-size: 11px; font-weight: 700; cursor: pointer; }
+.file-row:hover .row-action { display: inline-flex; align-items: center; }
+.row-action.stage, .row-action.success { background: var(--git-success-soft); border-color: var(--git-success); }
+.row-action.stage:hover, .row-action.success:hover { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
+.row-action.unstage, .row-action.danger { background: var(--git-danger-soft); border-color: var(--git-danger); }
+.row-action.unstage:hover, .row-action.danger:hover { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.row-action.resolve { background: var(--git-warning-soft); border-color: var(--git-warning); }
+.row-action.resolve:hover { background: var(--git-warning-strong); border-color: var(--git-warning-strong); color: var(--git-on-strong); }
 .btn.warning { color: var(--git-warning); border-color: var(--git-warning); background: var(--git-warning-soft); }
 .btn.success:hover:not(:disabled) { background: var(--git-success-strong); color: var(--git-on-strong); }
 .btn.danger:hover:not(:disabled) { background: var(--git-danger-strong); color: var(--git-on-strong); }
 
-.commit-box { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--git-border); }
-.summary-wrap { position: relative; }
-.summary-wrap .field { padding-right: 36px; font-weight: 600; }
-.counter { position: absolute; right: 8px; top: 7px; }
-.author-warning { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--radius-small); background: var(--git-warning-soft); color: var(--git-warning); font-size: 12px; }
-.commit-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.commit-actions .btn { height: 30px; }
-.danger-link { color: var(--git-danger) !important; }
+/* 커밋 상자(원본 CommitBox.uxml·GitStaging.uss commit-box): 제목 → 설명 → 작성자 경고 → 아래 한 줄. */
+.commit-box { flex: none; display: flex; flex-direction: column; padding: 6px; border-top: 1px solid var(--git-border); background: var(--git-header-bg); }
+.commit-box > #commit-summary { margin: 0 0 4px; }
+.commit-box > #commit-description { margin: 0; min-height: 64px; max-height: 160px; resize: vertical; }
+.author-notice { display: flex; align-items: center; margin: 4px; padding: 6px 8px; border-radius: var(--git-radius); border-left: 3px solid var(--git-warning); background: var(--git-header-bg); color: var(--git-text); }
+/* 칸이 좁으면 한 줄 그대로 줄인다 — 먼저 Amend 글자가 말줄임으로 줄고, 그래도 모자라면 두 버튼이 함께 줄며 글자를 말줄임한다. */
+.commit-footer { display: flex; align-items: center; margin-top: 6px; min-width: 0; }
+.commit-amend { flex: 0 1000 auto; min-width: 20px; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; cursor: pointer; }
+.commit-amend span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.commit-link { flex: none; height: 26px; margin: 0 4px 0 0; padding: 0 8px; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); font-size: 12px; cursor: pointer; }
+.commit-link:hover:not(:disabled) { color: var(--git-text); background: var(--git-hover); }
+.commit-link.danger, .commit-link.danger:hover { color: var(--git-danger); }
+.commit-link:disabled { opacity: 0.45; }
+.commit-btn, .commit-push { flex: 0 1 auto; height: 26px; min-width: 56px; margin-left: 6px; padding: 0 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid var(--git-button-border); border-radius: var(--git-radius); background: var(--git-button-bg); color: var(--git-text); cursor: pointer; }
+.commit-push:hover:not(:disabled) { background: var(--git-button-hover); }
+.commit-btn { border-color: var(--git-accent); background: var(--git-accent-soft); }
+.commit-btn:hover:not(:disabled) { background: var(--git-accent); color: var(--git-accent-text); }
+.commit-btn:active:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); color: var(--git-accent-text); }
+.commit-btn:disabled { background: var(--git-button-bg); border-color: var(--git-button-border); color: var(--git-text-muted); cursor: default; }
+.commit-push:disabled { opacity: 0.45; cursor: default; }
 
-/* ── 오른쪽 패널: 커밋 정보(원본 GraphCommitDetail) ─────── */
+/* ── 오른쪽 패널: 커밋 정보(원본 GraphCommitDetail.uxml·GitStaging.uss graph-detail) ─────── */
 
-.commit-detail { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-.detail-title { font-weight: 600; }
-.detail-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.detail-sha { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--git-border); border-radius: 4px; background: var(--git-badge-bg); color: var(--git-text-secondary); cursor: pointer; }
-.detail-sha:hover { color: var(--git-text); }
-.detail-parents .link { padding: 0 3px; }
-.detail-subject { margin: 0; font-size: 16px; line-height: 1.35; color: var(--git-text-strong); user-select: text; -webkit-user-select: text; }
-.detail-body { margin: 0; max-height: 200px; overflow: auto; padding: 8px 10px; border-radius: var(--radius); background: var(--git-list-bg); border: 1px solid var(--git-border); white-space: pre-wrap; font: inherit; color: var(--git-text-secondary); user-select: text; -webkit-user-select: text; }
-.detail-author { display: flex; align-items: center; gap: 10px; }
-.detail-author-name { font-weight: 600; }
-.avatar { border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 700; flex: none; overflow: hidden; }
-.avatar img { width: 100%; height: 100%; object-fit: cover; }
-.coauthors { display: flex; flex-wrap: wrap; gap: 6px; }
-.coauthor { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 2px; border-radius: 12px; background: var(--git-badge-bg); font-size: 12px; }
-.detail-files-head { display: flex; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--git-divider); }
-.file-summary { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; }
-.fs { display: inline-flex; align-items: center; gap: 3px; }
-.fs-modified { color: var(--git-state-modified); }
-.fs-added { color: var(--git-state-added); }
-.fs-deleted { color: var(--git-count-deleted); }
-.fs-renamed { color: var(--git-state-renamed); }
-.commit-detail .file-list { overflow: visible; flex: none; }
-.commit-detail .file-row { padding-left: 4px; }
+.commit-detail { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cd-header { flex: none; display: flex; align-items: center; justify-content: center; height: 28px; border-bottom: 1px solid var(--git-border); }
+.cd-label { margin-right: 4px; color: var(--git-text-muted); }
+.cd-hash { padding: 0; border: 0; background: none; font-weight: 700; color: var(--git-text); cursor: pointer; }
+.cd-hash:hover { color: var(--git-accent-fg); }
+/* 파일 목록만 스크롤한다. */
+.cd-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 10px 4px; }
+.cd-title { flex: none; margin-bottom: 6px; font-weight: 600; }
+.cd-card { flex: none; max-height: 40%; min-height: 56px; overflow: auto; padding: 8px 10px; border: 1px solid var(--git-border); border-radius: var(--git-radius); background: var(--git-field-bg); user-select: text; -webkit-user-select: text; }
+.cd-subject { margin-bottom: 6px; font-size: 15px; color: var(--git-text); white-space: pre-wrap; word-break: break-word; }
+.cd-message { color: var(--git-text); white-space: pre-wrap; word-break: break-word; }
+.cd-meta { flex: none; display: flex; align-items: center; margin-top: 10px; }
+.cd-avatar { width: 36px; height: 36px; flex: none; margin-right: 8px; border-radius: 18px; display: grid; place-items: center; overflow: hidden; color: #fff; font-weight: 700; }
+.cd-avatar img, .cd-coauthor-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.cd-author-block { flex: 1 1 auto; min-width: 0; }
+.cd-author { font-size: 13px; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-authored { color: var(--git-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-parents { flex: none; align-self: flex-start; display: flex; align-items: center; margin-left: 8px; }
+.cd-parent-label { margin-right: 2px; color: var(--git-text-muted); }
+.cd-parent { padding: 0 0 0 2px; border: 0; background: none; color: var(--git-text); cursor: pointer; }
+.cd-parent:hover { color: var(--git-accent-fg); }
+.cd-coauthors { flex: none; display: flex; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.cd-coauthors-label { margin-right: 6px; color: var(--git-text-muted); }
+.cd-coauthor { display: inline-flex; align-items: center; margin-right: 8px; color: var(--git-text); }
+.cd-coauthor-avatar { width: 20px; height: 20px; flex: none; margin-right: 4px; border-radius: 4px; display: grid; place-items: center; overflow: hidden; color: #fff; font-size: 9px; font-weight: 700; }
+.cd-files-head { flex: none; display: flex; flex-wrap: wrap; align-items: center; margin-top: 12px; padding-bottom: 4px; border-bottom: 1px solid var(--git-border); }
+.cd-summary { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; }
+.cd-files-head > .view-switch { margin-left: auto; }
+.cd-count { margin-right: 10px; color: var(--git-text); }
+.cd-count-modified { color: var(--git-state-modified); }
+.cd-count-added { color: var(--git-state-added); }
+.cd-count-deleted { color: var(--git-state-deleted); }
+.cd-count-renamed { color: var(--git-state-renamed); }
+.cd-files { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cd-skeleton { gap: 8px; padding-top: 8px; }
 .sk-gap { height: 10px; }
 
 /* ── 알림·작업 중 ───────────────────────────────────── */
 
-.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 10; max-width: min(480px, calc(100% - 32px)); }
-.toast { position: relative; padding: 10px 32px 10px 12px; border-radius: var(--radius); background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 6px 20px var(--git-menu-shadow); user-select: text; -webkit-user-select: text; }
+/* 알림·진행 카드는 창 아래 가운데에 쌓인다(새 것이 아래). 아래에서 위로 올라오며 나타나고, 사라질 때는 아래로 가라앉는다. */
+.toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 10; width: max-content; max-width: min(520px, calc(100% - 32px)); pointer-events: none; }
+.toasts > * { pointer-events: auto; }
+.toast { position: relative; min-width: 220px; max-width: 100%; padding: 10px 32px 10px 12px; border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 8px 24px var(--git-menu-shadow); user-select: text; -webkit-user-select: text; animation: toast-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.toast.leaving { opacity: 0; transform: translateY(12px); transition: opacity 200ms ease-in, transform 200ms ease-in; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
 .toast.error { border-left: 3px solid var(--git-danger); }
 .toast.success { border-left: 3px solid var(--git-success); }
 .toast-text { white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; }
 .toast-hint { margin-top: 6px; color: var(--git-warning); font-size: 12px; }
-.toast-close { position: absolute; top: 6px; right: 6px; border: 0; background: none; cursor: pointer; color: var(--git-text-muted); font-size: 16px; }
+.toast-close { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); border: 0; background: none; cursor: pointer; color: var(--git-text-muted); font-size: 16px; }
 
 .busy { position: fixed; left: 50%; top: 62px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 16px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 4px 12px var(--git-menu-shadow); z-index: 10; font-size: 12px; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--git-text-muted); border-top-color: var(--git-accent); animation: spin 0.8s linear infinite; }
@@ -536,6 +685,12 @@ body[data-layout="fork"] .row-action { display: none; }
 .error-text { color: var(--git-danger); white-space: pre-wrap; }
 .file-row { cursor: default; }
 .file-row.active { background: var(--git-selected); color: var(--git-selected-text); }
+/* 스테이징 목록: diff 로 연 줄이 선택에서 빠졌으면(Cmd 로 끄거나 Shift 범위 밖) 고른 줄과 헷갈리지 않게 옅게. */
+.list-host .file-row.active:not(.selected) { background: var(--git-hover); color: inherit; box-shadow: inset 2px 0 0 var(--git-accent); }
+.list-host .file-row.active:not(.selected) .file-name { color: var(--git-text); }
+/* 키보드로 옮겨 다닐 때 지금 줄(cursor)에 테두리. 마우스로 누를 때는 보이지 않는다. */
+.file-list:focus-visible { outline: none; }
+.file-list:focus-visible .file-row.cursor { box-shadow: inset 0 0 0 1px var(--git-accent); }
 .row-action.plain { background: var(--git-badge-bg); color: var(--git-text-secondary); margin-right: 2px; }
 .btn.tiny { height: 19px; padding: 0 7px; font-size: 11px; border-radius: var(--radius-small); }
 .btn.danger-strong { background: var(--git-danger); border-color: var(--git-danger); color: #fff; }
@@ -544,82 +699,155 @@ body[data-layout="fork"] .row-action { display: none; }
 
 /* ── diff 보기(원본 GitDiffPanel) ───────────────────── */
 
-.diff-view { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; background: var(--git-diff-bg); }
-.diff-bar { flex: none; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 8px; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
+.diff-view { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; background: var(--git-bg); color: var(--git-text); }
+
+/* 제목 줄(원본 git-diff__toolbar, 32px): 경로 · +n · −n · 두 판 … 다시 읽기 · ×. 좁아지면 경로·판 설명이 말줄임으로 준다. */
+.diff-head { flex: none; display: flex; align-items: center; height: 32px; padding: 0 8px; overflow: hidden; }
+.diff-head .diff-title { flex: 0 1 auto; min-width: 0; margin-right: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.diff-stat { flex: none; margin-right: 6px; font-size: 11px; font-weight: 700; }
+.diff-stat.added { color: var(--git-diff-added-sign); }
+.diff-stat.removed { color: var(--git-diff-removed-sign); }
+.diff-revisions { flex: 0 2 auto; min-width: 0; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--git-text-muted); }
+.diff-head-btn { flex: none; width: 22px; height: 22px; margin-left: 6px; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); background: transparent; color: var(--git-text); cursor: pointer; }
+.diff-head-btn:hover { background: var(--git-hover); }
+.diff-close { flex: none; width: 22px; height: 22px; margin-left: 6px; padding: 0; border: 0; background: transparent; color: var(--git-text-muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.diff-close:hover { color: var(--git-text); }
+
+/* 막대(원본 git-diff__bar, 32px): 왼쪽·오른쪽 묶음이 남는 폭을 반씩 가져 가운데 묶음이 늘 가운데에 온다. 모든 버튼 22px·1px·모서리·12px. */
+.diff-bar { flex: none; display: flex; align-items: center; height: 32px; padding: 0 8px; overflow: hidden; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
+.dbar-side { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+.dbar-side.right { justify-content: flex-end; }
+.dbar-center { flex: none; display: flex; align-items: center; margin: 0 12px; }
+.dbar-seg { flex: none; display: flex; margin-left: 6px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); overflow: hidden; }
+.dbar-seg:first-child { margin-left: 0; }
+.dbar-seg > button + button { border-left: 1px solid var(--git-field-border); }
+.dbar-btn { flex: none; height: 22px; min-width: 26px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 0; background: transparent; color: var(--git-text); cursor: pointer; }
+.dbar-seg > .dbar-btn { height: 20px; }
+.dbar-btn.icon-only { width: 28px; padding: 0; }
+.dbar-btn:hover:not(:disabled) { background: var(--git-hover); }
+.dbar-btn.on, .dbar-btn.on:hover { background: var(--git-selected); color: var(--git-selected-text); }
+.dbar-btn:disabled { opacity: 0.4; cursor: default; }
+.dbar-btn.outlined { border: 1px solid var(--git-field-border); border-radius: var(--git-radius); }
+.dbar-btn .png-icon { width: 14px; height: 14px; background: var(--git-text-muted); }
+.dbar-btn:hover:not(:disabled) .png-icon { background: var(--git-text); }
+.dbar-btn.on .png-icon { background: var(--git-selected-text); }
+.dbar-btn.edit .png-icon { background: var(--git-accent); }
+.dbar-label { font-size: 12px; white-space: nowrap; }
+.dbar-label.with-icon { margin-left: 6px; }
+/* 좁은 칸: 가운데 맞춤을 그만두고 왼쪽부터 차례로, 편집은 아이콘만 → Blame·히스토리 → 공백·줄바꿈 → 보기 방식 순으로 뺀다. */
+.diff-bar.compact .dbar-label.with-icon { display: none; }
+.diff-bar.compact .dbar-btn.outlined { width: 28px; padding: 0; }
+.diff-bar.compact .dbar-side, .diff-bar.compact .dbar-center { flex: none; }
+.diff-bar.compact .dbar-center { margin: 0 0 0 12px; }
+.diff-bar.compact .dbar-side.right { flex: 1 0 auto; }
+.diff-bar.narrow .seg-file-tools { display: none; }
+.diff-bar.tiny .seg-display { display: none; }
+.diff-bar.micro .seg-layouts { display: none; }
+/* 다른 도구(편집기·이미지 diff)가 같은 막대 모양을 쓴다. */
 .dbar-left { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; }
-.dbar-center { flex: none; }
 .dbar-right { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-.dbar-seg { display: flex; border: 1px solid var(--git-button-border); border-radius: var(--radius); overflow: hidden; flex: none; }
-.dbar-seg > button + button { border-left: 1px solid var(--git-button-border); }
-.dbar-btn, .dbar-text { height: 24px; min-width: 26px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: var(--git-button-bg); color: var(--git-action-icon); cursor: pointer; flex: none; }
-.dbar-btn:not(.dbar-seg *) { border-radius: var(--radius); background: none; }
-.dbar-text { padding: 0 9px; font-size: 11.5px; color: var(--git-text-secondary); }
-.dbar-btn:hover:not(:disabled), .dbar-text:hover:not(:disabled) { background: var(--git-hover); }
-.dbar-btn.on, .dbar-text.on { background: var(--git-accent); color: #fff; }
+.dbar-text { flex: none; height: 20px; padding: 0 10px; display: inline-flex; align-items: center; border: 0; background: transparent; color: var(--git-text); font-size: 12px; cursor: pointer; }
+.dbar-text:hover:not(:disabled) { background: var(--git-hover); }
+.dbar-text.on { background: var(--git-selected); color: var(--git-selected-text); }
 .dbar-text:disabled { opacity: 0.4; cursor: default; }
-.dbar-gap { width: 6px; }
+.dbar-text.outlined { height: 22px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); }
+.diff-bar .dbar-left .diff-title, .diff-bar .dbar-right .diff-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.diff-path { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 .png-icon { width: 16px; height: 16px; display: inline-block; background: currentColor; -webkit-mask: var(--png) center / contain no-repeat; mask: var(--png) center / contain no-repeat; flex: none; }
 .btn .png-icon { margin-right: 4px; }
-.diff-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.diff-path { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
-.diff-count { flex: none; font-family: var(--mono); font-size: 12px; }
-.diff-count .plus { color: var(--git-count-added); }
-.diff-count .minus { color: var(--git-count-deleted); }
-.diff-sides { flex: none; padding: 3px 10px; border-bottom: 1px solid var(--git-divider); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .diff-empty { padding: 24px; text-align: center; }
-.diff-loading { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 14px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 4px 12px var(--git-menu-shadow); font-size: 12px; }
-.diff-body { flex: 1; min-height: 0; overflow: auto; position: relative; outline: none; font-family: var(--mono); font-size: 12.5px; line-height: 20px; color: var(--git-diff-text); tab-size: 4; user-select: text; -webkit-user-select: text; }
+.diff-notice { margin: 16px; text-align: center; color: var(--git-text-muted); white-space: pre-wrap; }
+/* "불러오는 중": 내용 위에 겹쳐 띄운다(자리를 차지하지 않아 내용이 밀리지 않는다). */
+.diff-loading { position: absolute; left: 0; right: 0; top: 40%; z-index: 4; text-align: center; color: var(--git-text-muted); pointer-events: none; }
+
+/* 줄(원본 diff-row, 18px). 고른 줄은 왼쪽 3px 강조 선(폭은 늘 잡아 두어 고를 때 줄이 밀리지 않는다). */
+.diff-body { flex: 1; min-height: 0; overflow: auto; position: relative; outline: none; font-family: var(--mono); font-size: 12px; line-height: 18px; color: var(--git-diff-text); tab-size: 4; user-select: text; -webkit-user-select: text; background: var(--git-diff-bg); }
 .diff-sizer { position: relative; min-width: 100%; width: max-content; }
 .diff-rows { position: absolute; inset: 0; }
 .diff-rows.flow { position: static; }
-.dr { height: 20px; display: flex; min-width: 100%; }
+.dr { height: 18px; display: flex; min-width: 100%; border-left: 3px solid transparent; }
+.dr.picked, .dr-split:has(.picked) { border-left-color: var(--git-accent); }
 .diff-rows:not(.flow) > .dr { position: absolute; left: 0; right: 0; }
-.wrap .dr { height: auto; min-height: 20px; }
+.wrap .dr { height: auto; min-height: 18px; }
 .wrap .tx { white-space: pre-wrap; word-break: break-all; }
-.dr .ln { flex: none; width: var(--ln); padding-right: 8px; text-align: right; color: var(--git-diff-number); user-select: none; -webkit-user-select: none; background: var(--git-diff-gutter); }
+.dr .ln { flex: none; width: var(--ln); padding-right: 6px; text-align: right; font-size: 11px; color: var(--git-diff-number); user-select: none; -webkit-user-select: none; background: var(--git-diff-gutter); }
 .no-old .ln-old, .no-new .ln-new { display: none; }
 .view-file .ln-old { display: none; }
-.dr .gut { flex: none; width: 16px; display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; background: var(--git-diff-gutter); }
+/* 거터: 줄 번호 왼쪽의 [+] 칸(Stage 초록·Unstage 빨강). 바뀐 줄에 마우스를 올리거나 고른 줄에서만 보인다. */
+.dr .gut { flex: none; width: 24px; display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; background: var(--git-diff-gutter); }
 .pickable .ln[data-i], .pickable .gut[data-i] { cursor: pointer; }
-.gut-btn { display: none; width: 14px; height: 14px; padding: 0; align-items: center; justify-content: center; border: 0; border-radius: 3px; background: var(--git-accent); color: #fff; cursor: pointer; }
-.pickable .dr:hover .gut-btn, .pickable .half:hover .gut-btn, .picked .gut-btn { display: flex; }
-.dr .mk { flex: none; width: 16px; text-align: center; user-select: none; -webkit-user-select: none; }
-.dr .tx { flex: 1; white-space: pre; padding-right: 16px; }
-.dr-hunk { align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px; background: var(--git-diff-hunk); color: var(--git-diff-hunk-text); position: sticky; left: 0; }
+.gut-btn { visibility: hidden; width: 16px; height: 16px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--git-radius-small); background: var(--git-success); color: #fff; font: 700 13px/1 var(--font); cursor: pointer; }
+.gut-btn.unstage { background: var(--git-danger); }
+.gut-btn:hover { opacity: 0.8; }
+.dr.k-added:hover .gut-btn, .dr.k-removed:hover .gut-btn, .half.k-added:hover .gut-btn, .half.k-removed:hover .gut-btn, .picked .gut-btn { visibility: visible; }
+.dr .mk { flex: none; width: 16px; text-align: center; color: var(--git-diff-number); user-select: none; -webkit-user-select: none; }
+.dr .tx { flex: 1; white-space: pre; padding-right: 16px; cursor: text; }
+/* 바뀐 덩어리 머리(@@ …)·"\ No newline": Fork 처럼 바탕을 칠하지 않고 흐린 글자로. Hunk 보기는 버튼이 들어가게 30px. */
+.dr-hunk { align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 0 10px; color: var(--git-text-muted); border-bottom: 1px solid var(--git-border); position: sticky; left: 0; }
+.dr-hunk.tall { height: 30px; }
 .diff-rows:not(.flow) > .dr-hunk { position: absolute; }
 .hunk-text { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-.hunk-actions { display: flex; gap: 4px; font-family: var(--font); }
-.dr-meta { color: var(--git-text-muted); font-style: italic; padding-left: calc(var(--ln) * 2 + 32px); }
+.hunk-actions { display: flex; font-family: var(--font); }
+.hunk-btn { height: 22px; margin-left: 6px; padding: 0 10px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); color: var(--git-text); font-size: 12px; cursor: pointer; }
+.hunk-btn.stage { border-color: var(--git-success); background: var(--git-success-soft); }
+.hunk-btn.stage:hover { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
+.hunk-btn.stage:active { background: var(--git-success-strong-pressed); border-color: var(--git-success-strong-pressed); color: var(--git-on-strong); }
+.hunk-btn.unstage, .hunk-btn.discard { border-color: var(--git-danger); background: var(--git-danger-soft); }
+.hunk-btn.unstage:hover, .hunk-btn.discard:hover { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.hunk-btn.unstage:active, .hunk-btn.discard:active { background: var(--git-danger-strong-pressed); border-color: var(--git-danger-strong-pressed); color: var(--git-on-strong); }
+.dr-meta .tx { color: var(--git-text-muted); padding-left: calc(var(--ln) * 2 + 40px); }
 .k-added, .k-added .ln, .k-added .gut { background: var(--git-diff-added-line); }
 .k-removed, .k-removed .ln, .k-removed .gut { background: var(--git-diff-removed-line); }
 .k-added .mk { color: var(--git-diff-added-sign); }
 .k-removed .mk { color: var(--git-diff-removed-sign); }
-.k-added .chg { background: var(--git-diff-added-change); border-radius: 2px; }
-.k-removed .chg { background: var(--git-diff-removed-change); border-radius: 2px; }
-.view-file .k-added .ln-new { color: var(--git-diff-added-sign); }
+.k-added .chg { background: var(--git-diff-added-change); }
+.k-removed .chg { background: var(--git-diff-removed-change); }
+/* 파일 보기: 줄 번호 칸까지 물들지 않게 +/− 칸과 코드 칸에만 깐다. */
+.view-file .dr.k-added, .view-file .dr.k-removed, .view-file .k-added .ln, .view-file .k-removed .ln { background: var(--git-diff-gutter); }
+.view-file .k-added .mk, .view-file .k-added .tx { background: var(--git-diff-added-line); }
+.view-file .k-removed .mk, .view-file .k-removed .tx { background: var(--git-diff-removed-line); }
 .ws { color: inherit; }
-.diff-body .ws, .diff-body .tx { }
-.picked, .picked .ln, .picked .gut { box-shadow: inset 3px 0 0 var(--git-accent); background-image: linear-gradient(var(--git-accent-soft), var(--git-accent-soft)); }
 .dr-split { gap: 0; }
 .half { flex: 1 1 50%; min-width: 0; display: flex; overflow: hidden; }
 .half + .half { border-left: 1px solid var(--git-diff-split-border); }
 .half.empty { background: var(--git-diff-empty); }
-.half .mk { display: none; }
 .select-left .half[data-side="right"], .select-right .half[data-side="left"] { user-select: none; -webkit-user-select: none; }
 .diff-body ::selection { background: var(--git-diff-text-selection); }
-.hunk-band { position: absolute; left: 4px; right: 14px; z-index: 3; border: 1.5px solid var(--git-accent); border-radius: 4px; background: rgba(53, 116, 240, 0.06); pointer-events: none; }
-.band-actions { position: absolute; top: -12px; right: 8px; display: flex; gap: 4px; pointer-events: auto; padding: 2px; border-radius: 5px; background: var(--git-menu-bg); box-shadow: 0 2px 8px var(--git-menu-shadow); font-family: var(--font); }
-.selection-pop { position: absolute; right: 24px; z-index: 4; display: flex; gap: 4px; padding: 3px; border-radius: 6px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 4px 12px var(--git-menu-shadow); }
-.binary-card { margin: 40px auto; width: 360px; max-width: calc(100% - 32px); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; border-radius: 10px; border: 1px solid var(--git-border); background: var(--git-list-bg); }
-.binary-icon .file-kind svg { width: 40px; height: 40px; }
-.binary-name { font-weight: 700; font-size: 14px; color: var(--git-text-strong); }
-.binary-sizes { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; }
-.lfs-banner { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--git-accent-soft); color: var(--git-text); border-bottom: 1px solid var(--git-divider); }
-.lfs-banner span { flex: 1; }
+
+/* 끌어 고른 줄·Fork 식 hover 덩어리를 감싸는 띠(강조색 1px 테두리 + 옅은 강조색 바탕)와 붙은 한 묶음 [Stage | 되돌리기…]. */
+.diff-band { position: absolute; z-index: 3; border: 1px solid var(--git-accent); background: rgba(80, 140, 230, 0.10); pointer-events: none; }
+.diff-actions { position: absolute; z-index: 4; display: flex; }
+.diff-actions button { height: 22px; margin: 0; padding: 0 10px; border: 1px solid var(--git-field-border); border-radius: 0; background: var(--git-pressed); color: var(--git-text); font-size: 12px; cursor: pointer; }
+.diff-actions button:hover { border-color: var(--git-text-muted); }
+.diff-actions button:active { background: var(--git-hover); }
+.diff-actions .act-stage { border-radius: var(--git-radius) 0 0 var(--git-radius); }
+.diff-actions .act-discard { border-left-width: 0; border-radius: 0 var(--git-radius) var(--git-radius) 0; }
+.diff-actions.single .act-stage { border-radius: var(--git-radius); }
+
+/* 바이너리 파일(원본 git-diff-binary): 상태 글자, 판마다 회색 카드(아이콘·확장자)와 크기, 옛 → 새. */
+.diff-binary { flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 24px; }
+.binary-status { margin-bottom: 12px; font-size: 13px; }
+.binary-status.created { color: var(--git-success); }
+.binary-status.deleted { color: var(--git-danger); }
+.binary-status.modified { color: var(--git-warning); }
+.binary-cards { display: flex; align-items: center; }
+.binary-column { display: flex; flex-direction: column; align-items: center; margin: 0 12px; }
+.binary-card { width: 164px; height: 194px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: var(--git-radius); background: var(--git-pressed); }
+.binary-icon { margin-bottom: 8px; }
+.binary-icon .file-kind svg { width: 32px; height: 32px; }
+.binary-ext { font-size: 13px; color: var(--git-text); }
+.binary-size { margin-top: 12px; font-size: 12px; color: var(--git-text); }
+.binary-arrow { margin: 0 6px 30px; font-size: 20px; color: var(--git-text-muted); }
+/* LFS 원본이 없을 때(원본 git-diff-lfs): 안내와 [이 파일 원본 받기 (크기)]. */
+.diff-lfs { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 24px 16px 0; }
+.lfs-message { margin-bottom: 12px; text-align: center; color: var(--git-text-muted); white-space: pre-wrap; }
+.lfs-btn { height: 22px; margin-top: 6px; padding: 0 10px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); background: transparent; color: var(--git-text); font-size: 12px; cursor: pointer; }
+.lfs-btn:hover:not(:disabled) { background: var(--git-hover); }
+.lfs-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* ── 창·메뉴 ─────────────────────────────────────────── */
 
-.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0, 0, 0, 0.35); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); }
 .modal { width: 440px; max-width: calc(100% - 32px); max-height: calc(100% - 48px); overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 10px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 12px 40px var(--git-menu-shadow); }
 .modal-title { font-size: 15px; font-weight: 700; color: var(--git-text-strong); }
 .modal-message { white-space: pre-wrap; word-break: break-word; color: var(--git-text-secondary); user-select: text; -webkit-user-select: text; }
@@ -647,72 +875,106 @@ select.field { height: 30px; }
 .op-text strong { color: var(--git-warning); margin-right: 4px; }
 .row-action.conflict { background: var(--git-state-conflicted); color: #fff; opacity: 1; }
 .mode-conflict { color: var(--git-state-conflicted); }
-.merge-view { display: flex; flex-direction: column; }
-.warn-glyph { display: flex; color: var(--git-warning); }
-.merge-top { flex: 1.2; min-height: 0; display: grid; grid-template-columns: 1fr 6px 1fr; border-bottom: 1px solid var(--git-border); }
+/* 병합 편집기(원본 GitDiff.uss git-merge__* · merge-row__*): A 청록 #2fa4c2 · B 노랑 #d9a732. */
+.merge-view { display: flex; flex-direction: column; background: var(--git-bg); color: var(--git-text); }
+.merge-head { flex: none; display: flex; align-items: center; height: 30px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--git-border); background: var(--git-toolbar-bg, var(--git-header-bg)); }
+.warn-glyph { display: flex; flex: none; margin-right: 8px; color: var(--git-warning); }
+.merge-path { flex: 0 1 auto; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.merge-count { flex: none; margin-left: 8px; font-size: 11px; color: var(--git-text-muted); }
+.merge-save { height: 22px; min-width: 64px; margin-left: 8px; padding: 0 12px; border: 1px solid var(--git-success); border-radius: 4px; background: rgba(63, 184, 92, 0.25); color: var(--git-text-strong); font-weight: 700; cursor: pointer; }
+.merge-save:hover:not(:disabled) { background: rgba(63, 184, 92, 0.4); }
+.merge-save:disabled { opacity: 0.45; cursor: default; }
+.merge-close { width: 22px; height: 22px; margin-left: 6px; padding: 0; border: 0; border-radius: 4px; background: none; font-size: 16px; line-height: 1; color: var(--git-text); cursor: pointer; }
+.merge-close:hover { background: var(--git-hover); }
+.merge-notice { flex: none; padding: 4px 10px; font-size: 11px; color: var(--git-text); background: rgba(214, 174, 88, 0.12); border-bottom: 1px solid var(--git-border); }
+.merge-top { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 1fr 5px 1fr; border-bottom: 1px solid var(--git-border); }
 .msplit { cursor: col-resize; background: var(--git-border); background-clip: content-box; padding: 0 2px; }
-.merge-bottom { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.msplit:hover { background-color: var(--git-accent); }
+.merge-bottom { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 .mpane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.mpane-title { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--git-text-secondary); background: var(--git-header-bg); border-bottom: 1px solid var(--git-divider); cursor: pointer; }
+.mpane.disabled .mpane-body, .mpane.disabled .mpane-title { pointer-events: none; opacity: 0.55; }
+.mpane-title { flex: none; display: flex; align-items: center; height: 28px; padding: 0 6px; font-size: 12px; color: var(--git-text); background: var(--git-header-bg); border-bottom: 1px solid var(--git-border); cursor: pointer; }
+.mpane-title:hover { background: var(--git-hover); }
+.mpane-title > .tri-check { margin-right: 6px; }
+.mpane.pane-a.chosen > .mpane-title { border-bottom: 2px solid #2fa4c2; }
+.mpane.pane-b.chosen > .mpane-title { border-bottom: 2px solid #d9a732; }
 .out-title { cursor: default; }
-.mbadge { padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 800; color: #fff; }
-.badge-a { background: var(--git-accent); }
-.badge-b { background: var(--git-success); }
-.mname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tri-check { width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; border: 1.5px solid var(--git-text-muted); border-radius: 3px; background: none; color: #fff; cursor: pointer; }
+.out-title:hover { background: var(--git-header-bg); }
+.mout-title { font-size: 13px; font-weight: 700; }
+.mposition { margin-right: 8px; font-size: 12px; color: var(--git-accent-fg); }
+.mnav { height: 20px; margin-left: 4px; padding: 0 6px; font-size: 10px; border: 1px solid var(--git-accent); border-radius: 3px; background: none; color: var(--git-accent-fg); cursor: pointer; }
+.mnav.wide { margin-left: 10px; font-size: 11px; }
+.mnav:hover { background: var(--git-hover); }
+.mbadge { width: 20px; height: 20px; flex: none; margin-right: 8px; display: grid; place-items: center; box-sizing: border-box; border: 1px solid; border-radius: 3px; font-size: 12px; font-weight: 700; }
+.badge-a { border-color: #2fa4c2; color: #2fa4c2; }
+.badge-b { border-color: #d9a732; color: #d9a732; }
+.mname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tri-check { width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--git-field-border, var(--git-text-muted)); border-radius: 3px; background: var(--git-field-bg, none); color: #fff; cursor: pointer; }
+.tri-check:hover { border-color: var(--git-accent); }
 .tri-check.all, .tri-check.some { border-color: var(--git-accent); background: var(--git-accent); }
-.pane-b .tri-check.all, .pane-b .tri-check.some { border-color: var(--git-success); background: var(--git-success); }
-.mpane-body, .moutput-list { flex: 1; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 20px; }
-.mrow { display: flex; min-height: 20px; white-space: pre; min-width: max-content; }
-.mrow.common { color: var(--git-text-muted); }
-.mgut { width: 24px; flex: none; display: flex; align-items: center; justify-content: center; }
-.mchunk { position: relative; display: flex; border-top: 1px solid var(--git-border); border-bottom: 1px solid var(--git-border); }
-.mchunk.current { box-shadow: inset 3px 0 0 var(--git-warning); }
-.mchunk-check { width: 26px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--git-header-bg); }
-.morder { font-size: 10px; color: var(--git-warning); font-family: var(--font); }
-.mchunk-lines { flex: 1; min-width: max-content; }
-.side-a .mchunk-lines { background: color-mix(in srgb, var(--git-accent) 8%, transparent); }
-.side-b .mchunk-lines { background: color-mix(in srgb, var(--git-success) 8%, transparent); }
-.mrow.mline { cursor: pointer; }
-.mrow.mline:hover { filter: brightness(1.2); }
-.side-a .mline.on { background: color-mix(in srgb, var(--git-accent) 28%, transparent); }
-.side-b .mline.on { background: color-mix(in srgb, var(--git-success) 28%, transparent); }
-.mdot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--git-text-muted); }
-.side-a .mdot.on { background: var(--git-accent); border-color: var(--git-accent); }
-.side-b .mdot.on { background: var(--git-success); border-color: var(--git-success); }
-.mrow.pad { background: var(--git-diff-empty); }
-.mrow.deleted-note { color: var(--git-text-muted); font-style: italic; font-family: var(--font); }
-.moutput-list .mrow { padding-left: 10px; }
-.mrow.placeholder { color: var(--git-warning); cursor: pointer; background: var(--git-warning-soft); }
-.mrow.placeholder.current { box-shadow: inset 3px 0 0 var(--git-warning); }
-.mrow.from-a { box-shadow: inset 3px 0 0 var(--git-accent); }
-.mrow.from-b { box-shadow: inset 3px 0 0 var(--git-success); }
-.moutput { flex: 1; width: 100%; resize: none; border: 0; outline: none; padding: 6px 10px; background: var(--git-diff-bg); color: var(--git-diff-text); font-family: var(--mono); font-size: 12.5px; line-height: 20px; white-space: pre; tab-size: 4; }
+.mpane-body, .moutput-list { flex: 1 1 0; min-height: 0; overflow: auto; background: var(--git-diff-bg); }
+/* 줄 하나: [덩어리 체크 칸 22] [몸통: 번호 40 · 줄 체크 13 · 글]. 색 띠와 왼쪽 막대는 몸통에만. */
+.mrow { display: flex; align-items: center; height: 18px; min-width: max-content; }
+.mrow.clickable { cursor: pointer; }
+.mgut { width: 22px; flex: none; }
+.mbody { flex: 1; display: flex; align-items: center; height: 100%; border-left: 3px solid transparent; }
+.mnum { width: 40px; flex: none; padding-right: 4px; text-align: right; font-size: 11px; color: var(--git-diff-number); }
+.mcheck { width: 13px; height: 13px; flex: none; margin: 0 6px 0 2px; display: grid; place-items: center; box-sizing: border-box; border-radius: 7px; color: #fff; }
+.mcheck.on { background: var(--git-success); }
+.mcheck.off { border: 1px solid var(--git-text-muted); }
+.mtx { flex: 1; font-family: var(--mono); font-size: 12px; white-space: pre; tab-size: 4; color: var(--git-diff-text); }
+.mrow.m-a > .mbody { background: rgba(47, 164, 194, 0.22); border-left-color: #2fa4c2; }
+.mrow.m-b > .mbody { background: rgba(217, 167, 50, 0.24); border-left-color: #d9a732; }
+.mrow.current.m-a > .mbody { background: rgba(47, 164, 194, 0.32); }
+.mrow.current.m-b > .mbody { background: rgba(217, 167, 50, 0.34); }
+.mrow.placeholder .mtx { font-family: var(--font); font-style: italic; color: var(--git-text-muted); }
+.mrow.unresolved > .mbody { background: rgba(224, 160, 48, 0.08); border-left-color: var(--git-warning); }
+.mrow.unresolved .mtx { color: var(--git-warning); }
+/* 덩어리 체크: 띠 밖 왼쪽 칸, 덩어리 가운데. */
+.mblock { position: relative; }
+.mblock-check { position: absolute; left: 3px; top: 50%; transform: translateY(-50%); }
+.moutput { flex: 1 1 0; min-height: 0; width: 100%; resize: none; border: 0; outline: none; padding: 6px 8px; background: var(--git-diff-bg); color: var(--git-diff-text); font-family: var(--mono); font-size: 12px; line-height: 18px; white-space: pre; tab-size: 4; }
 .ico.flip { transform: rotate(180deg); }
-.merge-simple { padding: 32px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; overflow: auto; }
-.merge-simple-actions { display: flex; gap: 8px; margin-top: 8px; }
-.merge-images { display: flex; gap: 20px; }
-.merge-image { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 0 0 10px; border: 1px solid var(--git-border); border-radius: 8px; overflow: hidden; }
-.merge-image > div:not(.mpane-title), .merge-image > .btn { margin: 0 10px; }
-.merge-img { max-width: 360px; max-height: 300px; display: block; }
-.image-note { padding: 20px; }
+/* 줄 단위로 못 고치는 충돌(바이너리·삭제): 가운데 안내와 버튼. */
+.merge-binary { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+.merge-binary-message { max-width: 520px; margin: 0 0 14px; font-size: 12px; text-align: center; }
+.merge-binary-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+/* 이미지 충돌: 위 A·B 이미지(눌러 고르기), 아래 고른 이미지. */
+.merge-image-stage { position: relative; flex: 1 1 0; min-height: 80px; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: hidden; }
+.mpane .merge-image-stage { cursor: pointer; }
+.merge-image-frame { max-width: 100%; max-height: 100%; display: flex; line-height: 0; }
+.merge-image-frame img { max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: pixelated; }
+.merge-image-hint { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; font-size: 12px; color: var(--git-text-muted); }
+.merge-image-info { flex: none; padding: 0 0 8px; text-align: center; font-size: 11px; color: var(--git-text-muted); }
 
 /* ── 5단계: 탭·설정·clone·로그인 ─────────────────────── */
 
 body { display: flex; flex-direction: column; }
 .start, .main { flex: 1; min-height: 0; height: auto; }
-.tabs { flex: none; display: flex; align-items: flex-end; gap: 2px; height: 34px; padding: 4px 8px 0; background: var(--git-sidebar-bg); border-bottom: 1px solid var(--git-border); overflow-x: auto; }
-.tabs:empty { display: none; }
-.tab { display: flex; align-items: center; gap: 6px; max-width: 220px; height: 30px; padding: 0 6px 0 12px; border-radius: 6px 6px 0 0; color: var(--git-text-secondary); cursor: default; }
-.tab:hover { background: var(--git-hover); }
-.tab.active { background: var(--git-bg); color: var(--git-text-strong); font-weight: 600; box-shadow: inset 0 2px 0 var(--git-accent); }
-.tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tab-close { width: 18px; height: 18px; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; visibility: hidden; }
+/* 탭 막대(GitKraken 모양): 어두운 막대 위에 지금 탭만 아래 도구 막대와 같은 색으로 솟아 이어진다. */
+.tabs { flex: none; position: relative; display: flex; align-items: flex-end; height: 38px; padding: 0 8px; background: var(--git-titlebar-bg); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; user-select: none; -webkit-user-select: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--git-border); pointer-events: none; }
+:root[data-platform="macos"] .tabs { padding-left: 80px; }
+:root[data-platform="macos"] body.fullscreen .tabs { padding-left: 8px; }
+.tabs-drag { flex: 1; align-self: stretch; min-width: 24px; }
+.tab-folder, .tab-new { flex: none; align-self: center; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--git-text-muted); cursor: pointer; }
+.tab-folder { margin-right: 6px; }
+.tab-new { margin-left: 4px; }
+.tab-folder:hover, .tab-new:hover { background: var(--git-hover); color: var(--git-text); }
+.tab-new.active { color: var(--git-text-strong); }
+.tab { position: relative; z-index: 1; flex: 0 1 auto; display: flex; align-items: center; gap: 8px; min-width: 96px; max-width: 240px; height: 32px; padding: 0 6px 0 14px; border-radius: 8px 8px 0 0; color: var(--git-text-muted); font-size: 13px; cursor: default; }
+.tab::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 1px; background: var(--git-border); }
+.tab-folder + .tab::before, .tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before { display: none; }
+.tab:hover { background: var(--git-titlebar-hover); color: var(--git-text); }
+.tab.active { background: var(--git-toolbar-bg); color: var(--git-text-strong); font-weight: 600; box-shadow: inset 1px 0 0 var(--git-border), inset -1px 0 0 var(--git-border), inset 0 1px 0 var(--git-border); }
+.tab.active::after { content: ''; position: absolute; left: 1px; right: 1px; bottom: -1px; height: 2px; background: var(--git-toolbar-bg); }
+.tab-icon { flex: none; opacity: 0.8; }
+.tab.active .tab-icon { opacity: 1; }
+.tab-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-close { flex: none; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; visibility: hidden; }
 .tab:hover .tab-close, .tab.active .tab-close { visibility: visible; }
 .tab-close:hover { background: var(--git-pressed); color: var(--git-text); }
-.tab-new { width: 30px; height: 30px; border: 0; border-radius: 6px 6px 0 0; background: none; color: var(--git-text-muted); cursor: pointer; font-size: 16px; }
-.tab-new:hover { background: var(--git-hover); }
-.tab-new.active { background: var(--git-bg); color: var(--git-text-strong); box-shadow: inset 0 2px 0 var(--git-accent); }
 .row { display: flex; gap: 6px; align-items: center; }
 .row > .field { flex: 1; min-width: 0; }
 .modal.wide { width: 560px; }
@@ -725,44 +987,78 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 
 /* ── 도구 막대(원본 GitToolbar) ─────────────────────── */
 
-.toolbar { height: 54px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 8px; background: var(--git-toolbar-bg); border-bottom: 1px solid var(--git-border); }
-.tb-picker { display: flex; flex-direction: column; justify-content: center; align-items: flex-start; min-width: 0; max-width: 220px; height: 44px; padding: 2px 8px; border: 0; border-radius: var(--radius); background: none; cursor: pointer; text-align: left; }
+/* 위 도구 막대(원본 git-actionbar): 높이 48. 레포지토리·브랜치 칸 | 빈칸 | 가운데 묶음 | 빈칸 | 진행 상태(220) | 터미널·새로고침. */
+.toolbar { position: relative; height: 48px; flex: none; display: flex; align-items: center; padding: 0 6px; background: var(--git-toolbar-bg); border-bottom: 1px solid var(--git-border); overflow: hidden; }
+.tb-context { flex: 0 1 120px; min-width: 40px; margin-right: 12px; display: flex; flex-direction: column; align-items: flex-start; }
+.tb-context.branch { flex-basis: 180px; }
+.tb-caption { padding: 0 2px; font-size: 9px; color: var(--git-text-muted); }
+/* 이름 + ▾ 만큼만 밝힌다(칸 끝까지 늘어나지 않게). 이름이 길면 칸 폭까지만 늘고 말줄임. */
+.tb-picker { display: flex; align-items: center; min-width: 0; max-width: 100%; height: 20px; padding: 0 0 0 2px; border: 0; border-radius: var(--radius); background: none; cursor: pointer; text-align: left; }
 .tb-picker:hover, .tb-picker.open { background: var(--git-hover); }
-.tb-caption { font-size: 10.5px; color: var(--git-text-muted); }
-.tb-value { display: flex; align-items: center; gap: 2px; min-width: 0; max-width: 100%; }
-.tb-name { font-weight: 600; color: var(--git-text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-caret { display: flex; color: var(--git-text-muted); transition: transform 0.12s; }
+.tb-name { min-width: 0; font-size: 13px; font-weight: 700; color: var(--git-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-caret { flex: none; display: flex; margin: 0 4px 0 2px; color: var(--git-text-muted); }
 .tb-picker.open .tb-caret { transform: rotate(180deg); }
-.tb-sep { width: 1px; height: 28px; margin: 0 4px; background: var(--git-border); flex: none; }
-.tb-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 50px; height: 44px; padding: 0 6px; border: 0; border-radius: var(--radius); background: none; cursor: pointer; font-size: 11px; color: var(--git-text-secondary); flex: none; }
-.tb-icon { display: flex; color: var(--git-action-icon); }
+.tb-spacer { flex: 1 1 0; min-width: 0; }
+/* 버튼 묶음: 묶음 사이는 왼쪽 1px 선, 첫 묶음은 선 없음. */
+.tb-group { flex: none; display: flex; align-items: center; padding: 0 4px; border-left: 1px solid var(--git-divider); }
+.tb-group.first { border-left: 0; }
+.tb-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 52px; height: 42px; margin: 0 1px; padding: 2px 0 1px; border: 0; border-radius: var(--radius); background: none; cursor: pointer; color: var(--git-text); flex: none; }
+.tb-icon { display: flex; width: 20px; height: 20px; align-items: center; justify-content: center; color: var(--git-action-icon); }
+.tb-png { width: 20px; height: 20px; }
+.tb-text { margin-top: 1px; font-size: 10px; color: var(--git-text-muted); white-space: nowrap; }
 .tb-btn:hover:not(:disabled) { background: var(--git-hover); }
-.tb-btn:disabled { opacity: 0.4; cursor: default; }
-.tb-badge { position: absolute; top: 2px; right: 2px; min-width: 15px; padding: 0 4px; border-radius: 8px; background: var(--git-accent); color: #fff; font-size: 10px; line-height: 15px; text-align: center; }
-.tb-badge.danger { background: var(--git-danger); font-weight: 700; }
+.tb-btn:active:not(:disabled) { background: var(--git-pressed); }
+.tb-btn:disabled { opacity: 0.35; cursor: default; }
+/* 받을·올릴 커밋 수, stash 수. 아이콘 오른쪽 위에 겹친다. */
+.tb-badge { position: absolute; top: 1px; right: 6px; min-width: 14px; height: 13px; padding: 0 3px; border-radius: 7px; background: var(--git-accent); color: var(--git-accent-text); font-size: 9px; font-weight: 700; line-height: 13px; text-align: center; }
+.tb-badge.danger { background: var(--git-danger); color: #fff; }
 .tb-split { display: flex; align-items: stretch; flex: none; }
-.tb-split .tb-btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.tb-split-caret { width: 16px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 0 var(--radius) var(--radius) 0; background: none; color: var(--git-text-muted); cursor: pointer; }
+.tb-split .tb-btn { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.tb-split-caret { width: 14px; height: 42px; margin-right: 1px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 0 var(--radius) var(--radius) 0; background: none; color: var(--git-text-muted); cursor: pointer; }
 .tb-split-caret:hover:not(:disabled) { background: var(--git-hover); }
-.tb-split-caret:disabled { opacity: 0.4; }
-.tb-status { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 10px; font-size: 12px; color: var(--git-text-muted); white-space: nowrap; overflow: hidden; }
+.tb-split-caret:disabled { opacity: 0.35; }
+/* 오른쪽 진행 상태 자리는 폭을 정해 둔다(글이 뜨고 지거나 길어져도 가운데 버튼이 움직이지 않게). */
+.tb-side { flex: 0 1 300px; min-width: 24px; display: flex; justify-content: flex-end; overflow: hidden; }
+.tb-status { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-right: 4px; font-size: 11px; color: var(--git-text-muted); white-space: nowrap; overflow: hidden; }
+.toolbar.working .tb-status { color: var(--git-text); }
+
+/* 작업 중 표시: 도구 막대 아래 가장자리의 막대. 짧은 작업은 깜빡이지 않게 0.3초 뒤에 나타난다.
+   진행률을 모르면 흐르는 막대, 알면(.known) 그만큼 찬 막대. */
+.tb-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; overflow: hidden; opacity: 0; pointer-events: none; transition: opacity 160ms; }
+.toolbar.working .tb-progress { opacity: 1; transition-delay: 300ms; }
+.tb-progress-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 30%; background: var(--git-accent); border-radius: 1px; animation: tb-flow 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+.tb-progress.known .tb-progress-fill { animation: none; transition: width 160ms linear; }
+@keyframes tb-flow { from { left: -30%; } to { left: 100%; } }
+
+/* 누른 동작 버튼(페치·풀·푸시): 작업이 끝날 때까지 아이콘 자리에서 돈다. 다른 버튼처럼 흐려지지 않는다. */
+.tb-btn.running:disabled { opacity: 1; }
+.tb-btn.running .tb-icon > * { visibility: hidden; }
+.tb-btn.running .tb-icon { position: relative; }
+.tb-btn.running .tb-icon::after { content: ''; position: absolute; inset: 2px; border-radius: 50%; border: 2px solid var(--git-border); border-top-color: var(--git-accent); animation: spin 0.8s linear infinite; }
+.tb-btn.running .tb-text { color: var(--git-accent); }
+.tb-btn.running .tb-badge { visibility: hidden; }
 .tb-status-text { overflow: hidden; text-overflow: ellipsis; }
 .tb-more { width: 30px; height: 36px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius); background: none; color: var(--git-action-icon); cursor: pointer; flex: none; }
 .tb-more:hover { background: var(--git-hover); }
-.toolbar.narrow .tb-text { display: none; }
-.toolbar.narrow .tb-btn { min-width: 36px; }
-.tb-popup { position: fixed; z-index: 30; width: 320px; max-height: 60vh; display: flex; flex-direction: column; padding: 6px; border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 8px 24px var(--git-menu-shadow); }
-.tb-search-wrap { display: flex; align-items: center; gap: 6px; padding: 0 6px; margin-bottom: 4px; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-field-bg); color: var(--git-text-muted); }
+/* 창이 좁으면 글자와 진행 상태를 빼고 아이콘만(원본 git-actionbar--compact). */
+.toolbar.narrow .tb-text, .toolbar.narrow .tb-side { display: none; }
+.toolbar.narrow .tb-btn { width: 30px; }
+.toolbar.narrow .tb-badge { right: 0; }
+/* 레포지토리·브랜치 고르기 목록(원본 branch-picker). 폭·위치는 toolbar.js 가 칸에 맞춘다. 줄 28px, 12줄까지. */
+.tb-popup { position: fixed; z-index: 30; display: flex; flex-direction: column; padding: 6px; border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 8px 24px var(--git-menu-shadow); outline: none; }
+.tb-search-wrap { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; margin-bottom: 4px; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-field-bg); color: var(--git-text-muted); }
 .tb-search-wrap:focus-within { border-color: var(--git-accent); }
 .tb-search { border: 0 !important; box-shadow: none !important; padding: 5px 0; background: transparent; }
-.tb-list { overflow: auto; min-height: 0; }
-.tb-list-head { padding: 6px 8px 2px; font-size: 11px; color: var(--git-text-muted); font-weight: 600; }
-.tb-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 5px; cursor: pointer; color: var(--git-text); }
-.tb-item.on, .tb-item:hover { background: var(--git-menu-hover); color: var(--git-menu-hover-text); }
+.tb-list { overflow: auto; min-height: 0; max-height: calc(28px * 12); }
+.tb-item { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border-radius: 5px; cursor: pointer; color: var(--git-text); flex: none; }
+.tb-item .ico { color: var(--git-text-muted); flex: none; }
+.tb-item.on { background: var(--git-menu-hover); color: var(--git-menu-hover-text); }
+.tb-item.on .ico { color: inherit; }
 .tb-item.current { font-weight: 700; }
 .tb-item.disabled { opacity: 0.45; cursor: default; }
 .tb-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tb-item-check { color: var(--git-success); }
+.tb-item-hint { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--git-text-muted); }
+.tb-item.on .tb-item-hint { color: inherit; opacity: 0.8; }
 .tb-empty { padding: 10px; text-align: center; }
 
 /* ── 사이드바(원본 RefSidebar) ─────────────────────── */
@@ -785,22 +1081,27 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .side-add:hover { background: var(--git-hover); }
 .side-chev { width: 12px; flex: none; display: flex; color: var(--git-text-muted); transition: transform 0.12s; }
 .side-chev.open { transform: rotate(90deg); }
-.side-item { position: relative; display: flex; align-items: center; gap: 6px; height: 26px; padding-right: 6px; cursor: pointer; white-space: nowrap; color: var(--git-text); }
+/* 기록된 커밋과 맞는 서브모듈: 화살표 자리에 초록 체크(원본 ref-tree__synced). */
+.side-chev.synced { color: var(--git-success); }
+.side-badge { min-width: 12px; text-align: center; font-weight: 700; }
+.side-item { position: relative; display: flex; align-items: center; gap: 6px; height: 28px; padding-right: 6px; cursor: pointer; white-space: nowrap; color: var(--git-text); }
 .side-item:hover { background: var(--git-hover); }
 .side-item.focused { background: var(--git-selected); }
 .side-tree:not(:focus) .side-item.focused { background: var(--git-current-row); }
 .side-section.focused { background: var(--git-current-row); }
+/* 지금 체크아웃한 브랜치·워크트리(현재 위치): 초록 띠와 왼쪽 막대, 흰 글자. 선택 중이면 선택색이 앞선다. */
+.side-item.current, .side-tree:not(:focus) .side-item.current.focused { background: var(--git-success-soft); box-shadow: inset 3px 0 0 var(--git-success); }
+.side-item.current:hover { background: color-mix(in srgb, var(--git-success) 34%, transparent); }
+.side-tree:focus .side-item.current.focused { background: var(--git-selected); }
 .side-item.current .side-name { font-weight: 700; color: var(--git-text-strong); }
+.side-item.current .side-icon, .side-item.current .side-track { color: var(--git-text-strong); }
 .side-item.folder .side-name { color: var(--git-text-secondary); }
 .side-icon { color: var(--git-text-muted); }
 .side-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .side-sub { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
 .side-count { font-size: 11px; color: var(--git-text-muted); }
 .side-check, .side-ok { display: flex; color: var(--git-success); }
-.side-track { display: flex; gap: 4px; font-size: 11px; }
-.side-track .ahead { color: var(--git-success); }
-.side-track .behind { color: var(--git-warning); }
-.side-track .gone { color: var(--git-danger); }
+.side-track { flex: none; margin-left: 6px; font-size: 12px; font-weight: 500; color: var(--git-text-muted); white-space: nowrap; }
 .side-sub-state { font-size: 11px; color: var(--git-warning); }
 .side-sub-state.conflict { color: var(--git-danger); }
 .side-more { display: none; width: 20px; height: 20px; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; flex: none; }
@@ -811,66 +1112,210 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 /* ── 사이드바 레일 · 하단 상태 표시줄 · skeleton ───────── */
 
 .workspace { position: relative; }
-.rail { width: 44px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; background: var(--git-sidebar-bg); border-right: 1px solid var(--git-border); }
-.rail-btn { position: relative; width: 34px; height: 32px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: var(--radius); background: none; color: var(--git-action-icon); cursor: pointer; }
-.rail-btn:hover { background: var(--git-hover); }
-.rail-badge { position: absolute; top: 0; right: -2px; min-width: 14px; padding: 0 3px; border-radius: 7px; background: var(--git-badge-bg); color: var(--git-text-secondary); font-size: 9.5px; line-height: 14px; }
-.rail-sep { width: 22px; height: 1px; margin: 4px 0; background: var(--git-divider); }
-.footer { height: 24px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-top: 1px solid var(--git-border); background: var(--git-toolbar-bg); font-size: 11.5px; color: var(--git-text-secondary); }
-.footer-btn { display: flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: inherit; cursor: pointer; font-size: 11.5px; }
-.footer-btn:hover:not(:disabled) { background: var(--git-hover); }
-.footer-btn:disabled { opacity: 0.6; cursor: default; }
-.footer-sep { width: 1px; height: 12px; background: var(--git-border); }
-.footer-version { padding: 0 4px; }
+/* 사이드바 레일(원본 SidebarRail · .git-rail): 36px, [펼치기] · 보기 탭 묶음 · 구역 묶음, 개수는 아이콘 아래. */
+.rail { width: 36px; flex: none; display: flex; flex-direction: column; align-items: stretch; padding: 6px 0; overflow-y: auto; background: var(--git-sidebar-bg); border-right: 1px solid var(--git-border); }
+.rail-group { display: flex; flex-direction: column; padding: 4px 0; border-top: 1px solid var(--git-border); }
+.rail-item { display: flex; flex-direction: column; align-items: center; padding: 5px 0; margin: 1px 4px; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; }
+.rail > .rail-item:first-child { margin-bottom: 4px; }
+.rail-item:hover { background: var(--git-hover); color: var(--git-text); }
+.rail-item.selected, .rail-item.selected:hover { background: var(--git-selected); color: var(--git-selected-text, var(--git-text)); }
+.rail-icon { flex: none; }
+.rail-badge { margin-top: 1px; font-size: 10px; line-height: 12px; color: var(--git-section-count, var(--git-text-muted)); }
+/* 아래쪽 상태 줄(원본 GitWindow.uss .git-footer): 낮고 흐린 글씨, 누를 수 있는 칸은 올리면 밝아진다. */
+.footer { height: 24px; flex: none; display: flex; align-items: center; padding: 0 6px; border-top: 1px solid var(--git-border); background: var(--git-header-bg); color: var(--git-text-muted); }
+.footer-btn { display: flex; align-items: center; min-width: 0; height: 20px; margin: 0 2px; padding: 0 6px; border: 0; border-radius: var(--radius); background: none; color: var(--git-text-muted); cursor: pointer; }
+.footer-btn:hover { background: var(--git-hover); color: var(--git-text); }
+.footer-icon { flex: none; margin-right: 5px; }
+.footer-text { font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.footer-version { flex: none; height: 16px; margin: 0 2px 0 6px; padding: 0 6px; font-size: 10px; line-height: 14px; color: var(--git-text-muted); border: 1px solid var(--git-border); border-radius: var(--radius); }
 .spacer { flex: 1; }
-.skeleton { position: absolute; inset: 0; z-index: 6; display: flex; background: var(--git-bg); }
-.sk-col { display: flex; flex-direction: column; gap: 14px; padding: 16px 14px; overflow: hidden; }
-.sk-side { width: 240px; background: var(--git-sidebar-bg); }
-.sk-graph { flex: 1; gap: 0; padding-top: 30px; }
-.sk-detail { width: 380px; background: var(--git-sidebar-bg); }
-.sk-row { height: 34px; display: flex; align-items: center; gap: 16px; padding-left: 190px; }
-.sk-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--git-skeleton); flex: none; }
-.sk-bar { height: 10px; border-radius: 5px; background: linear-gradient(180deg, var(--git-skeleton) 0%, var(--git-skeleton) 100%); animation: sk-wave 1.4s ease-in-out infinite; }
-@keyframes sk-wave { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+/* 처음 읽는 동안의 덮개(원본 GitSkeleton): 칸마다 같은 모양의 회색 막대, 밝은 띠가 위에서 아래로 2.3초에 한 번 지나간다. */
+.skeleton { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.sk-cover { position: absolute; overflow: hidden; padding-top: 4px; background: var(--git-list-bg, var(--git-bg)); pointer-events: auto; }
+.sk-cover::after { content: ''; position: absolute; left: 0; right: 0; top: -40%; height: 40%; background: linear-gradient(180deg, transparent, var(--git-skeleton-shine, rgba(255, 255, 255, 0.05)), transparent); animation: sk-sweep 2.3s linear infinite; }
+.sk-files .sk-row { height: 24px; display: flex; align-items: center; padding: 0 14px 0 12px; }
+.sk-commits .sk-row { height: 34px; display: flex; align-items: center; gap: 12px; padding: 0 14px 0 16px; }
+.sk-lead { margin-right: 10px; }
+.sk-meta { margin-left: 12px; }
+.sk-dot { width: 20px; height: 20px; border-radius: 10px; background: var(--git-skeleton); flex: none; }
+.sk-bar { flex: none; height: 10px; border-radius: 3px; background: var(--git-skeleton); }
+@keyframes sk-sweep { from { top: -40%; } to { top: 100%; } }
+
+/* 배율을 바꾸면 오른쪽 아래에 잠깐 뜨는 "120%"(원본 UiScaleController). */
+.scale-indicator { position: fixed; right: 16px; bottom: 36px; z-index: 50; padding: 4px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.75); color: #fff; font-size: 13px; font-weight: 700; pointer-events: none; }
+.scale-indicator[hidden] { display: none; }
+/* 배치를 바꿀 때 잠깐 덮는 "다시 그리는 중"(원본 GitWindow.Rebuild). */
+.rebuilding { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.25); color: #fff; font-size: 14px; }
 
 /* ── 카드·오류·드로어·고르기(원본 GitConfirmDialog·GitErrorDialog·SideDrawer) ── */
 
-.card-head { display: flex; align-items: center; gap: 10px; }
-.card-head .modal-title { flex: 1; }
-.card-badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; }
-.card-badge.tone-accent { background: var(--git-accent-soft); color: var(--git-accent-fg); }
-.card-badge.tone-danger { background: var(--git-danger-soft); color: var(--git-danger); }
-.card-badge.tone-warning { background: var(--git-warning-soft); color: var(--git-warning); }
+/* ── 카드(원본 branch-dialog·confirm-dialog·prompt-dialog·pick-dialog·error-dialog) ── */
+.modal.card { position: relative; width: 460px; gap: 0; padding: 16px 22px 14px; border-radius: 8px; background: var(--git-bg); border-color: var(--git-border); }
+.modal.card.prompt { width: 440px; }
+.modal.card.branch-card { width: 560px; }
+.modal.card.error-card { width: 520px; }
+.modal.card.overwrite { width: 540px; }
+/* 도움말 > 키보드 단축키: 두 단으로 묶음(파일·편집 …)마다 이름과 키. */
+.modal.card.shortcuts-card { width: 640px; }
+.shortcut-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; max-height: 60vh; overflow: auto; margin: 0 0 4px; }
+.shortcut-group { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shortcut-title { margin: 6px 0 2px; font-size: 11px; font-weight: 700; color: var(--git-text-muted); }
+.shortcut-row { display: flex; align-items: center; gap: 8px; min-height: 22px; font-size: 12px; color: var(--git-text); }
+.shortcut-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shortcut-key { flex: none; padding: 1px 6px; border: 1px solid var(--git-border); border-radius: 4px; background: var(--git-hover); font: inherit; font-size: 11px; color: var(--git-text-secondary); }
+.modal.card.overwrite .modal-message { word-break: keep-all; }
+/* 덮어써질 파일 목록: 제목 시작선에 맞춰 들인 스크롤 상자. 한 줄에 파일 이름(굵게) + 폴더(흐리게, 넘치면 말줄임). */
+.overwrite-files { margin: 4px 0 2px 58px; max-height: 216px; overflow: auto; padding: 4px 0; border: 1px solid var(--git-border); border-radius: 6px; background: var(--git-field-bg, var(--git-sidebar-bg)); }
+.overwrite-file { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; font-size: 12px; white-space: nowrap; min-width: 0; }
+.overwrite-file:hover { background: var(--git-hover); }
+.overwrite-file > svg { flex: none; color: var(--git-text-muted); }
+.overwrite-name { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; color: var(--git-text); }
+.overwrite-dir { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--git-text-muted); }
+.card > .card-close { position: absolute; top: 8px; right: 8px; }
 .card-close { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; flex: none; }
 .card-close:hover { background: var(--git-hover); color: var(--git-text); }
-.modal-error { min-height: 16px; }
+.card-head { display: flex; align-items: center; margin-bottom: 14px; padding-right: 24px; }
+/* 강조색 원 안의 흰 그림(오류는 빨간 원에 "!"). */
+.card-badge { width: 44px; height: 44px; border-radius: 22px; margin-right: 14px; display: flex; align-items: center; justify-content: center; flex: none; background: var(--git-accent); color: var(--git-accent-text); }
+.card-badge.tone-error, .card-badge.tone-danger { background: var(--git-danger); }
+.card-mark { font-size: 26px; font-weight: 700; line-height: 1; color: #fff; }
+.card-titles { flex: 1; min-width: 0; }
+.card .modal-title { font-size: 15px; font-weight: 700; color: var(--git-text); white-space: normal; word-break: break-word; }
+.card-hint { margin-top: 2px; font-size: 12px; color: var(--git-text-muted); white-space: pre-wrap; word-break: break-word; }
+/* 확인 카드의 안내 글: 제목 시작선(배지 44 + 간격 14)에 맞춰 들이고 줄바꿈을 그대로 보인다. */
+.card .modal-message { margin: 0 0 6px 58px; font-size: 12px; color: var(--git-text); }
+.card .modal-field { margin-top: 10px; }
+.card .modal-label { font-weight: 400; }
+.card .modal-check { margin-top: 8px; }
+.card .modal-error { min-height: 16px; margin-top: 4px; font-size: 11px; white-space: pre-wrap; }
+.card .modal-actions { gap: 0; margin-top: 10px; }
+.card .modal-actions .btn { height: 28px; min-width: 88px; margin-left: 8px; padding: 0 14px; font-size: 12px; border-radius: 5px; }
+/* 주 버튼: 옅은 강조색 + 강조색 테두리, 마우스를 올리면 채운다. 위험한 확인은 같은 모양의 빨강. */
+.btn.card-ok { background: var(--git-accent-soft); border-color: var(--git-accent); color: var(--git-text); font-weight: 700; }
+.btn.card-ok:hover:not(:disabled) { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); }
+.btn.card-ok.danger { background: var(--git-danger-soft); border-color: var(--git-danger); }
+.btn.card-ok.danger:hover:not(:disabled) { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.btn.card-ok:disabled { opacity: 0.5; cursor: default; }
+/* 카드 버튼은 포커스 테두리를 따로 그리지 않는다(원본: 포커스여도 1px 테두리 그대로). Enter 대상은 아래 .default 의 채운 모양으로 보인다. */
+.card .modal-actions .btn:focus, .card .modal-actions .btn:focus-visible { outline: none; box-shadow: none; }
+/* Enter 가 누를 버튼(.default — 기본은 확인, Tab 으로 옮기면 따라간다): 마우스를 올린 것처럼 꽉 채운다(원본 confirm-dialog__button--default). */
+.card .modal-actions .btn.default { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); }
+.card .modal-actions .btn.card-ok.danger.default { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.card .modal-actions .btn.card-ok.default:active:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); }
+.card .modal-actions .btn.card-ok.danger.default:active:not(:disabled) { background: var(--git-danger-strong-pressed); border-color: var(--git-danger-strong-pressed); }
+.card .modal-actions .btn.card-cancel { background: var(--git-button-bg); border-color: var(--git-button-border); color: var(--git-text); }
+.card .modal-actions .btn.card-cancel:hover:not(:disabled):not(.default) { background: var(--git-button-hover); }
+.card .modal-actions .btn.card-cancel.default { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); }
+
+/* 경고창(Fork·macOS 경고 모양, 원본 confirm-dialog--alert): 좁은 둥근 카드에 아이콘·질문·안내를 위아래로, 버튼 둘을 같은 폭으로. × 는 없다. */
+.modal.card.confirm.alert { width: 260px; padding: 18px 16px 16px; border-radius: 14px; }
+.card.alert .card-head { flex-direction: column; align-items: flex-start; margin-bottom: 8px; padding-right: 0; }
+.card.alert .card-badge { width: 56px; height: 56px; border-radius: 28px; margin: 0 0 14px; }
+.card.alert .card-badge svg { width: 30px; height: 30px; }
+.card.alert .card-titles { align-self: stretch; }
+.card.alert .modal-title { font-size: 13px; }
+.card.alert .modal-message { margin: 0 0 6px; }
+.card.alert .modal-actions { justify-content: space-between; margin-top: 12px; }
+.card.alert .modal-actions .btn { flex: 1 1 0; min-width: 0; height: 26px; margin: 0; border-radius: 7px; }
+.card.alert .modal-actions .btn.card-cancel { margin-right: 8px; }
+.card.alert .modal-actions .btn.card-ok { font-weight: 400; }
+/* 브랜치 카드: 왼쪽 이름표(오른쪽 맞춤 130) + 오른쪽 내용. 문제 줄은 이름 칸 바로 아래, 체크아웃은 그 아래. */
+.branch-card .modal-field { flex-direction: row; align-items: center; min-height: 26px; margin: 0 0 6px; gap: 0; }
+.branch-card .modal-label { width: 130px; flex: none; margin-right: 10px; text-align: right; font-size: 12px; }
+.branch-card .modal-field > .field-with-icon, .branch-card .card-static { flex: 1; min-width: 0; }
+.branch-card .field-with-icon { height: 28px; }
+.branch-card .modal-error, .branch-card .modal-check { margin-left: 140px; }
+.branch-card .modal-error { margin-top: 0; }
+.branch-card .modal-check { order: 2; margin-top: 2px; }
+.branch-card .modal-actions { order: 3; }
+.card-static { display: flex; align-items: center; gap: 6px; color: var(--git-text-muted); }
+.card-static-text { font-size: 12px; font-weight: 700; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .field-with-icon { display: flex; align-items: center; gap: 6px; padding-left: 8px; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-field-bg); color: var(--git-text-muted); }
 .field-with-icon:focus-within { border-color: var(--git-accent); box-shadow: 0 0 0 1px var(--git-accent); }
 .field-with-icon .field { border: 0; box-shadow: none !important; background: transparent; padding-left: 0; }
-.error-card { width: 520px; }
-.error-body { display: flex; flex-direction: column; gap: 8px; }
-.error-line { display: flex; gap: 8px; align-items: baseline; user-select: text; -webkit-user-select: text; }
-.error-tag { flex: none; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--git-danger-soft); color: var(--git-danger); }
-.error-tag.fix { background: var(--git-success-soft); color: var(--git-success); }
-.error-raw { margin: 0; max-height: 260px; overflow: auto; padding: 8px; border-radius: var(--radius); background: var(--git-diff-bg); font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; }
+.modal-error { min-height: 16px; }
 .seg { align-self: flex-start; }
 .seg button { display: inline-flex; align-items: center; gap: 4px; }
-.pick-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; }
-.pick-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius); cursor: pointer; }
+/* 오류 카드: 설명 | git 원문 전환, 두 보기를 겹쳐 높은 쪽에 맞춘다. [전체 복사] 는 왼쪽 끝. */
+.error-modes { display: flex; align-self: flex-start; margin: 0 0 10px 58px; border: 1px solid var(--git-button-border); border-radius: 6px; overflow: hidden; }
+.error-modes button { height: 24px; padding: 0 12px; border: 0; background: var(--git-button-bg); color: var(--git-text-muted); font-size: 12px; cursor: pointer; }
+.error-modes button:hover { background: var(--git-button-hover); }
+.error-modes button.on { background: var(--git-accent); color: var(--git-accent-text); font-weight: 700; }
+.error-stack { display: grid; max-height: 320px; margin: 0 0 6px 58px; overflow: auto; }
+.error-stack > .error-view { grid-area: 1 / 1; min-width: 0; }
+.error-stack > .error-view.hidden { visibility: hidden; }
+.error-cause { font-size: 13px; font-weight: 700; color: var(--git-text); white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+.error-fix { margin-top: 6px; font-size: 12px; color: var(--git-text-muted); white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+.error-raw { margin: 4px 0 0; padding: 8px 10px; border: 1px solid var(--git-border); border-radius: 6px; font: 12px/1.5 var(--mono); color: var(--git-text); white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; }
+.card .modal-actions .btn.error-copy { margin-left: 0; margin-right: auto; }
+/* 고르기 카드: 테두리 상자 안 30px 줄, 누르면 바로 고른다. */
+.pick-list { display: flex; flex-direction: column; max-height: 320px; margin-top: 10px; overflow: auto; border: 1px solid var(--git-border); border-radius: 5px; }
+.pick-item { flex: none; display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 12px; border: 0; border-radius: 0; background: none; color: var(--git-text); font: inherit; text-align: left; cursor: pointer; outline: none; }
 .pick-item:hover { background: var(--git-hover); }
-.pick-item.on { background: var(--git-selected); }
-.pick-radio { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--git-text-muted); flex: none; }
-.pick-item.on .pick-radio { border: 4px solid var(--git-accent); }
-.drawer { position: fixed; z-index: 15; display: flex; flex-direction: column; background: var(--git-menu-bg); border-right: 1px solid var(--git-menu-border); box-shadow: 8px 0 24px var(--git-menu-shadow); animation: drawer-in 0.16s ease-out; }
+.pick-item.on { background: var(--git-selected); color: var(--git-selected-text); }
+.pick-label { flex: 1; min-width: 0; }
+.pick-hint { flex: none; font-size: 11px; color: var(--git-text-muted); }
+.pick-item.on .pick-hint { color: inherit; opacity: 0.8; }
+.card.pick .modal-message { margin-bottom: 0; }
+/* ── 드로어(원본 side-drawer): 폭 480, 사이드바 뒤에서 0.4s 동안 끝까지 미끄러져 나온다(ease-out-circ). ── */
+.drawer-clip { position: fixed; z-index: 15; overflow: hidden; pointer-events: none; }
+.drawer { position: absolute; left: 0; top: 0; bottom: 0; max-width: 100%; display: flex; flex-direction: column; padding-top: 14px; background: var(--git-bg); border-right: 1px solid var(--git-border); box-shadow: 8px 0 24px var(--git-menu-shadow); pointer-events: auto; animation: drawer-in 0.4s cubic-bezier(0.075, 0.82, 0.165, 1); }
 .drawer.no-anim { animation: none; }
-.drawer.closing { animation: drawer-out 0.16s ease-in forwards; }
-@keyframes drawer-in { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes drawer-out { to { transform: translateX(-24px); opacity: 0; } }
-.drawer-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px; border-bottom: 1px solid var(--git-divider); color: var(--git-text-strong); }
-.drawer-title { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drawer-body { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-.drawer-form { display: flex; flex-direction: column; gap: 10px; }
-.drawer-tabs { margin-bottom: 4px; }
+.drawer.closing { animation: drawer-out 0.4s cubic-bezier(0.075, 0.82, 0.165, 1) forwards; }
+@keyframes drawer-in { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes drawer-out { from { transform: none; } to { transform: translateX(-100%); } }
+.drawer-head { flex: none; display: flex; align-items: center; margin: 0 18px 10px; }
+.drawer-glyph { width: 20px; height: 20px; margin-right: 8px; color: var(--git-text-muted); flex: none; }
+.drawer-title { flex: 1; min-width: 0; font-size: 16px; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-body { flex: 1; overflow: auto; padding: 0 18px 18px; display: flex; flex-direction: column; }
+.drawer-form { display: flex; flex-direction: column; }
+/* 다른 화면(GitHub 드로어 등)이 쓰는 이름표 + 칸 묶음은 칸 사이를 띄운다. */
+.drawer-form > .modal-field, .drawer-form > .modal-actions { margin-top: 10px; }
+.drawer-form > .modal-error { min-height: 16px; margin-top: 6px; }
+.drawer-field { display: flex; flex-direction: column; }
+.drawer-caption { margin: 10px 0 4px; font-size: 12px; color: var(--git-text); }
+.drawer-form .field { height: 30px; }
+.drawer-form .search-select { min-height: 30px; }
+.drawer-form .field[readonly] { color: var(--git-text-muted); }
+/* 원본 side-drawer__caption-row · __help: 이름 오른쪽 원 안의 i, 마우스를 올리면 설명. */
+.drawer-caption-row { display: flex; align-items: center; }
+.drawer-help { display: inline-flex; margin: 10px 0 4px 5px; color: var(--git-text-muted); cursor: help; }
+.drawer-help:hover { color: var(--git-text); }
+.drawer-note { margin-top: 6px; font-size: 12px; color: var(--git-text-muted); white-space: pre-wrap; word-break: keep-all; }
+.drawer-section { display: flex; flex-direction: column; }
+.drawer-section[hidden] { display: none; }
+.drawer-toggle { margin-top: 12px; gap: 6px; }
+.drawer-toggle[hidden] { display: none; }
+/* "만든 뒤 브랜치 올리기" 아래 칸들: 체크 칸 글자 시작에 맞춰 들인다. */
+.drawer-suboptions { margin-left: 22px; display: flex; flex-direction: column; }
+.drawer-suboptions[hidden] { display: none; }
+/* GitHub 탭의 [기존 | 새로 만들기]: diff 막대의 칸 묶음을 서랍 폭에 맞춰 반씩. */
+.dbar-seg.drawer-modes { margin: 8px 0 2px; align-self: stretch; }
+.drawer-modes > .dbar-btn { flex: 1 1 0; height: 26px; }
+.drawer-problem { margin-top: 6px; font-size: 11px; color: var(--git-danger); white-space: pre-wrap; }
+/* 주 버튼: 폭을 다 쓰는 초록. 보조 버튼: 흰 바탕·얇은 테두리, 왼쪽 정렬. */
+.btn.drawer-primary { width: 100%; height: 30px; margin-top: 16px; border-color: var(--git-success); background: var(--git-success-soft); color: var(--git-text); }
+.btn.drawer-primary:hover:not(:disabled) { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
+.btn.drawer-primary:disabled { opacity: 0.5; cursor: default; }
+.btn.drawer-secondary { height: 26px; margin-top: 10px; padding: 0 12px; align-self: flex-start; }
+.btn.drawer-secondary:disabled { opacity: 0.5; cursor: default; }
+.drawer-form .row .btn.drawer-secondary { height: 30px; margin-top: 0; }
+.btn.icon-text { display: inline-flex; align-items: center; gap: 6px; }
+.btn.danger-text { color: var(--git-danger); }
+.drawer-actions { display: flex; gap: 8px; margin-top: 16px; }
+.drawer-actions .btn.drawer-secondary { margin-top: 0; }
+.submodule-sync { margin-top: 14px; padding: 8px 10px; border-radius: 6px; font-size: 12px; background: var(--git-success-soft); color: var(--git-text); }
+.submodule-sync.modified, .submodule-sync.uninitialized { background: var(--git-warning-soft); }
+.submodule-sync.conflict { background: var(--git-danger-soft); }
+.fact { display: flex; gap: 10px; margin-top: 6px; font-size: 12px; }
+.fact-name { width: 80px; flex: none; color: var(--git-text-muted); }
+.fact-value { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; }
+.fact-value.empty { color: var(--git-text-muted); }
+/* 원격 추가 위 탭: 그림(24) 위·글자 아래, 고른 탭은 아래 2px 선. */
+.drawer-tabs { display: flex; flex: none; margin: 0 -18px 6px; padding: 0 18px; border-bottom: 1px solid var(--git-divider); }
+.drawer-tab { width: 72px; margin-right: 4px; padding: 4px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--git-text-muted); font-size: 12px; cursor: pointer; }
+.drawer-tab:hover { color: var(--git-text); }
+.drawer-tab.on { color: var(--git-text); border-bottom-color: var(--git-text); }
 .search-select { position: relative; display: flex; align-items: center; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-field-bg); }
 .search-select:focus-within { border-color: var(--git-accent); box-shadow: 0 0 0 1px var(--git-accent); }
 .ss-input { flex: 1; min-width: 0; padding: 6px 8px; border: 0; outline: none; background: transparent; color: var(--git-text); }
@@ -880,15 +1325,25 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .ss-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
 .ss-item.on { background: var(--git-menu-hover); color: var(--git-menu-hover-text); }
 .ss-item.chosen { font-weight: 700; }
+.ss-item > .muted.small { margin-left: auto; }
 .ss-empty { padding: 6px; }
+.ss-prefix { display: flex; align-items: center; padding-left: 7px; }
+.ss-image { width: 18px; height: 18px; flex: none; border-radius: 50%; background: var(--git-badge-bg); object-fit: cover; }
+.ss-item .ss-image { width: 16px; height: 16px; }
+.ss-clear { display: flex; align-items: center; padding: 0 6px; color: var(--git-text-muted); cursor: pointer; }
+.ss-clear:hover { color: var(--git-text); }
+.search-select.disabled { opacity: 0.5; }
+.search-select.up > .ss-list { top: auto; bottom: calc(100% + 2px); }
+.search-select.disabled .ss-caret { cursor: default; }
 
 /* ── 말풍선 툴팁(원본 HoverCallout) ─────────────────── */
 
-.callout { position: fixed; z-index: 50; max-width: 360px; padding: 5px 9px; border-radius: 6px; background: var(--git-graph-tooltip-bg); color: var(--git-graph-tooltip-text); border: 1px solid var(--git-menu-border); box-shadow: 0 4px 14px var(--git-menu-shadow); font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; pointer-events: none; }
-.callout-arrow { position: absolute; width: 8px; height: 8px; background: inherit; border: inherit; border-width: 0; transform: rotate(45deg); }
-.callout.side-right .callout-arrow { left: -5px; margin-top: -4px; border-left-width: 1px; border-bottom-width: 1px; border-style: solid; border-color: var(--git-menu-border); }
-.callout.side-below .callout-arrow { top: -5px; margin-left: -4px; border-left-width: 1px; border-top-width: 1px; border-style: solid; border-color: var(--git-menu-border); }
-.callout.side-above .callout-arrow { bottom: -5px; margin-left: -4px; border-right-width: 1px; border-bottom-width: 1px; border-style: solid; border-color: var(--git-menu-border); }
+/* 원본 hover-callout: 테마와 상관없이 검은 말풍선에 흰 12px 글자, 둥글기 4, 꼭지 6. */
+.callout { position: fixed; z-index: 50; max-width: 360px; padding: 3px 8px; border-radius: 4px; background: #000; color: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; pointer-events: none; }
+.callout-arrow { position: absolute; width: 6px; height: 6px; background: #000; transform: rotate(45deg); }
+.callout.side-right .callout-arrow { left: -3px; margin-top: -3px; }
+.callout.side-below .callout-arrow { top: -3px; margin-left: -3px; }
+.callout.side-above .callout-arrow { bottom: -3px; margin-left: -3px; }
 
 /* ── 안내 띠 ───────────────────────────────────────── */
 
@@ -901,7 +1356,7 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .ico { flex: none; }
 
 /* ── 커밋 검색 ─────────────────────────────────────── */
-.graph-search { position: absolute; top: 34px; right: 16px; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 4px 6px; width: 440px; max-width: calc(100% - 32px); border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 6px 18px var(--git-menu-shadow); color: var(--git-text-muted); }
+.graph-search { position: absolute; top: 56px; right: 16px; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 4px 6px; width: 440px; max-width: calc(100% - 32px); border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 6px 18px var(--git-menu-shadow); color: var(--git-text-muted); }
 .graph-search .field { flex: 1; padding: 4px 6px; }
 .search-count { white-space: nowrap; padding: 0 4px; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; }
@@ -910,78 +1365,138 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 
 /* ── 도구 화면: 파일 히스토리 · Blame · 비교 · 편집기 · 이미지 diff ── */
 
-.tool-view { display: flex; flex-direction: column; }
-.tool-head { flex: none; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); color: var(--git-text-strong); }
-.tool-title { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-view { display: flex; flex-direction: column; background: var(--git-bg); }
+/* 머리 줄(원본 file-history__header): 32px · 굵은 13px 제목 · × */
+.tool-head { flex: none; display: flex; align-items: center; height: 32px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
+.tool-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-close { width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--git-radius); background: none; font-size: 18px; line-height: 1; color: var(--git-text-muted); cursor: pointer; }
+.tool-close:hover { background: var(--git-hover); color: var(--git-text); }
 .diff-view.embedded { position: relative; inset: auto; z-index: auto; }
+/* 칸 경계 끌기(원본 TwoPaneSplitView). 1px 선, 잡는 자리는 양옆 3px 더. */
+.pane-split { flex: none; position: relative; z-index: 2; background: var(--git-border); }
+.pane-split.cols { width: 1px; cursor: col-resize; }
+.pane-split.rows { height: 1px; cursor: row-resize; }
+.pane-split::after { content: ""; position: absolute; inset: -3px 0; }
+.pane-split.cols::after { inset: 0 -3px; }
+.pane-split:hover, .pane-split.dragging { background: var(--git-accent); }
+.vrows { position: relative; }
+.vrows > * { position: absolute; left: 0; right: 0; }
+/* 파일 히스토리(원본 FileHistoryPanel · GitStaging.uss file-history__*) */
 .fh-body { flex: 1; min-height: 0; display: flex; }
-.fh-list { width: 320px; flex: none; overflow: auto; border-right: 1px solid var(--git-border); background: var(--git-sidebar-bg); }
+.fh-list { min-width: 0; display: flex; flex-direction: column; background: var(--git-list-bg, var(--git-sidebar-bg)); }
+.fh-rows { flex: 1; min-height: 0; overflow: auto; outline: none; }
 .fh-diff { flex: 1; min-width: 0; }
 .fh-empty { padding: 12px; }
-.fh-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--git-divider); }
+.fh-notice { margin: 16px; text-align: center; white-space: normal; color: var(--git-text-muted); }
+.fh-notice[hidden] { display: none; }
+.fh-row { display: flex; align-items: center; height: 44px; padding: 0 10px 0 8px; cursor: default; }
 .fh-row:hover { background: var(--git-hover); }
 .fh-row.active { background: var(--git-selected); }
-.fh-text { flex: 1; min-width: 0; }
-.fh-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--git-text-strong); }
-.splitter.fixed { cursor: default; }
-.blame-body { flex: 1; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 20px; }
-.bl-row { display: flex; min-width: max-content; cursor: pointer; }
-.bl-row.alt { background: var(--git-row-alt, rgba(127,127,127,0.06)); background: color-mix(in srgb, var(--git-text) 4%, transparent); }
-.bl-row:hover { background: var(--git-hover); }
-.bl-row.first { border-top: 1px solid var(--git-divider); }
-.bl-row.uncommitted .bl-info { color: var(--git-warning); }
-.bl-info { width: 300px; flex: none; display: flex; gap: 8px; padding: 0 8px; color: var(--git-text-muted); font-family: var(--font); font-size: 12px; position: sticky; left: 0; background: inherit; }
-.bl-hash { width: 70px; color: var(--git-accent-fg); }
-.bl-author { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bl-date { width: 80px; text-align: right; }
-.bl-ln { width: 48px; flex: none; text-align: right; padding-right: 10px; color: var(--git-diff-number); }
-.bl-code { white-space: pre; padding-right: 20px; color: var(--git-diff-text); tab-size: 4; }
-.cmp-files { flex: 0 0 34%; min-height: 120px; display: flex; flex-direction: column; border-bottom: 1px solid var(--git-border); background: var(--git-sidebar-bg); }
-.cmp-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
-.cmp-diff { flex: 1; min-height: 0; }
+.fh-avatar { width: 28px; height: 28px; flex: none; margin-right: 10px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; }
+.fh-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.fh-subject { font-size: 13px; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fh-meta { margin-top: 2px; font-size: 11px; color: var(--git-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fh-hash { flex: none; align-self: flex-start; margin: 6px 0 0 8px; font-family: var(--mono); font-size: 11px; color: var(--git-text-muted); }
+.fh-row.active .fh-hash, .fh-row.active .fh-meta { color: var(--git-selected-text); }
+.fh-footer { flex: none; padding: 8px 0 10px; font-size: 11px; text-align: center; color: var(--git-text-muted); border-top: 1px solid var(--git-border); }
+/* Blame(원본 GitBlameWindow · blame-row) */
+.bl-summary { flex: none; height: 22px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: var(--git-text-secondary); border-bottom: 1px solid var(--git-border); }
+.blame-body { flex: 1; min-height: 0; overflow: auto; background: var(--git-diff-bg); }
+.bl-row { display: flex; align-items: center; height: 18px; cursor: default; }
+.bl-row.odd { background: var(--git-header-bg); }
+.bl-row.start { border-top: 1px solid var(--git-border); }
+.bl-row.selected { background: var(--git-selected); }
+.bl-hash, .bl-author, .bl-date { flex: none; padding: 0 6px; font-size: 11px; color: var(--git-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-hash { width: 80px; color: var(--git-refs); }
+.bl-row.uncommitted .bl-hash { color: var(--git-warning); }
+.bl-author { width: 120px; }
+.bl-date { width: 110px; }
+.bl-ln { width: 44px; flex: none; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-size: 11px; color: var(--git-diff-number); background: var(--git-diff-gutter); }
+.bl-code { flex: 1; padding-left: 8px; font-family: var(--mono); font-size: 12px; white-space: pre; tab-size: 4; color: var(--git-diff-text); }
+/* 비교(원본 GitCompareWindow): 요약 줄 · 위 바뀐 파일 · 아래 diff */
+.cmp-bar { flex: none; height: 22px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--git-border); }
+.cmp-summary { font-size: 12px; color: var(--git-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cmp-files { flex: 1; min-height: 60px; overflow: auto; background: var(--git-sidebar-bg); }
+.cmp-diff { min-height: 0; }
 .sx-keyword { color: var(--git-code-keyword); }
 .sx-string { color: var(--git-code-string); }
 .sx-number { color: var(--git-code-number); }
-.sx-comment { color: var(--git-code-comment); font-style: italic; }
+.sx-comment { color: var(--git-code-comment); }
 .sx-key { color: var(--git-code-key); }
-.ed-head .ed-status { font-size: 12px; color: var(--git-text-secondary); font-weight: 400; }
-.ed-status.dirty { color: var(--git-warning); }
-.ed-body { flex: 1; min-height: 0; display: flex; background: var(--git-diff-bg); font-family: var(--mono); font-size: 13px; line-height: 20px; }
-.ed-gutter { width: 56px; flex: none; overflow: hidden; padding: 6px 0; background: var(--git-diff-gutter); color: var(--git-diff-number); text-align: right; user-select: none; -webkit-user-select: none; }
-.ed-ln { height: 20px; padding-right: 10px; border-left: 3px solid transparent; }
+.sx-tag { color: var(--git-code-tag); }
+.sx-attribute { color: var(--git-code-attribute); }
+.sx-punctuation { color: var(--git-code-punctuation); }
+.sx-type { color: var(--git-code-type); }
+.sx-function { color: var(--git-code-function); }
+/* 코드 편집기(원본 GitCodeEditor · git-diff__editing): 12px · 줄 18px, 보이는 줄만 그린다. */
+.dbar-text.outlined { border: 1px solid var(--git-button-border); border-radius: var(--git-radius-small); height: 22px; }
+.ed-bar .dbar-left { gap: 6px; }
+.ed-editing { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--git-text-secondary); font-size: 12px; }
+.ed-label.dirty { color: var(--git-warning); }
+.ed-save:not(:disabled) { border-color: var(--git-success); color: var(--git-text); }
+.ed-body { flex: 1; min-height: 0; display: flex; position: relative; background: var(--git-diff-bg); font-family: var(--mono); font-size: 12px; line-height: 18px; }
+.ed-gutter { flex: none; position: relative; overflow: hidden; background: var(--git-diff-gutter); user-select: none; -webkit-user-select: none; }
+.ed-numbers { position: relative; height: 100%; min-width: 40px; font-size: 11px; }
+.ed-ln { position: absolute; left: 0; right: 0; height: 18px; padding-right: 8px; text-align: right; color: var(--git-diff-number); border-left: 3px solid transparent; }
 .ed-ln.cur { color: var(--git-editor-number-current); }
 .ed-ln.changed { border-left-color: var(--git-diff-added-sign); }
-.ed-scroll { position: relative; flex: 1; min-width: 0; overflow: auto; }
-.ed-hl, .ed-input { margin: 0; padding: 6px 12px; font: inherit; line-height: 20px; white-space: pre; tab-size: 4; min-width: 100%; min-height: 100%; }
-.ed-hl { position: absolute; top: 0; left: 0; pointer-events: none; color: var(--git-diff-text); }
+.ed-scroll { flex: 1; min-width: 0; overflow: auto; cursor: text; }
+.ed-sizer { position: relative; min-width: 100%; }
+.ed-layer { position: absolute; inset: 0; pointer-events: none; color: var(--git-diff-text); }
+.ed-line { position: absolute; left: 10px; height: 18px; white-space: pre; tab-size: 4; }
 .ed-ind { background-image: repeating-linear-gradient(90deg, var(--git-editor-indent-guide) 0 1px, transparent 1px 4ch); }
-.ed-line { height: 20px; }
-.ed-input { position: relative; display: block; width: 100%; height: 100%; border: 0; outline: none; resize: none; background: transparent; color: transparent; caret-color: var(--git-editor-caret); overflow: hidden; }
+.ed-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0 0 0 10px; border: 0; outline: none; resize: none; overflow: hidden; font: inherit; line-height: 18px; white-space: pre; tab-size: 4; background: transparent; color: transparent; caret-color: var(--git-editor-caret); }
 .ed-input::selection { background: var(--git-diff-text-selection); color: transparent; }
-.ed-current { position: absolute; left: 0; right: 0; height: 20px; background: var(--git-editor-current-line); pointer-events: none; }
+.ed-current { position: absolute; left: 0; right: 0; height: 18px; background: var(--git-editor-current-line); pointer-events: none; }
+.ed-measure { position: absolute; visibility: hidden; white-space: pre; font: inherit; }
 .checker { background-color: #fff; background-image: linear-gradient(45deg, #ddd 25%, transparent 25%), linear-gradient(-45deg, #ddd 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ddd 75%), linear-gradient(-45deg, transparent 75%, #ddd 75%); background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0; }
 :root[data-theme="dark"] .checker { background-color: #2b2d30; background-image: linear-gradient(45deg, #36383c 25%, transparent 25%), linear-gradient(-45deg, #36383c 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #36383c 75%), linear-gradient(-45deg, transparent 75%, #36383c 75%); }
-.img-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; cursor: grab; }
-.img-side { display: flex; gap: 24px; align-items: flex-start; }
-.img-col, .img-single { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.img-caps { display: flex; gap: 12px; align-items: center; }
-.img-cap { display: flex; gap: 8px; padding: 2px 8px; border-radius: 4px; background: var(--git-menu-bg); font-size: 12px; }
-.img-cap.before { border-left: 3px solid var(--git-danger); }
-.img-cap.after { border-left: 3px solid var(--git-success); }
-.img-frame { position: relative; line-height: 0; box-shadow: 0 0 0 1px var(--git-border); }
-.img-frame.before { box-shadow: 0 0 0 2px var(--git-danger-soft); }
-.img-frame.after { box-shadow: 0 0 0 2px var(--git-success-soft); }
-.img-frame.missing { width: 120px; height: 120px; box-shadow: 0 0 0 1px dashed var(--git-border); }
-.img-frame img, .img-frame canvas { image-rendering: pixelated; display: block; }
-.img-stack { position: relative; cursor: ew-resize; }
-.img-stack > .swipe-top { position: absolute; inset: 0; }
-.swipe-handle { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--git-accent); display: flex; align-items: center; justify-content: center; }
-.swipe-knob { width: 26px; height: 26px; border-radius: 50%; background: var(--git-accent); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
-.onion-slider { width: 200px; }
-.img-info { position: absolute; left: 10px; bottom: 8px; padding: 2px 8px; border-radius: 4px; background: var(--git-menu-bg); }
-.img-props { position: absolute; right: 12px; top: 12px; border-collapse: collapse; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); border-radius: 6px; font-size: 12px; }
-.img-props td, .img-props th { padding: 4px 10px; text-align: left; }
-.img-props td.diff { color: var(--git-warning); font-weight: 700; }
+/* 이미지 diff(원본 GitImageDiffView · git-image-diff__*): 보기 막대 · 정보 줄 · 뷰포트 · 아래 속성 칸. */
+.img-toolbar { height: 32px; }
+.img-modes { display: flex; align-items: center; }
+.img-opacity { display: inline-flex; align-items: center; gap: 6px; width: 220px; margin-left: 12px; font-size: 12px; color: var(--git-text-secondary); }
+.img-opacity[hidden] { display: none; }
+.img-slider { flex: 1; min-width: 60px; }
+.img-zoom { min-width: 44px; text-align: right; font-size: 12px; color: var(--git-text-muted); }
+.img-props-btn { margin-left: 8px; }
+.img-info { flex: none; display: flex; align-items: center; gap: 12px; height: 22px; padding: 0 10px; font-size: 11px; white-space: nowrap; color: var(--git-text); border-bottom: 1px solid var(--git-border); }
+.img-info[hidden], .img-size-changed[hidden] { display: none; }
+.img-size-changed { font-weight: 700; color: var(--git-diff-removed-sign); }
+.img-changed.changed { font-weight: 700; color: var(--git-diff-hunk-text); }
+.img-stage { flex: 1; min-height: 0; display: flex; background: var(--git-diff-bg); }
+.img-vp { position: relative; flex: 1 1 0; min-width: 0; overflow: hidden; cursor: grab; user-select: none; -webkit-user-select: none; }
+.img-vp.panning { cursor: grabbing; }
+.img-vp.left { border-right: 1px solid var(--git-diff-split-border); }
+.img-layer { position: absolute; left: 0; top: 0; display: block; }
+.img-vp img.img-layer, .img-vp canvas { image-rendering: pixelated; display: block; }
+/* 원본 Checker: 2×2 텍스처(204·153)를 16px 로 깐다 → 8px 칸. */
+.img-checker { background: repeating-conic-gradient(#999 0 25%, #ccc 0 50%) 0 0 / 16px 16px; }
+.img-checker.framed { box-shadow: 0 0 0 1px var(--git-border); }
+.img-vp.added .img-checker.framed { box-shadow: 0 0 0 1px var(--git-success); }
+.img-vp.deleted .img-checker.framed { box-shadow: 0 0 0 1px var(--git-danger); }
+.img-clip { overflow: hidden; }
+.img-caption { position: absolute; left: 8px; top: 8px; padding: 2px 6px; font-size: 10px; border-radius: var(--git-radius-small); color: #fff; background: rgba(0, 0, 0, 0.55); pointer-events: none; white-space: pre; }
+.img-status { position: absolute; left: 0; right: 0; top: 6px; text-align: center; font-size: 13px; font-weight: 700; pointer-events: none; }
+.img-vp.added .img-status { color: var(--git-success); }
+.img-vp.deleted .img-status { color: var(--git-danger); }
+.img-swipe { position: absolute; top: 0; bottom: 0; width: 12px; display: flex; justify-content: center; cursor: pointer; }
+.img-swipe-line { width: 2px; height: 100%; background: var(--git-accent); }
+.img-swipe-knob { position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); box-sizing: border-box; border: 2px solid var(--git-accent); border-radius: 15px; background: #fff; color: #1f1f1f; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); }
+.img-swipe-knob .png-icon { width: 20px; height: 20px; }
+.img-props-split { flex: none; height: 5px; display: flex; flex-direction: column; justify-content: center; cursor: row-resize; background: var(--git-diff-bg); }
+.img-props-line { height: 1px; background: var(--git-border); }
+.img-props-split:hover .img-props-line { height: 2px; background: var(--git-accent); }
+.img-props { flex: none; display: flex; overflow: hidden; background: var(--git-diff-bg); }
+.img-props[hidden], .img-props-split[hidden] { display: none; }
+.img-prop-col { flex: 1 1 0; min-width: 0; padding-bottom: 6px; }
+.img-prop-gutter { width: 1px; background: var(--git-diff-split-border); }
+.img-prop-head { padding: 3px 8px; font-size: 11px; text-align: center; color: var(--git-text-muted); background: var(--git-header-bg); border-bottom: 1px solid var(--git-border); }
+.img-prop { display: flex; align-items: center; height: 18px; }
+.img-prop.changed.before { background: var(--git-diff-removed-line); }
+.img-prop.changed.after { background: var(--git-diff-added-line); }
+.img-prop-n { width: 28px; padding-right: 6px; text-align: right; font-size: 11px; color: var(--git-text-muted); }
+.img-prop-v { font-family: var(--mono); font-size: 12px; color: var(--git-text); }
 
 /* ── 설정 ─────────────────────────────────────────── */
 .modal.settings { width: 780px; height: min(640px, calc(100% - 48px)); }
@@ -997,93 +1512,536 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 /* ── 탭 · 배치별 화면(원본 GitWindow 탭, ForkChangesView, PendingChangesView, 탐색 화면) ── */
 
 .view-hidden { display: none !important; }
-.side-tabs { flex: none; display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--git-divider); }
-.side-tab { position: relative; flex: 1; min-width: 0; height: 30px; display: flex; align-items: center; justify-content: center; gap: 4px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--git-text-muted); cursor: pointer; font-size: 11px; }
-.side-tab:hover { color: var(--git-text); }
-.side-tab.on { color: var(--git-text-strong); border-bottom-color: var(--git-accent); }
-.side-tab-text { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-tab.on .side-tab-text { display: inline; }
-.side-tab-badge { min-width: 15px; padding: 0 4px; border-radius: 8px; background: var(--git-accent); color: #fff; font-size: 10px; line-height: 15px; }
+/* 사이드바 위 탭(원본 git-sidebar__views · git-sidebar__tab): 세로 목록, 22px 줄, 제목 + 오른쪽 개수 배지. */
+.side-tabs { flex: none; display: flex; flex-direction: column; padding: 4px 0; border-bottom: 1px solid var(--git-border); }
+.side-tab { display: flex; align-items: center; height: 22px; padding: 0 10px; color: var(--git-text); cursor: default; }
+.side-tab:hover { background: var(--git-hover); }
+.side-tab.on, .side-tab.on:hover { background: var(--git-selected); }
+.side-tab-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-tab.on .side-tab-text { color: var(--git-selected-text); }
+.side-tab-badge { flex: none; padding: 0 5px; border-radius: 8px; background: var(--git-badge-bg); color: var(--git-text); font-size: 10px; line-height: 15px; }
 .view-host { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--git-bg); position: relative; }
 .workspace > .tool-view { position: absolute; top: 0; right: 0; bottom: 0; left: 45px; z-index: 7; }
 .diff-view.docked, .merge-view.docked { position: relative; inset: auto; flex: 1; min-height: 0; }
-.fork-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 34%) 1fr; }
-.fork-lists { width: auto !important; border-right: 1px solid var(--git-border); }
+.fork-layout { flex: 1; min-height: 0; display: flex; }
+.fork-lists { width: auto !important; min-width: 0; }
+/* 병합 편집기를 여는 동안: Fork 는 목록·커밋 칸, Unity VCS 는 동작 줄·메시지·목록·세부사항을 접는다(원본 SetMergeFullScreen). */
+.view-host.merging .fork-lists, .view-host.merging .fork-lists + .pane-split, .view-host.merging .fork-commit,
+.view-host.merging .pending-actions, .view-host.merging .pending-commit, .view-host.merging .pending-head,
+.view-host.merging .pending-list, .view-host.merging .pending-list + .pane-split,
+.view-host.merging .pending-details, .view-host.merging .pending-main + .pane-split { display: none !important; }
 .fork-lists > .commit-box { display: none; }
-.fork-right { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.fork-right { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .fork-diff { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .fork-diff > .fork-empty { position: absolute; inset: 0; display: grid; place-items: center; }
 .fork-commit { flex: none; border-top: 1px solid var(--git-border); background: var(--git-sidebar-bg); }
 .fork-commit .commit-box { border-top: 0; }
+/* Unity VCS 대기 중인 변경사항(원본 PendingChangesView): 동작 줄 · 메시지 · [머리 · 목록(220) · diff] | 세부사항(340). */
+.pending-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .pending-layout { flex: 1; min-height: 0; display: flex; }
 .pending-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.pending-actions { flex: none; display: flex; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--git-divider); }
+.pending-actions { flex: none; display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--git-divider); }
+.pending-actions .btn[hidden] { display: none; }
 .btn.on { background: var(--git-selected); }
-.pending-message { margin: 8px 10px; width: auto; flex: none; }
+.pending-commit { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--git-border); }
+.pending-message { width: 100%; flex: none; resize: vertical; }
+.pending-author[hidden] { display: none; }
+.pending-head { flex: none; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--git-divider); }
+.pending-head .check { margin: 0; }
+.pending-summary { font-size: 12px; color: var(--git-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pending-filter { width: 180px; height: 22px; padding: 2px 6px; }
+.pending-filter[hidden], .pending-head .dbar-btn[hidden] { display: none; }
 .pending-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.pending-list { flex: 0 0 38%; min-height: 100px; display: flex; flex-direction: column; border-top: 1px solid var(--git-divider); }
-.pending-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--git-divider); }
-.pending-rows { flex: 1; overflow: auto; }
-.pending-rows .file-row input { margin: 0 4px 0 0; }
-.pending-sep { height: 1px; background: var(--git-border); }
+.pending-list { min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.pending-list .row-check { margin: 0 4px 0 0; flex: none; }
 .pending-diff { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.pending-details { width: 280px; flex: none; overflow: auto; padding: 12px; border-left: 1px solid var(--git-border); background: var(--git-sidebar-bg); display: flex; flex-direction: column; gap: 10px; }
+.pending-diff > .fork-empty { position: absolute; inset: 0; display: grid; place-items: center; }
+.pending-details[hidden], .pane-split[hidden] { display: none; }
 .info-title { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--git-text-strong); }
 .info-table { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .info-row { display: grid; grid-template-columns: 60px 1fr; gap: 6px; word-break: break-all; user-select: text; -webkit-user-select: text; }
-.explorer-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
-.small-select { width: auto; height: 26px; padding: 2px 6px; }
-.explorer-search { width: 260px; padding: 4px 8px; }
+/* 탐색 화면 머리(원본 branch-explorer__toolbar): 기간 · 요약 | 찾기 · [다음] · 탐색기 모양 */
+.explorer-bar { flex: none; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
+.explorer-bar .check { margin: 0; font-size: 12px; white-space: nowrap; }
+.small-select { width: auto; height: 22px; padding: 0 6px; }
+.explorer-search { width: 220px; height: 22px; padding: 2px 8px; }
 .explorer-search.no-match { border-color: var(--git-warning); }
 .explorer-summary { white-space: nowrap; }
+.explorer-style { display: inline-flex; align-items: center; gap: 4px; }
 .explorer-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.explorer-graph { flex: 1.3 1 0; min-height: 120px; }
-.splitter-h { height: 1px; background: var(--git-border); flex: none; }
-.explorer-bottom { flex: 1 1 0; min-height: 120px; display: flex; flex-direction: column; background: var(--git-sidebar-bg); }
-.explorer-tabs { margin: 6px 10px; }
-.explorer-content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.commit-tab { padding: 8px 14px; overflow: auto; display: flex; flex-direction: column; gap: 4px; user-select: text; -webkit-user-select: text; }
-.ct-row { display: flex; gap: 10px; }
-.ct-label { width: 52px; flex: none; }
-.ct-ref { padding: 0 6px; margin-right: 4px; border-radius: 4px; background: var(--git-badge-bg); }
-.ct-message { margin: 8px 0; white-space: pre-wrap; font: inherit; color: var(--git-text-strong); }
-.ct-files { display: flex; flex-direction: column; align-items: flex-start; }
-.ct-file { display: inline-flex; align-items: center; gap: 6px; }
-.ch-summary { flex: none; padding: 0 12px 4px; }
-.ch-body { flex: 1; min-height: 0; display: flex; }
-.ch-list { width: 300px; flex: none; overflow: auto; border-right: 1px solid var(--git-border); display: flex; flex-direction: column; }
-.ch-diff { flex: 1; min-width: 0; }
-.ft-view { flex: 1; min-width: 0; overflow: auto; background: var(--git-diff-bg); }
-.ft-code { font-family: var(--mono); font-size: 12.5px; line-height: 20px; }
-.ft-image { padding: 20px; display: inline-block; }
-.bx-wrap { flex: 1.3 1 0; min-height: 160px; position: relative; overflow: hidden; background: var(--git-graph-bg); cursor: grab; }
-.bx-canvas { display: block; }
-.bx-tip { position: fixed; z-index: 40; }
-.bx-detail { flex: 1 1 0; min-height: 120px; display: flex; flex-direction: column; background: var(--git-sidebar-bg); overflow: auto; }
+.explorer-graph { flex: 1 1 0; min-height: 80px; }
+/* Fork 탐색기 아래 칸(원본 GitViews.uss commit-history__*): 위 [커밋][변경][파일 트리] 단추, 아래 고른 칸. */
+.chx-detail { min-height: 0; display: flex; flex-direction: column; background: var(--git-sidebar-bg); }
+.chx-notice { flex: none; padding: 6px 12px; font-size: 12px; color: var(--git-text-muted); border-bottom: 1px solid var(--git-border); }
+.chx-notice.error { color: var(--git-danger); background: var(--git-danger-soft); }
+.chx-notice[hidden], .explorer-split[hidden] { display: none; }
+.chx-tabs { flex: none; display: flex; padding: 6px 10px; border-bottom: 1px solid var(--git-border); }
+.chx-tab { margin: 0 4px 0 0; padding: 3px 12px; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); font-size: 13px; font-family: inherit; cursor: pointer; }
+.chx-tab:hover { background: var(--git-hover); color: var(--git-text); }
+.chx-tab.on, .chx-tab.on:hover { background: var(--git-selected); color: var(--git-selected-text); }
+.chx-placeholder { margin-top: 12px; padding: 0 12px; text-align: center; color: var(--git-text-muted); font-size: 12px; }
+.chx-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chx-page[hidden], .chx-placeholder[hidden], .chx-detail [hidden] { display: none; }
+/* 커밋 칸: 정보 · 메시지 · 파일 목록이 한 스크롤. */
+.chx-info { display: block; overflow: auto; padding: 10px 16px; user-select: text; -webkit-user-select: text; }
+.chx-people { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
+.chx-person { min-width: 260px; flex: 1 1 0; margin: 0 16px 6px 0; }
+.chx-person-caption { font-size: 11px; color: var(--git-text-muted); margin-bottom: 4px; }
+.chx-person-row { display: flex; align-items: center; }
+.chx-avatar { width: 36px; height: 36px; flex: none; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-right: 10px; font-size: 12px; font-weight: 700; color: #fff; user-select: none; -webkit-user-select: none; }
+.chx-avatar.small { width: 20px; height: 20px; border-radius: 4px; margin-right: 8px; font-size: 9px; }
+.chx-person-text { min-width: 0; }
+.chx-person-name-line { display: flex; flex-wrap: wrap; align-items: center; }
+.chx-person-name { font-size: 14px; font-weight: 700; color: var(--git-text); margin-right: 8px; }
+.chx-person-email, .chx-person-date { font-size: 12px; color: var(--git-text-muted); }
+.chx-field { display: flex; align-items: center; min-height: 22px; }
+.chx-field-label { width: 72px; flex: none; margin-right: 10px; text-align: right; font-size: 11px; color: var(--git-text-muted); }
+.chx-field-value { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; }
+.chx-sha { font-family: var(--mono); font-size: 12px; color: var(--git-text); cursor: pointer; }
+.chx-parent { margin-right: 8px; font-family: var(--mono); font-size: 12px; color: var(--git-text); cursor: pointer; }
+.chx-parent:hover { color: var(--git-accent-fg); }
+.chx-ref { margin: 1px 6px 1px 0; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--git-graph-pill-text); background: var(--git-graph-pill-bg); }
+.chx-ref.current { background: var(--git-graph-pill-head); }
+.chx-ref.tag { background: var(--git-graph-pill-tag); }
+.chx-message { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--git-border); }
+.chx-subject { margin-bottom: 6px; font-size: 15px; font-weight: 700; color: var(--git-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.chx-body { font-family: var(--mono); font-size: 12px; color: var(--git-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 커밋 칸 바뀐 파일: [상태][아이콘][경로] 의 평평한 목록. 링크 모양 — 마우스를 올리면 경로가 파란 글씨, 뒤에 →. */
+.chx-file-list { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--git-border); user-select: none; -webkit-user-select: none; }
+.chx-file { display: flex; align-items: center; height: 24px; padding: 0 6px; border-radius: 5px; cursor: pointer; }
+.chx-file:hover { background: var(--git-hover); }
+.chx-file > .state-icon { margin: 0 8px 0 0; }
+.chx-file > .file-kind { margin-right: 8px; }
+.chx-file-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--git-text); }
+.chx-file:hover .chx-file-path { color: var(--git-accent-fg); }
+.chx-file-arrow { display: none; flex: none; margin-left: 8px; color: var(--git-text-muted); }
+.chx-file:hover .chx-file-arrow { display: block; }
+.chx-file-more { margin: 6px 0 0 6px; color: var(--git-accent-fg); cursor: pointer; }
+/* 변경 · 파일 트리 칸 위 한 줄: 아바타, 작성자, 해시, 날짜, 제목. */
+.chx-header-line { flex: none; display: flex; align-items: center; height: 30px; padding: 0 12px; border-bottom: 1px solid var(--git-border); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.chx-header-line > span:not(.chx-avatar) { flex: none; margin-right: 10px; }
+.chx-h-author { color: var(--git-text); }
+.chx-h-hash { font-family: var(--mono); color: var(--git-text-muted); }
+.chx-h-date { color: var(--git-text-muted); }
+.chx-header-line > .chx-h-subject { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--git-text); }
+/* 왼쪽 파일 칸(320, 180~640)과 오른쪽 diff · 내용. */
+.chx-split { flex: 1; min-height: 0; display: flex; }
+.chx-side { min-width: 180px; max-width: 640px; display: flex; flex-direction: column; padding: 6px 8px; overflow: hidden; }
+.chx-list-header { flex: none; display: flex; align-items: center; gap: 6px; height: 24px; margin: -6px -8px 4px; padding: 0 6px 0 10px; border-bottom: 1px solid var(--git-border); font-size: 12px; }
+.chx-summary { display: flex; flex-wrap: wrap; min-width: 0; overflow: hidden; white-space: nowrap; }
+.chx-count { margin-right: 10px; color: var(--git-text); }
+.chx-count.modified { color: var(--git-state-modified); }
+.chx-count.added { color: var(--git-state-added); }
+.chx-count.deleted { color: var(--git-state-deleted); }
+.chx-count.renamed { color: var(--git-state-renamed); }
+.chx-tools { display: flex; flex: none; }
+.chx-files { flex: 1; min-height: 0; overflow: auto; }
+.chx-files .file-row { border-radius: 5px; }
+.chx-files .st-tracked { display: none; }
+.chx-viewer { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--git-diff-bg); }
+/* 원본처럼 변경 칸 diff 에는 닫기·다시 읽기 단추를 두지 않는다(ShowCloseButton(false) · ShowReloadButton(false)). */
+.chx-viewer .diff-close, .chx-viewer .diff-head-btn[data-tip="다시 읽기"] { display: none; }
+.chx-content-path { flex: none; padding: 4px 12px; font-size: 12px; color: var(--git-text-muted); border-bottom: 1px solid var(--git-border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chx-content-path:empty { display: none; }
+.chx-content { flex: 1; min-height: 0; overflow: auto; }
+.chx-line { display: flex; height: 18px; align-items: center; white-space: pre; font-family: var(--mono); font-size: 12px; }
+.chx-ln { width: 52px; flex: none; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; color: var(--git-diff-number); background: var(--git-diff-gutter); }
+.chx-text { padding-left: 10px; color: var(--git-diff-text); }
+.chx-image { padding: 20px; display: inline-block; }
+/* Unity VCS 가로 탐색기(원본 BranchExplorerView): 그래프 | 인스펙터(380), 그래프 위 오른쪽 아래 세로로 [HEAD][확대][축소] */
+.bx-split { flex: 1; min-height: 0; display: flex; }
+.bx-wrap { flex: 1 1 0; min-width: 0; position: relative; overflow: hidden; }
+.bx-overlay { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 4px; z-index: 2; }
+.bx-overlay-btn { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 1px solid var(--git-button-border); border-radius: var(--git-radius); background: var(--git-button-bg); color: var(--git-action-icon); cursor: pointer; }
+.bx-overlay-btn:hover { background: var(--git-hover); }
+.bx-detail { min-width: 0; display: flex; flex-direction: column; background: var(--git-sidebar-bg); overflow: auto; }
+/* 브랜치 그래프 캔버스(원본 BranchGraph.uss 의 .branch-graph*). 선·원은 canvas 로 그리고, 글자(머리글자·메시지·이름표·날짜)는 아래 클래스를 단
+   요소를 절대 위치로 올린다. 캔버스 색(선택·검색·HEAD·날짜 띠·잘린 선·그림자)은 --git-graph-* 토큰을 branchgraph.js 가 읽는다. */
+.bx-graph { position: absolute; inset: 0; overflow: hidden; background: var(--git-graph-bg); user-select: none; -webkit-user-select: none; }
+.bx-graph--node-hover { cursor: pointer; }
+.bx-canvas { position: absolute; left: 0; top: 0; display: block; }
+.bx-layer { position: absolute; inset: 0; pointer-events: none; }
+.bx-label { position: absolute; box-sizing: border-box; margin: 0; padding: 0; line-height: 1.2; font-size: 12px; white-space: nowrap; pointer-events: none; }
+.bx-initials { padding: 0; text-align: center; font-weight: 700; color: var(--git-graph-pill-text); overflow: hidden; }
+.bx-avatar { position: absolute; border-radius: 50%; background: center / cover no-repeat; pointer-events: none; }
+/* 가지 선이 커밋 이름 아래를 지나면 글자 사이로 비쳐 읽기 어려웠다 — 글자 폭만 한 바탕색 상자를 깔아 그 자리에서만 선을 끊는다. */
+.bx-subject { padding: 0 3px; border-radius: 3px; color: var(--git-graph-subject); background: var(--git-graph-bg); overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.bx-pill { padding: 1px 5px; border-radius: 4px; font-size: 9px; line-height: 14px; font-weight: 700; color: var(--git-graph-pill-text); background: var(--git-graph-pill-bg); box-shadow: 0 0.5px 2.5px var(--git-graph-shadow); }
+.bx-pill--head { background: var(--git-graph-pill-head); }
+/* 태그(레이블): Unity VCS 처럼 상자 없이 커밋 위에 글자로(커밋 원에는 초록 고리). */
+.bx-pill--tag { font-size: 11px; background: transparent; color: var(--git-graph-lane-text); box-shadow: none; }
+/* 가지 이름표: 가지 관 머리 위의 상자. 왼쪽 막대가 가지 색(branchgraph.js), 글자 크기는 확대를 따른다. 최대 폭은 같은 행의 다음 가지 머리까지. */
+.bx-lane { padding: 3px 10px 4px 9px; border-left: 2.5px solid transparent; border-radius: 0 2px 2px 0; background: var(--git-graph-lane-bg); color: var(--git-graph-lane-text); overflow: hidden; text-overflow: ellipsis; box-shadow: 0 0.5px 2.5px var(--git-graph-shadow); }
+.bx-lane--compact { padding: 0 5px 1px 4px; border-left-width: 2px; border-radius: 0 1px 1px 0; }
+.bx-lane--anonymous { opacity: 0.6; font-style: italic; }
+.bx-header { position: absolute; left: 0; right: 0; top: 0; height: 24px; box-sizing: border-box; background: var(--git-graph-header-bg); border-bottom: 1px solid var(--git-graph-header-border); pointer-events: none; }
+/* 날짜 띠가 좁으면 한 줄로 두고 넘치면 "2026-10…" 처럼 자른다. 양옆 4px 는 띠 경계에 붙지 않게. */
+.bx-date { padding: 0 4px; font-size: 12px; line-height: 24px; color: var(--git-graph-date); text-align: center; overflow: hidden; text-overflow: ellipsis; }
+.bx-tooltip { z-index: 3; max-width: 420px; padding: 6px 8px; border: 1px solid var(--git-border); border-radius: 3px; background: var(--git-graph-tooltip-bg); color: var(--git-graph-tooltip-text); white-space: pre-line; box-shadow: 0 0.5px 2.5px var(--git-graph-shadow); }
+.bx-empty { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: var(--git-graph-empty); pointer-events: none; }
+.bx-graph--hidden-text .bx-initials,
+.bx-graph--hidden-text .bx-subject,
+.bx-graph--hidden-text .bx-pill { display: none; }
+/* 워크스페이스(원본 WorkspaceView): 트리 표(항목 · 상태 130 · 크기 80 · 수정한 날짜 130), 줄 번갈이 바탕 */
 .ws-layout { flex: 1; min-height: 0; display: flex; }
-.ws-table, .cs-list { flex: 1; min-width: 0; overflow: auto; }
-.ws-row { display: grid; grid-template-columns: minmax(200px, 1fr) 90px 100px 140px; gap: 10px; align-items: center; height: 26px; padding: 0 12px; cursor: default; white-space: nowrap; }
+.ws-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ws-table { flex: 1; min-height: 0; overflow: auto; outline: none; }
+.ws-row { display: grid; grid-template-columns: minmax(200px, 1fr) 130px 80px 130px; gap: 8px; align-items: center; height: 22px; padding: 0 10px; cursor: default; white-space: nowrap; font-size: 12px; }
+.ws-row.alt { background: color-mix(in srgb, var(--git-text) 3%, transparent); }
 .ws-row:hover { background: var(--git-hover); }
 .ws-row.active { background: var(--git-selected); }
-.ws-row.ignored { opacity: 0.55; }
-.ws-head { position: sticky; top: 0; z-index: 1; background: var(--git-header-bg); color: var(--git-text-muted); font-size: 11.5px; border-bottom: 1px solid var(--git-border); }
-.ws-path { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
-.ws-path span:last-child { overflow: hidden; text-overflow: ellipsis; }
-.ws-size, .ws-date { text-align: right; color: var(--git-text-muted); font-size: 12px; }
+.ws-row.ws-ignored { color: var(--git-text-muted); }
+.ws-row.ws-changed .ws-state { color: var(--git-state-modified); }
+.ws-row.ws-untracked .ws-state { color: var(--git-state-added); }
+.ws-head { flex: none; background: var(--git-header-bg); color: var(--git-text-muted); font-size: 11px; border-bottom: 1px solid var(--git-border); }
+.ws-path { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.ws-path > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.ws-chev-gap { width: 12px; flex: none; }
+.ws-state { overflow: hidden; text-overflow: ellipsis; }
+.ws-size, .ws-date { text-align: right; color: var(--git-text-muted); }
 .st-text-modified { color: var(--git-state-modified); }
 .st-text-added, .st-text-untracked { color: var(--git-state-added); }
 .st-text-deleted { color: var(--git-state-deleted); }
 .st-text-conflicted { color: var(--git-state-conflicted); }
-.ws-side { width: 300px; flex: none; overflow: auto; padding: 12px; border-left: 1px solid var(--git-border); background: var(--git-sidebar-bg); display: flex; flex-direction: column; gap: 10px; }
-.ws-history { display: flex; flex-direction: column; gap: 2px; }
-.ws-rev { display: grid; grid-template-columns: 64px 1fr auto; gap: 6px; padding: 3px 4px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-.ws-rev:hover { background: var(--git-hover); }
-.ws-rev-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-row { grid-template-columns: 80px minmax(200px, 1fr) 140px 140px; }
-.cs-subject { overflow: hidden; text-overflow: ellipsis; }
-.cs-more { margin: 10px auto; display: block; }
-.cs-detail { width: 380px; flex: none; border-left: 1px solid var(--git-border); }
-.side-tab.on { flex: 3; }
+/* 오른쪽 정보·히스토리(원본 workspace__side, 대기 중인 변경사항의 세부사항도 같다) */
+.ws-side { min-width: 0; overflow: auto; padding: 10px; background: var(--git-sidebar-bg); display: flex; flex-direction: column; gap: 8px; }
+.ws-empty { padding: 16px; text-align: center; white-space: normal; color: var(--git-text-muted); font-size: 12px; }
+.ws-history-title { margin-top: 6px; font-size: 11px; font-weight: 700; color: var(--git-text-muted); }
+.ws-history { flex: 1 1 0; min-height: 80px; overflow: auto; border: 1px solid var(--git-border); border-radius: var(--git-radius-small); background: var(--git-bg); }
+.ws-message { flex: none; min-height: 18px; font-size: 12px; white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+/* 커밋 목록 줄(원본 CommitList 칸: 해시 70 · 메시지 · 작성자 130 · 날짜 112) */
+.cl-row { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px; font-size: 12px; white-space: nowrap; cursor: default; }
+.cl-row:hover { background: var(--git-hover); }
+.cl-row.active { background: var(--git-selected); color: var(--git-selected-text); }
+.cl-head { position: sticky; top: 0; z-index: 1; font-size: 11px; color: var(--git-text-muted); background: var(--git-header-bg); border-bottom: 1px solid var(--git-border); }
+.cl-head:hover { background: var(--git-header-bg); }
+.cl-hash { width: 70px; flex: none; font-family: var(--mono); font-size: 11px; color: var(--git-text-muted); }
+.cl-subject { flex: 3 1 0; min-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+.cl-author { width: 130px; flex: none; overflow: hidden; text-overflow: ellipsis; }
+.cl-date { width: 112px; flex: none; color: var(--git-text-muted); }
+.ws-side .cl-author, .ws-side .cl-date { display: none; }
+/* 체인지 세트(원본 ChangesetsView): 위 목록 · 아래 상세(260) */
+.cs-layout { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cs-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cs-list { flex: 1; min-height: 0; overflow: auto; }
+.cs-detail { width: auto !important; min-height: 0; overflow: auto; }
+.explorer-bar .btn[hidden] { display: none; }
 .fork-head .lbl-shift { display: none; }
 body.shift-held .fork-head .lbl-normal { display: none; }
 body.shift-held .fork-head .lbl-shift { display: inline; }
+
+/* ── GitHub 연결 화면(원본 GitWindow.uss .github-connect) ── */
+.github-connect { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--git-bg); }
+.github-connect[hidden] { display: none; }
+.github-connect__card { width: 640px; max-width: 90%; box-sizing: border-box; display: flex; flex-direction: column; padding: 40px 44px; border: 1px solid var(--git-connect-card-border); border-radius: 12px; background: var(--git-connect-card); box-shadow: 0 18px 60px var(--git-menu-shadow); transition: opacity 200ms cubic-bezier(0.32, 0, 0.67, 0), transform 200ms cubic-bezier(0.32, 0, 0.67, 0); }
+.github-connect__card--leave { opacity: 0; transform: scale(0.96); }
+.github-connect__reveal { opacity: 0; transform: translateY(10px); transition: opacity 380ms cubic-bezier(0.33, 1, 0.68, 1), transform 460ms cubic-bezier(0.33, 1, 0.68, 1); }
+.github-connect__reveal--in { opacity: 1; transform: none; }
+.github-connect__title { font-size: 28px; font-weight: 700; color: var(--git-text); margin: 0 0 12px; }
+.github-connect__text { white-space: normal; font-size: 15px; line-height: 1.5; color: var(--git-text-muted); margin: 0 0 20px; }
+.github-connect__step { margin-top: 4px; display: flex; flex-direction: column; }
+.github-connect__step[hidden] { display: none; }
+.github-connect__primary { height: 42px; margin: 0; font-size: 15px; font-weight: 700; color: var(--git-text); background: var(--git-accent-soft); border: 1px solid var(--git-accent); border-radius: 8px; cursor: pointer; font-family: inherit; }
+.github-connect__primary:hover:not(:disabled) { background: var(--git-accent); color: var(--git-accent-text); }
+.github-connect__primary:active:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); color: var(--git-accent-text); }
+.github-connect__primary[hidden] { display: none; }
+.github-connect__code { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 8px 0 20px; }
+.github-connect__code[hidden] { display: none; }
+.github-connect__code-cell { width: 44px; height: 56px; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; color: var(--git-text); background: var(--git-connect-code-cell); border: 1px solid var(--git-connect-card-border); border-radius: 8px; transition: background-color 160ms ease-out, border-color 160ms ease-out, transform 160ms ease-out; user-select: none; -webkit-user-select: none; }
+.github-connect__code-cell--flash { background: var(--git-accent-soft); border-color: var(--git-accent); transform: scale(1.06); }
+.github-connect__code-dash { margin: 0 -6px; font-size: 30px; color: var(--git-text-muted); }
+.github-connect__row { display: flex; justify-content: center; gap: 8px; }
+.github-connect__secondary { height: 32px; padding: 0 16px; font-size: 13px; color: var(--git-text); background: transparent; border: 1px solid var(--git-connect-card-border); border-radius: 8px; cursor: pointer; font-family: inherit; transition: background-color 120ms, border-color 120ms; }
+.github-connect__secondary:hover { background: var(--git-connect-code-cell); border-color: var(--git-connect-card-highlight); }
+.github-connect__secondary:active { background: var(--git-connect-card-border); }
+.github-connect__secondary[hidden] { display: none; }
+.github-connect__next { margin-top: 16px; }
+.github-connect__error { white-space: pre-wrap; font-size: 13px; color: var(--git-warning); margin: 12px 0 0; }
+.github-connect__error[hidden] { display: none; }
+.github-connect__link { align-self: center; margin-top: 20px; border: 0; background: none; color: var(--git-text-muted); font-size: 13px; cursor: pointer; font-family: inherit; }
+.github-connect__link:hover { color: var(--git-text); }
+/* 연결 화면을 마치면 본체가 조금 아래에서 올라오며 나타난다(원본 EnterShell 260ms, 6px). */
+body #main, body #start, body #tabs { transition: opacity 260ms cubic-bezier(0.33, 1, 0.68, 1), transform 260ms cubic-bezier(0.33, 1, 0.68, 1); }
+body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacity: 0; transform: translateY(6px); transition: none; }
+
+/* ── 이 레포지토리의 GitHub 계정(원본 GitAccountDialog) ── */
+.modal.account-dialog { width: 540px; }
+.account-list { margin: 0 0 0 42px; border: 1px solid var(--git-border); border-radius: 6px; }
+.account-row { display: flex; align-items: center; min-height: 40px; padding: 4px 8px; border-bottom: 1px solid var(--git-border); }
+.account-row:last-child { border-bottom: 0; }
+.account-names { flex: 1; min-width: 0; }
+.account-login { font-size: 13px; font-weight: 700; color: var(--git-text); }
+.account-source { margin-top: 1px; font-size: 11px; color: var(--git-text-muted); }
+.account-access { display: flex; align-items: center; gap: 3px; margin: 0 10px; font-size: 12px; }
+.account-access.yes { color: var(--git-success); }
+.account-access.no { color: var(--git-danger); }
+.account-access.unknown { color: var(--git-text-muted); }
+.account-row .btn { min-width: 110px; }
+.account-empty { padding: 10px; font-size: 12px; white-space: normal; }
+.account-status { margin-left: 42px; font-size: 11px; white-space: pre-wrap; }
+.account-status[hidden] { display: none; }
+
+/* ── 사이드바 Pull Requests 구역 ── */
+.side-info { height: 24px; display: flex; min-width: 0; align-items: center; padding-right: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 긴 안내(오류 원문 등)는 한 줄로 두고 끝을 … 으로 자른다. 전체는 툴팁에. */
+.side-info-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-info.action { cursor: pointer; }
+.pr-search { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 41px; }
+.pr-search-box { flex: 1; min-width: 0; height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--git-field-border); border-radius: 4px; background: var(--git-field-bg); color: var(--git-text-muted); }
+.pr-search-box:focus-within { border-color: var(--git-accent); }
+.pr-search-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--git-text); font-size: 12px; font-family: inherit; }
+.pr-search .icon-btn { width: 24px; height: 24px; border-radius: 4px; }
+.pr-filter-syntax { font-size: 11px; line-height: 1.55; user-select: text; -webkit-user-select: text; }
+
+/* ── 서랍 공통 더하기(원본 side-drawer__input--multiline · __columns · __arrow · __buttons) ── */
+.field.drawer-multiline { height: 110px; padding: 4px 6px; resize: none; font-family: inherit; line-height: 1.45; }
+.drawer-columns { display: flex; align-items: flex-start; }
+.drawer-column { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+/* 레포지토리 고르기 칸(캡션 아래 30px 상자)의 가운데 높이에 맞춘다. */
+.drawer-arrow { width: 28px; flex: none; margin-top: 36px; font-size: 16px; text-align: center; color: var(--git-text-muted); }
+/* [취소][만들기]: 둘이 반씩. */
+.drawer-row-buttons { display: flex; gap: 8px; margin-top: 16px; }
+.drawer-row-buttons > .btn { flex: 1 1 0; height: 30px; margin: 0; align-self: auto; }
+/* 보조 버튼 줄(원본 side-drawer__buttons): 줄바꿈, 30px, 오른쪽 8px. */
+.drawer-buttons { display: flex; flex-wrap: wrap; }
+.drawer-buttons > .btn.drawer-secondary { height: 30px; margin: 16px 8px 0 0; align-self: auto; }
+.drawer-buttons > .btn[hidden] { display: none; }
+
+/* ── Pull Request 상세 서랍(원본 PullRequestDetailDrawer · pr-detail__*) ── */
+.pr-detail-content { transition: opacity 0.35s cubic-bezier(0.215, 0.61, 0.355, 1), transform 0.35s cubic-bezier(0.215, 0.61, 0.355, 1); }
+.pr-detail-content[hidden] { display: none; }
+.pr-detail-content.entering { opacity: 0; transform: translateY(6px); transition: none; }
+.pr-detail-skeleton { position: relative; overflow: hidden; }
+.pr-detail-skeleton[hidden] { display: none; }
+.pr-detail-skeleton::after { content: ''; position: absolute; left: 0; right: 0; top: -40%; height: 40%; background: linear-gradient(180deg, transparent, var(--git-skeleton-shine, rgba(255, 255, 255, 0.05)), transparent); animation: sk-sweep 2.3s linear infinite; pointer-events: none; }
+.pr-detail-skeleton .sk-bar { border-radius: var(--radius); }
+.pr-detail-sk-badge { margin: 2px 8px 0 0; border-radius: 10px !important; }
+.pr-detail-sk-title { margin-top: 2px; }
+.pr-detail-sk-line { margin-top: 8px; }
+.pr-detail-sk-caption { margin: 12px 0 6px; }
+.pr-detail-sk-methods { display: flex; margin-top: 8px; }
+.pr-detail-sk-method { flex: 1 1 0; margin: 0 2px; }
+.pr-detail-sk-merge { margin-top: 8px; }
+.pr-detail-sk-actions { display: flex; margin-top: 10px; }
+.pr-detail-sk-actions > .sk-bar { margin-right: 6px; }
+.pr-detail-sk-event { margin-top: 6px; }
+.pr-detail-title-row { display: flex; align-items: flex-start; }
+.pr-detail-title { flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 700; color: var(--git-text); word-break: break-word; user-select: text; -webkit-user-select: text; }
+.pr-detail-badge { flex: none; margin: 2px 8px 0 0; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; color: var(--git-on-strong); background: var(--git-text-muted); }
+.pr-detail-badge.open { background: var(--git-success-strong); }
+.pr-detail-badge.merged { background: var(--git-accent); }
+.pr-detail-badge.closed { background: var(--git-danger-strong); }
+.pr-detail-readiness { margin: 2px 0 8px; font-size: 12px; color: var(--git-text-muted); white-space: normal; }
+.pr-detail-readiness.ok { color: var(--git-success); }
+.pr-detail-readiness.bad { color: var(--git-danger); }
+.pr-detail-methods { display: flex; }
+.pr-detail-method { flex: 1 1 0; min-width: 0; height: 26px; margin: 0 2px; padding: 0 4px; border: 1px solid var(--git-button-border); border-radius: var(--radius); background: var(--git-button-bg); color: var(--git-text); font-size: 11px; font-family: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-detail-method:hover:not(:disabled) { background: var(--git-hover); }
+.pr-detail-method.on, .pr-detail-method.on:hover:not(:disabled) { border-color: var(--git-accent); background: var(--git-selected); color: var(--git-selected-text); }
+.pr-detail-method:disabled { opacity: 0.5; cursor: default; }
+.pr-detail-actions { margin-bottom: 4px; }
+.pr-detail-body { margin-top: 4px; padding: 8px; border: 1px solid var(--git-border); border-radius: var(--radius); white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--git-text); user-select: text; -webkit-user-select: text; }
+.pr-detail-body.empty { color: var(--git-text-muted); font-style: italic; }
+.pr-detail-timeline { margin-bottom: 4px; }
+.pr-detail-event { margin-top: 6px; padding: 6px 8px; border: 1px solid var(--git-border); border-left-width: 3px; border-radius: var(--radius); }
+.pr-detail-event.review { border-left-color: var(--git-accent); }
+.pr-detail-event.reviewcomment { border-left-color: var(--git-text-muted); }
+.pr-detail-event-head { display: flex; align-items: center; font-size: 12px; }
+.pr-detail-event-author { flex: none; font-weight: 700; color: var(--git-text); }
+.pr-detail-event-action { flex: 1 1 auto; min-width: 0; margin-left: 6px; color: var(--git-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-detail-event-action.approved { color: var(--git-success); font-weight: 700; }
+.pr-detail-event-action.changes-requested { color: var(--git-danger); font-weight: 700; }
+.pr-detail-event-time { flex: none; margin-left: 6px; font-size: 11px; color: var(--git-text-muted); }
+.pr-detail-event-body { margin-top: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-word; color: var(--git-text); user-select: text; -webkit-user-select: text; }
+.pr-detail-reply-buttons { margin-bottom: 12px; }
+/* 색 있는 보조 버튼(닫기·변경 요청은 빨강, 승인은 초록): 평소엔 옅은 바탕 + 테두리, 올리면 채움. */
+.btn.drawer-secondary.pr-detail-danger { border-color: var(--git-danger); background: var(--git-danger-soft); color: var(--git-text); }
+.btn.drawer-secondary.pr-detail-danger:hover:not(:disabled) { border-color: var(--git-danger-strong); background: var(--git-danger-strong); color: var(--git-on-strong); }
+.btn.drawer-secondary.pr-detail-danger:active:not(:disabled) { border-color: var(--git-danger-strong-pressed); background: var(--git-danger-strong-pressed); color: var(--git-on-strong); }
+.btn.drawer-secondary.pr-detail-approve { border-color: var(--git-success); background: var(--git-success-soft); color: var(--git-text); }
+.btn.drawer-secondary.pr-detail-approve:hover:not(:disabled) { border-color: var(--git-success-strong); background: var(--git-success-strong); color: var(--git-on-strong); }
+.btn.drawer-secondary.pr-detail-approve:active:not(:disabled) { border-color: var(--git-success-strong-pressed); background: var(--git-success-strong-pressed); color: var(--git-on-strong); }
+.pr-detail-fact { display: flex; align-items: flex-start; min-height: 22px; font-size: 12px; }
+.pr-detail-fact:first-child { margin-top: 10px; }
+.pr-detail-fact-name { flex: none; width: 90px; color: var(--git-text-muted); }
+.pr-detail-fact-value { flex: 1 1 auto; min-width: 0; color: var(--git-text); white-space: normal; word-break: break-word; user-select: text; -webkit-user-select: text; }
+.pr-detail-fact-value.empty { color: var(--git-text-muted); }
+.pr-detail-file { display: flex; align-items: center; height: 22px; font-size: 12px; }
+.pr-detail-file-status { flex: none; width: 18px; text-align: center; font-weight: 700; color: var(--git-state-modified); }
+.pr-detail-file-status.added { color: var(--git-state-added); }
+.pr-detail-file-status.removed { color: var(--git-state-deleted); }
+.pr-detail-file-path { flex: 1 1 auto; min-width: 0; margin: 0 6px; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-detail-file-counts { flex: none; font-size: 11px; color: var(--git-text-muted); }
+
+/* ── PR 을 읽지 못했을 때의 카드(계정·권한) ── */
+.pr-read-facts, .pr-read-login { margin-left: 58px; }
+.pr-read-facts { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 12px; }
+.pr-read-fact { display: flex; }
+.pr-read-fact-name { flex: none; width: 80px; color: var(--git-text-muted); }
+.pr-read-fact-value { flex: 1; min-width: 0; color: var(--git-text); font-weight: 600; word-break: break-all; user-select: text; -webkit-user-select: text; }
+.pr-read-fact-value.muted { color: var(--git-text-muted); font-weight: 400; }
+.pr-read-explain { cursor: default; }
+.pr-read-login[hidden], .pr-read-failure .modal-message[hidden], .pr-read-code[hidden] { display: none; }
+.pr-read-login .modal-message { margin-left: 0; }
+.pr-read-code { margin: 4px 0 12px; justify-content: flex-start; }
+.pr-read-failure .modal-actions .btn[hidden] { display: none; }
+
+/* ── 레포지토리 만들기(원본에 없음 · 확장 — GitKraken "Initialize a Repository") ── */
+.modal.newrepo { width: 880px; height: min(720px, calc(100% - 40px)); padding: 0; gap: 0; overflow: hidden; border-radius: 8px; background: var(--git-bg); border-color: var(--git-border); }
+.newrepo-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 10px 18px; border-bottom: 1px solid var(--git-border); }
+.newrepo-body { flex: 1; min-height: 0; display: flex; }
+.newrepo-nav { width: 200px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; border-right: 1px solid var(--git-border); background: var(--git-sidebar-bg); }
+.newrepo-tab { display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 12px; border: 0; border-radius: var(--radius); background: none; color: var(--git-text-secondary); font-size: 13px; text-align: left; cursor: pointer; }
+.newrepo-tab:hover { background: var(--git-hover); color: var(--git-text); }
+.newrepo-tab.on { background: var(--git-selected); color: var(--git-selected-text); font-weight: 600; }
+.newrepo-panes { flex: 1; min-width: 0; display: flex; }
+.newrepo-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: auto; padding: 20px 28px 16px 14px; }
+.newrepo-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 9px 14px; align-items: center; }
+.newrepo-label { align-self: start; padding-top: 7px; text-align: right; font-size: 12px; color: var(--git-text-secondary); }
+.newrepo-control { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.newrepo .field { height: 30px; }
+.newrepo .field:disabled, .newrepo .btn:disabled { opacity: 0.5; }
+.newrepo .check.disabled { opacity: 0.5; cursor: default; }
+.newrepo .search-select { min-height: 30px; }
+.newrepo-inline { display: flex; align-items: center; gap: 6px; }
+.newrepo-inline > .field { flex: 1; min-width: 0; }
+.newrepo-inline > .btn { height: 30px; flex: none; }
+/* 전체 경로: "위치/" 는 흐린 글(긴 경로는 앞을 줄인다) + 폴더 이름 칸. */
+.newrepo-path { gap: 0; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-badge-bg); overflow: hidden; }
+.newrepo-path:focus-within { border-color: var(--git-accent); box-shadow: 0 0 0 1px var(--git-accent); }
+.newrepo-path > .field { border: 0; border-radius: 0; box-shadow: none !important; background: var(--git-field-bg); }
+.newrepo-prefix { flex: 0 1 auto; max-width: 62%; min-width: 0; padding: 0 2px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font-size: 12px; color: var(--git-text-muted); }
+.newrepo-radios { display: flex; gap: 18px; min-height: 30px; align-items: center; }
+.newrepo-account { display: flex; flex-direction: column; gap: 6px; min-height: 30px; justify-content: center; }
+.newrepo-login { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.btn.newrepo-signin { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; }
+.newrepo-code { display: flex; align-items: center; gap: 8px; }
+.newrepo-code-text { font-family: var(--mono); font-size: 16px; font-weight: 700; letter-spacing: 2px; color: var(--git-text-strong); user-select: text; -webkit-user-select: text; }
+.newrepo-warn { font-size: 12px; color: var(--git-warning); }
+.newrepo-foot { flex: none; display: flex; align-items: center; gap: 14px; margin-top: auto; padding-top: 18px; }
+.newrepo-problem { flex: 1; min-width: 0; text-align: right; font-size: 12px; color: var(--git-danger); }
+.btn.newrepo-ok { height: 32px; min-width: 160px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--git-success); background: var(--git-success-soft); color: var(--git-text); font-weight: 700; }
+.btn.newrepo-ok:hover:not(:disabled) { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
+.btn.newrepo-ok:disabled { opacity: 0.5; }
+
+/* ── GitHub 로그인 전용 창(github.js deviceLogin): 뒤를 어둡게 흐리고, 가운데 창이 살짝 커지며 나타난다. ── */
+.gh-login-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(8, 9, 12, 0.5); -webkit-backdrop-filter: blur(10px) saturate(120%); backdrop-filter: blur(10px) saturate(120%); opacity: 0; transition: opacity 180ms ease-out; }
+.gh-login-backdrop.in { opacity: 1; }
+.gh-login-backdrop.out { opacity: 0; transition-duration: 160ms; }
+.gh-login-window { position: relative; width: 440px; max-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; padding: 34px 36px 26px; border: 1px solid var(--git-connect-card-border); border-radius: 16px; background: var(--git-connect-card); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.12); text-align: center; transform: scale(0.96) translateY(6px); transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1); }
+.gh-login-backdrop.in .gh-login-window { transform: none; }
+.gh-login-backdrop.out .gh-login-window { transform: scale(0.97); }
+.gh-login-close { position: absolute; top: 10px; right: 10px; }
+.gh-login-mark { width: 64px; height: 64px; border-radius: 32px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; background: var(--git-text); color: var(--git-bg); }
+.gh-login-mark[hidden] { display: none; }
+.gh-login-title { font-size: 20px; font-weight: 700; color: var(--git-text); }
+.gh-login-lead { min-height: 18px; margin-top: 6px; font-size: 13px; color: var(--git-text-secondary); }
+.gh-login-main { align-self: stretch; display: flex; flex-direction: column; align-items: center; }
+.gh-login-main[hidden] { display: none; }
+.gh-login-code { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 20px 0 6px; padding: 6px 8px; border: 0; border-radius: 10px; background: none; cursor: pointer; font-family: inherit; }
+.gh-login-code:hover:not(:disabled) { background: var(--git-hover); }
+.gh-login-code:disabled { cursor: default; }
+.gh-login-cell { width: 38px; height: 50px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--git-connect-card-border); border-radius: 8px; background: var(--git-connect-code-cell); color: var(--git-text); font: 700 26px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; transition: background-color 160ms ease-out, border-color 160ms ease-out, transform 160ms ease-out; }
+.gh-login-cell.empty { background: var(--git-skeleton); border-color: transparent; animation: gh-login-pulse 1.2s ease-in-out infinite; }
+.gh-login-cell.flash { background: var(--git-accent-soft); border-color: var(--git-accent); transform: scale(1.06); }
+.gh-login-dash { width: 12px; font: 700 24px/1 ui-monospace, 'SF Mono', Menlo, monospace; color: var(--git-text-muted); }
+@keyframes gh-login-pulse { 50% { opacity: 0.55; } }
+.gh-login-copied { min-height: 16px; font-size: 11.5px; color: var(--git-text-muted); transition: color 160ms; }
+.gh-login-copied.flash { color: var(--git-success); }
+.gh-login-steps { align-self: stretch; display: flex; flex-direction: column; gap: 8px; margin: 18px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--git-connect-code-cell); text-align: left; }
+.gh-login-step { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--git-text-muted); }
+.gh-login-step-num { flex: none; width: 20px; height: 20px; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--git-border); font-size: 11px; font-weight: 700; }
+.gh-login-step-num svg { display: none; }
+.gh-login-step.active { color: var(--git-text); font-weight: 600; }
+.gh-login-step.active .gh-login-step-num { border-color: var(--git-accent); color: var(--git-accent); }
+.gh-login-step.done { color: var(--git-text-secondary); }
+.gh-login-step.done .gh-login-step-num { border-color: var(--git-success); background: var(--git-success); color: #fff; }
+.gh-login-step.done .gh-login-step-n { display: none; }
+.gh-login-step.done .gh-login-step-num svg { display: block; }
+.gh-login-wait { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--git-text-secondary); }
+.gh-login-wait[hidden] { display: none; }
+.gh-login-expiry { color: var(--git-text-muted); font-size: 11px; }
+.gh-login-expiry:not(:empty)::before { content: '·'; margin-right: 8px; }
+.gh-login-spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--git-border); border-top-color: var(--git-accent); animation: gh-login-spin 0.8s linear infinite; }
+@keyframes gh-login-spin { to { transform: rotate(360deg); } }
+.gh-login-error { margin-top: 12px; font-size: 12px; color: var(--git-danger); }
+.gh-login-error[hidden] { display: none; }
+.gh-login-primary { align-self: stretch; height: 38px; margin-top: 18px; border: 1px solid var(--git-accent); border-radius: 8px; background: var(--git-accent); color: var(--git-accent-text); font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer; transition: filter 120ms; }
+.gh-login-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.gh-login-primary:disabled { opacity: 0.55; cursor: default; }
+.gh-login-secondary { margin-top: 8px; padding: 6px 14px; border: 0; border-radius: 6px; background: none; color: var(--git-text-secondary); font-size: 12.5px; font-family: inherit; cursor: pointer; }
+.gh-login-secondary:hover { background: var(--git-hover); color: var(--git-text); }
+.gh-login-success { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 18px; }
+.gh-login-success[hidden] { display: none; }
+.gh-login-avatar { position: relative; width: 72px; height: 72px; border-radius: 36px; overflow: hidden; background: var(--git-accent); box-shadow: 0 0 0 3px var(--git-success); animation: gh-login-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gh-login-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.gh-login-avatar-letter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--git-accent-text); font-size: 30px; font-weight: 700; }
+.gh-login-success-text { font-size: 14px; color: var(--git-text); }
+@keyframes gh-login-pop { from { transform: scale(0.6); opacity: 0; } }
+.gh-login-code.failed .gh-login-cell.empty { animation: none; opacity: 0.45; }
+
+/* Clone 대화상자의 진행 표시(글 + 도구 막대와 같은 막대). */
+.clone-progress { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.clone-progress-text { font-size: 12px; color: var(--git-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clone-progress-bar.tb-progress { position: relative; left: auto; right: auto; bottom: auto; height: 3px; opacity: 1; border-radius: 2px; background: var(--git-border); }
+
+/* ── 앱을 켜는 동안의 스켈레톤(boot.js) ──────────────────
+   실제 화면과 같은 배치(탭·도구 막대·사이드바·그래프·작업 패널·상태 줄)에 회색 막대를 두고,
+   밝은 띠 하나가 창 전체를 왼쪽에서 오른쪽으로 지나간다(막대마다 따로가 아니라 창 기준이라 한 줄기로 보인다). */
+:root { --boot-shine: rgba(255, 255, 255, 0.07); }
+:root[data-theme="light"] { --boot-shine: rgba(255, 255, 255, 0.75); }
+.boot { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; background: var(--git-bg); color: transparent; transition: opacity 240ms ease-out; user-select: none; -webkit-user-select: none; cursor: progress; }
+.boot.out { opacity: 0; pointer-events: none; }
+.boot .bk {
+  flex: none; border-radius: 3px;
+  background-color: var(--git-skeleton);
+  background-image: linear-gradient(90deg, transparent 0, var(--boot-shine) 50%, transparent 100%);
+  background-repeat: no-repeat; background-size: 45% 100%; background-attachment: fixed;
+  animation: boot-shine 1.7s ease-in-out infinite;
+}
+@keyframes boot-shine { from { background-position: -90% 0; } to { background-position: 190% 0; } }
+.boot-grow { flex: 1; min-width: 0; }
+.boot-row { display: flex; align-items: center; }
+.boot-tabs { flex: none; display: flex; align-items: flex-end; height: 38px; padding: 0 8px; background: var(--git-titlebar-bg); border-bottom: 1px solid var(--git-border); }
+:root[data-platform="macos"] .boot-tabs { padding-left: 80px; }
+.boot-tab { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px 0 14px; border-radius: 8px 8px 0 0; }
+.boot-tab.on { background: var(--git-toolbar-bg); box-shadow: inset 1px 0 0 var(--git-border), inset -1px 0 0 var(--git-border), inset 0 1px 0 var(--git-border); margin-bottom: -1px; height: 33px; }
+.boot-toolbar { flex: none; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 10px; background: var(--git-toolbar-bg); border-bottom: 1px solid var(--git-border); }
+.boot-picker { display: flex; flex-direction: column; gap: 5px; margin-right: 34px; }
+.boot-action { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 52px; }
+.boot-sep { width: 1px; height: 26px; margin: 0 6px; background: var(--git-border); }
+.boot-body { flex: 1; min-height: 0; display: flex; }
+.boot-side, .boot-detail { flex: none; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--git-sidebar-bg); }
+:root:not([data-theme="light"]) .boot-side, :root:not([data-theme="light"]) .boot-detail { background: #26282c; }
+.boot-side { padding-top: 6px; border-right: 1px solid var(--git-border); }
+.boot-detail { border-left: 1px solid var(--git-border); }
+.boot-detail.fork { flex: 0 0 38%; border-left: 0; border-top: 1px solid var(--git-border); }
+.boot-column { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.boot-graph { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.boot-graph-head { flex: none; height: 28px; padding: 0 14px; gap: 12px; border-bottom: 1px solid var(--git-border); }
+.boot-graph-rows { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.boot-commit { height: 34px; gap: 0; }
+.boot-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--git-skeleton); box-shadow: 0 0 0 3px var(--git-bg); position: relative; z-index: 1; }
+.boot-lane { position: absolute; top: 17px; bottom: 0; width: 2px; background: var(--git-skeleton); opacity: 0.6; }
+.boot-commitbox { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
+.boot-footer { flex: none; display: flex; align-items: center; gap: 12px; height: 24px; padding: 0 10px; border-top: 1px solid var(--git-border); background: var(--git-header-bg); }
+.boot-start-card { width: 560px; max-width: calc(100% - 32px); margin: auto; display: flex; flex-direction: column; }
+
+/* 오래 걸리는 작업의 진행 카드(opcard.js): 아래 가운데 알림 자리. 왼쪽 원 배지(돌아가는 고리), 제목·지난 시간, 단계 글, 진행 막대. */
+.op-card { display: flex; align-items: flex-start; gap: 12px; width: 340px; max-width: 100%; padding: 12px 14px; border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 8px 24px var(--git-menu-shadow); animation: op-card-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.op-card.leaving { opacity: 0; transform: translateY(6px); transition: opacity 200ms, transform 200ms; }
+@keyframes op-card-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+/* 움직임 줄이기를 켠 사용자는 알림·진행 카드를 그 자리에 바로 보이고 바로 지운다. */
+@media (prefers-reduced-motion: reduce) { .toast, .op-card { animation: none; } .toast.leaving, .op-card.leaving { transition: none; } }
+.op-card-badge { position: relative; flex: none; width: 34px; height: 34px; border-radius: 17px; display: flex; align-items: center; justify-content: center; background: var(--git-accent-soft); color: var(--git-accent); }
+.op-card-spin { position: absolute; inset: -2px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--git-accent); animation: spin 0.9s linear infinite; }
+.op-card.done .op-card-badge { background: var(--git-success, #3fa66b); color: #fff; }
+.op-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.op-card-head { display: flex; align-items: baseline; gap: 8px; }
+.op-card-title { flex: 1; min-width: 0; font-weight: 700; font-size: 13px; color: var(--git-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.op-card-time { flex: none; font-size: 11px; color: var(--git-text-muted); font-variant-numeric: tabular-nums; }
+.op-card-phase { font-size: 12px; color: var(--git-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.op-card-bar { position: relative; height: 4px; margin-top: 4px; border-radius: 2px; overflow: hidden; background: var(--git-border); }
+.op-card-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 30%; border-radius: 2px; background: var(--git-accent); animation: tb-flow 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+.op-card-bar.known .op-card-fill { animation: none; transition: width 160ms linear; }
+.op-card.done .op-card-fill { background: var(--git-success, #3fa66b); }

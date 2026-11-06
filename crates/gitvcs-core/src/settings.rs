@@ -1,4 +1,4 @@
-//! 앱 설정과 최근 저장소 목록. 사용자 설정 폴더의 JSON 하나에 둔다
+//! 앱 설정과 최근 레포지토리 목록. 사용자 설정 폴더의 JSON 하나에 둔다
 //! (macOS `~/Library/Application Support/GitVcs/settings.json`, Windows `%APPDATA%\GitVcs\settings.json`).
 
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::repo::PullMode;
 use crate::ssl::SslSettings;
 
-/// 최근 저장소를 몇 개까지 기억하는가.
+/// 최근 레포지토리를 몇 개까지 기억하는가.
 pub const MAX_RECENT: usize = 15;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,7 +26,7 @@ pub struct Settings {
     /// "dark", "light" 또는 "system"(OS 밝기를 따른다).
     pub theme: String,
     pub recent: Vec<RecentRepo>,
-    /// 마지막에 열었던 저장소. 앱을 다시 켜면 연다.
+    /// 마지막에 열었던 레포지토리. 앱을 다시 켜면 연다.
     pub last_repo: Option<String>,
     /// 비우면 PATH 의 git.
     pub git_path: String,
@@ -36,7 +36,7 @@ pub struct Settings {
     pub auto_fetch_minutes: u32,
     /// diff 배치: "inline" 또는 "split".
     pub diff_layout: String,
-    /// 탭으로 열어 둔 저장소들(차례대로). 앱을 다시 켜면 되살린다.
+    /// 탭으로 열어 둔 레포지토리들(차례대로). 앱을 다시 켜면 되살린다.
     pub open_tabs: Vec<String>,
     /// clone 할 때 처음 보여 줄 폴더.
     pub clone_dir: String,
@@ -83,7 +83,7 @@ impl Settings {
         std::fs::rename(&tmp, path)
     }
 
-    /// 연 저장소를 최근 목록 맨 앞에 둔다. 같은 경로는 하나만.
+    /// 연 레포지토리를 최근 목록 맨 앞에 둔다. 같은 경로는 하나만.
     pub fn touch_recent(&mut self, path: &str, name: &str, now: i64) {
         self.recent.retain(|r| !same_path(&r.path, path));
         self.recent.insert(0, RecentRepo { path: path.to_string(), name: name.to_string(), opened_at: now });

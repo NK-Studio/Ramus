@@ -48,13 +48,15 @@ export function authorColor(name) {
   return `hsl(${hue} 45% 45%)`;
 }
 
-/** 아바타에 넣을 이니셜(한글 이름은 첫 글자, 영문은 단어 첫 글자 둘). */
+/**
+ * 아바타에 넣을 머리글자(원본 GitDisplay.Initials). 공백·`.`·`_`·`-` 로 나눠 두 마디 이상이면 앞 두 마디의 첫 글자,
+ * 아니면 앞 두 글자("김한용" → "김한", "nk-studio" → "NS", "octocat" → "OC").
+ */
 export function initials(name) {
-  const trimmed = (name || '?').trim();
-  if (/^[가-힣]/.test(trimmed)) return trimmed.slice(0, 1);
-  const words = trimmed.split(/\s+/).filter(Boolean);
-  const letters = words.length > 1 ? words[0][0] + words[1][0] : trimmed.slice(0, 2);
-  return letters.toUpperCase();
+  const words = (name || '').trim().split(/[ ._-]+/).filter(Boolean);
+  if (!words.length) return '?';
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return words[0].slice(0, 2).toUpperCase();
 }
 
 /**

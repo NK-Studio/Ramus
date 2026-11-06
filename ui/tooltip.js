@@ -1,5 +1,5 @@
-// 말풍선 툴팁. 원본 Elements/HoverCallout.cs 처럼 브라우저 기본 title 대신 테마·배율을 따르는 꼭지 달린 말풍선을
-// 오른쪽(자리가 없으면 아래)에 지연 없이 띄운다. 어디서든 title 이나 data-tip 을 달면 된다(title 은 처음 올릴 때 data-tip 으로 옮긴다).
+// 말풍선 툴팁. 원본 Elements/HoverCallout.cs 처럼 브라우저 기본 title 대신 꼭지 달린 검은 말풍선(테마와 상관없이 흰 글자)을
+// 대상 아래(넘치면 위)에 지연 없이 띄운다. data-tip-side="right" 면 오른쪽. 어디서든 title 이나 data-tip 을 달면 된다(title 은 처음 올릴 때 data-tip 으로 옮긴다).
 
 const bubble = document.createElement('div');
 bubble.className = 'callout';
@@ -19,6 +19,8 @@ function tipOf(element) {
   return element.dataset.tip;
 }
 
+const side0 = (element) => element.dataset.tipSide ?? 'below';
+
 function show(element) {
   const tip = tipOf(element);
   if (!tip) return hide();
@@ -28,16 +30,16 @@ function show(element) {
   bubble.className = 'callout';
   const r = element.getBoundingClientRect();
   const b = bubble.getBoundingClientRect();
-  const gap = 8;
-  let side = element.dataset.tipSide;
-  if (!side) side = r.right + gap + b.width < window.innerWidth - 4 && r.width < 220 ? 'right' : 'below';
+  const gap = side0(element) === 'right' ? 6 : 4;
+  // 원본 HoverCallout.ReplaceTooltips 처럼 툴팁은 늘 대상 아래(넘치면 위)에 뜬다. 오른쪽은 data-tip-side="right" 를 단 것만(구역 머리 "+" 등).
+  let side = side0(element) === 'right' && r.right + gap + b.width < window.innerWidth - 4 ? 'right' : 'below';
   let left;
   let top;
   if (side === 'right') {
     left = r.right + gap;
     top = r.top + r.height / 2 - b.height / 2;
   } else {
-    left = Math.min(Math.max(4, r.left + Math.min(r.width, 240) / 2 - b.width / 2), window.innerWidth - b.width - 4);
+    left = Math.min(Math.max(4, r.left + r.width / 2 - b.width / 2), window.innerWidth - b.width - 4);
     top = r.bottom + gap;
     if (top + b.height > window.innerHeight - 4) {
       top = r.top - gap - b.height;
@@ -49,7 +51,7 @@ function show(element) {
   bubble.style.left = `${left}px`;
   bubble.style.top = `${top}px`;
   if (side === 'right') arrow.style.cssText = `top:${Math.min(Math.max(8, r.top + r.height / 2 - top), b.height - 8)}px`;
-  else arrow.style.cssText = `left:${Math.min(Math.max(10, r.left + Math.min(r.width, 240) / 2 - left), b.width - 10)}px`;
+  else arrow.style.cssText = `left:${Math.min(Math.max(10, r.left + r.width / 2 - left), b.width - 10)}px`;
 }
 
 function hide() {

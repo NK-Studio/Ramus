@@ -38,10 +38,32 @@ pub struct Advice {
 
 const MAX_FILES: usize = 5;
 
+/// 원격이 접근을 거부할 때 git 이 남기는 글(원본 GitAuth.AuthFailurePatterns).
+/// GitHub 는 권한 없는 계정에게 비공개 레포지토리를 "없다(Repository not found)" 고 답한다.
+const AUTH_FAILURE_PATTERNS: &[&str] = &[
+    "repository not found",
+    "authentication failed",
+    "could not read username",
+    "could not read password",
+    "terminal prompts disabled",
+    "invalid username or password",
+    "returned error: 401",
+    "returned error: 403",
+    "permission to ",
+    "the requested url returned error: 404",
+    // git-lfs: 권한 없는 계정이 비공개 레포지토리의 LFS 원본을 받으려 할 때.
+    "batch response: not found",
+    "batch response: authentication required",
+    "permission denied (",
+];
+
+/// git 쓰기·네트워크 작업이 계정 문제로 실패했는지(계정이 틀렸거나 로그인이 없거나 만료).
+pub fn is_auth_failure(message: &str) -> bool {
+    is_auth(&message.to_lowercase())
+}
+
 fn is_auth(lower: &str) -> bool {
-    ["could not read username", "authentication failed", "could not read password", "invalid username or password", "permission denied ("]
-        .iter()
-        .any(|p| lower.contains(p))
+    AUTH_FAILURE_PATTERNS.iter().any(|p| lower.contains(p))
 }
 
 pub fn classify(message: &str) -> ErrorKind {
@@ -136,7 +158,7 @@ pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
         ErrorKind::Unknown => ("git 이 작업을 끝내지 못했습니다.".into(), "새로고침한 뒤 다시 해 보고, 그래도 안 되면 'git 원문' 을 확인하세요."),
         ErrorKind::NoRemote => {
             let r = group(r"(?i)'(?P<remote>[^']+)' does not appear to be a git repository", message, "remote").unwrap_or_else(|| "origin".into());
-            let cause = format!("원격 저장소 '{r}' 가 등록되어 있지 않습니다.");
+            let cause = format!("원격 레포지토리 '{r}' 가 등록되어 있지 않습니다.");
             remote = Some(r);
             (cause, "원격을 추가한 뒤 다시 Push 하세요.")
         }
@@ -152,7 +174,19 @@ pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
             (format!("원격 '{}' 에 내게 없는 커밋이 있습니다.", branch.clone().unwrap_or_default()), "Pull 로 받아 합친 뒤 다시 Push 하세요.")
         }
         ErrorKind::Network => ("원격 서버에 연결하지 못했습니다.".into(), "인터넷·VPN·프록시를 확인하고 다시 해 보세요."),
-        ErrorKind::Auth => ("이 계정으로는 저장소에 접근할 수 없습니다.".into(), "로그인하거나 계정을 바꾸세요(⋮ 메뉴 > GitHub 계정, 설정 > 로그인)."),
+        ErrorKind::Auth => {
+            let lower = message.to_lowercase();
+            // 비공개 레포지토리를 권한 없는 계정으로 열면 GitHub 는 "없다" 고 답한다 — 실제로 없는 것이 아니라 권한 문제라고 풀어 쓴다.
+            let cause = if lower.contains("repository not found") || lower.contains("error: 404") || lower.contains("batch response: not found") {
+                match group(r"(?i)repository '(?:https?://[^/]+/)?(?P<repo>[^']+?)(?:\.git)?/?' not found", message, "repo") {
+                    Some(repo) => format!("서버가 '{repo}' 레포지토리를 찾을 수 없다고 답했습니다.\n지금 쓰는 계정에 권한이 없는 비공개 레포지토리면 GitHub 는 이렇게 답합니다."),
+                    None => "서버가 레포지토리를 찾을 수 없다고 답했습니다.\n지금 쓰는 계정에 권한이 없는 비공개 레포지토리면 GitHub 는 이렇게 답합니다.".to_string(),
+                }
+            } else {
+                "서버가 접속을 받아 주지 않았습니다. 로그인하지 않았거나, 비밀번호·토큰이 틀렸거나 만료됐을 수 있습니다.".to_string()
+            };
+            (cause, "이 레포지토리에 접근할 수 있는 계정으로 로그인하거나 계정을 바꾸세요(⋮ 메뉴 > GitHub 계정, 설정 > 로그인).")
+        }
         ErrorKind::SshKey => {
             let host = group(r"@(?P<host>[^\s:']+): Permission denied \((?P<methods>[^)]*)\)", message, "host").unwrap_or_else(|| "서버".into());
             let methods = group(r"@(?P<host>[^\s:']+): Permission denied \((?P<methods>[^)]*)\)", message, "methods").unwrap_or_default();
@@ -230,5 +264,15 @@ mod tests {
         assert!(a.fix.contains("비밀번호"));
         let many = (0..7).map(|i| format!("CONFLICT (content): Merge conflict in f{i}")).collect::<Vec<_>>().join("\n");
         assert!(explain(&many, None).cause.ends_with("외 2개"));
+    }
+
+    #[test]
+    fn private_repository_not_found_is_account_problem() {
+        let message = "remote: Repository not found.\nfatal: repository 'https://github.com/NanaliStudios/ArrowsAndCats.git/' not found";
+        assert!(is_auth_failure(message));
+        let advice = explain(message, None);
+        assert_eq!(advice.kind, ErrorKind::Auth);
+        assert!(advice.cause.contains("'NanaliStudios/ArrowsAndCats'"), "{}", advice.cause);
+        assert!(advice.cause.contains("비공개"));
     }
 }

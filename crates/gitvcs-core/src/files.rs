@@ -1,4 +1,4 @@
-//! 파일 단위 작업: .gitignore 에 넣기, LFS 추적, 고른 파일만 stash, 패치 만들기, 파일 지우기, Stage 전 확인(충돌 표시·안의 git 저장소),
+//! 파일 단위 작업: .gitignore 에 넣기, LFS 추적, 고른 파일만 stash, 패치 만들기, 파일 지우기, Stage 전 확인(충돌 표시·안의 git 레포지토리),
 //! diff 의 두 판 크기, LFS 원본 받기. 원본 `Core/GitFileTools.cs`·`GitFileOperations` 를 옮겼다.
 
 use std::path::Path;
@@ -42,7 +42,7 @@ pub fn pattern(path: &str, kind: PatternKind) -> Result<String> {
 pub struct StageWarnings {
     /// 충돌 표시(<<<<<<<)가 남은 파일.
     pub conflict_markers: Vec<String>,
-    /// 안에 git 저장소가 있는 폴더(Stage 하면 gitlink 가 된다).
+    /// 안에 git 레포지토리가 있는 폴더(Stage 하면 gitlink 가 된다).
     pub nested_repos: Vec<String>,
 }
 
@@ -191,7 +191,7 @@ impl Repository {
         result.map_err(|e| GitError::new(format!("{path} 를 지우지 못했습니다: {e}")))
     }
 
-    /// Stage 하기 전에 물어볼 것: 충돌 표시가 남은 파일, 안에 git 저장소가 있는 폴더.
+    /// Stage 하기 전에 물어볼 것: 충돌 표시가 남은 파일, 안에 git 레포지토리가 있는 폴더.
     pub fn stage_warnings(&self, paths: &[String]) -> StageWarnings {
         let mut w = StageWarnings::default();
         for path in paths {

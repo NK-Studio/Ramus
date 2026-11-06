@@ -19,7 +19,7 @@ pub enum FileState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusEntry {
-    /// 저장소 루트 기준 경로(슬래시 구분). git 명령에 그대로 넘긴다.
+    /// 레포지토리 루트 기준 경로(슬래시 구분). git 명령에 그대로 넘긴다.
     pub path: String,
     /// 이름 변경·복사의 원래 경로.
     pub original_path: Option<String>,
