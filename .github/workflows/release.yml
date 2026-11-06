@@ -51,10 +51,56 @@ jobs:
         run: sh scripts/bundle-macos.sh release
       - name: Check architecture
         run: lipo -archs target/release/Ramus.app/Contents/MacOS/ramus
+      # 태그 빌드와 수동 실행에서만 Developer ID 로 서명하고 공증한다(PR·main 빌드는 시크릿 없이 임시 서명 그대로).
+      - name: Import signing certificate
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "MACOS_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+      - name: Sign Ramus.app
+        if: env.MACOS_KEYCHAIN != ''
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning "$MACOS_KEYCHAIN" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          test -n "$IDENTITY" || { echo "::error::Developer ID Application 인증서를 찾지 못했습니다"; exit 1; }
+          codesign --force --options runtime --timestamp --sign "$IDENTITY" target/release/Ramus.app
+          codesign --verify --strict --verbose=2 target/release/Ramus.app
+      - name: Notarize Ramus.app
+        if: env.MACOS_KEYCHAIN != ''
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          printf '%s\n' "$APPLE_API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          ditto -c -k --keepParent target/release/Ramus.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$RUNNER_TEMP/AuthKey.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple target/release/Ramus.app
+          spctl -a -vv -t exec target/release/Ramus.app
       - name: Package
         run: |
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent target/release/Ramus.app "dist/Ramus-${{ github.ref_name }}-macos-arm64.zip"
+      - name: Remove signing keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          if [ -n "${MACOS_KEYCHAIN:-}" ]; then security delete-keychain "$MACOS_KEYCHAIN" || true; fi
       - uses: actions/upload-artifact@v4
         with:
           name: macos-arm64
@@ -113,11 +159,7 @@ jobs:
             PC 에 `git` 이 설치되어 있어야 합니다. Windows 는 WebView2 런타임(Windows 10/11 기본 포함)을 씁니다.
 
             ### macOS 처음 실행
-            서명·공증하지 않은 빌드라 처음에는 Gatekeeper 가 막습니다. 압축을 풀고 `Ramus.app` 을 응용 프로그램 폴더로 옮긴 뒤 아래를 한 번 실행하세요.
-
-            ```bash
-            xattr -dr com.apple.quarantine /Applications/Ramus.app
-            ```
+            Apple Developer ID 로 서명·공증된 앱입니다. 압축을 풀고 `Ramus.app` 을 응용 프로그램 폴더로 옮기면 바로 실행됩니다.
 
             ### Windows 처음 실행
             SmartScreen 경고가 뜨면 **추가 정보 → 실행** 을 누르세요.
