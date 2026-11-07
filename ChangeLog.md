@@ -16,6 +16,8 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-07
+
 ### 추가
 
 - git 을 앱에 넣어 배포합니다(dugite-native 2.56.0: git + git-lfs + 자격 증명 도우미). PC 에 git 이 없어도 바로 씁니다.
