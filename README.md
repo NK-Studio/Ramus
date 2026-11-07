@@ -17,14 +17,17 @@ PC 에 `git` 이 설치되어 있어야 합니다.
 - `crates/ramus-core` — git 실행·파싱(status·log·그래프 열 배치), SSL `-c` 설정, 설정·최근 레포지토리. 화면과 상관없어 테스트로 확인합니다.
 - `crates/ramus-app` — tao 창 + wry 웹뷰, 화면과 JSON 메시지로 주고받기, 폴더 고르기.
 - `ui/` — 화면(HTML·CSS·JS, 빌드 도구 없음). 실행 파일 안에 묻어 넣습니다.
+- `assets/icon/` — 앱 아이콘(SVG 원본과 그것으로 만든 `.icns`·`.ico`). macOS 는 번들 스크립트가, Windows 는 `build.rs` 가 실행 파일에 넣습니다.
 
 ## 빌드·실행
 
 ```bash
 cargo test
 node tests/ui/syntax.test.mjs     # 문법 색(원본 GitTextEditorTests 의 Tokenize 시험)
+node tests/ui/changelog.test.mjs  # ChangeLog.md 맨 위 버전이 Cargo.toml 과 같은지
 cargo run -p ramus-app
 scripts/bundle-macos.sh release   # target/release/Ramus.app
+scripts/make-icons.sh             # assets/icon/ramus.svg → Ramus.icns·ramus.ico (아이콘을 고쳤을 때만, macOS 에서)
 ```
 
 개발 중에는 `RAMUS_UI_DIR=$PWD/ui` 를 주면 화면 파일을 디스크에서 바로 읽습니다. `RAMUS_SETTINGS` 로 설정 파일 위치를 바꿀 수 있습니다.
@@ -41,7 +44,7 @@ scripts/bundle-macos.sh release   # target/release/Ramus.app
   GitHub 가 아닌 서버가 로그인을 요구하면 로그인 창(SSH 는 `SSH_ASKPASS` 도우미에 환경 변수로만, http(s) 는 `git credential approve`)
 - GitHub: 연결 화면(Device Flow 로그인, 토큰은 OS 자격 증명 저장소), 레포지토리마다 계정 고르기(gh·자격 증명 도우미·앱 로그인, 인증 실패 뒤 고르면 다시 시도),
   사이드바 풀 리퀘스트 구역(묶음·검색 문법·상세·병합·코멘트·만들기), 원격 추가의 GitHub 탭(기존 레포지토리·새로 만들기)
-- 배치 3종(GitKraken · Fork · Unity VCS), 브랜치 탐색기·워크스페이스·체인지 세트, 파일 히스토리·Blame·비교·편집기·이미지 diff
+- 배치 3종(GitKraken · Fork · Unity VCS), 브랜치 탐색기·워크스페이스, 파일 히스토리·Blame·비교·편집기·이미지 diff
 - JetBrains 다크·라이트·시스템 테마, UI 배율
 
 ## 단계
@@ -61,3 +64,8 @@ scripts/bundle-macos.sh release   # target/release/Ramus.app
 ```bash
 echo 'return document.title' | nc 127.0.0.1 7777
 ```
+
+## 라이선스
+
+[Unlicense](LICENSE) — 퍼블릭 도메인입니다. 저작권 표시 없이 누구나 복사·수정·배포·판매할 수 있습니다.
+앱에 묻은 글꼴 IBM Plex Sans KR 은 따로 SIL OFL 1.1 을 따릅니다([ui/fonts/OFL.txt](ui/fonts/OFL.txt)).

@@ -9,6 +9,7 @@ APP="$ROOT/target/$PROFILE/Ramus.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/target/$PROFILE/ramus" "$APP/Contents/MacOS/ramus"
+cp "$ROOT/assets/icon/Ramus.icns" "$APP/Contents/Resources/Ramus.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -18,6 +19,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>Ramus</string>
   <key>CFBundleIdentifier</key><string>com.nkstudio.ramus</string>
   <key>CFBundleExecutable</key><string>ramus</string>
+  <key>CFBundleIconFile</key><string>Ramus</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>

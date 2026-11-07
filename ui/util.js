@@ -79,3 +79,28 @@ export function splitPath(path) {
 export function isComposing(event) {
   return event.isComposing || event.keyCode === 229;
 }
+
+/**
+ * 여러 줄 칸의 가로 스크롤 막대를 긴 줄이 실제로 넘칠 때만 켠다. 긴 줄은 접지 않고 가로로 민다(white-space: pre).
+ * 빈 칸은 넘칠 내용이 없으니 늘 끈다 — WebKit 은 페이지 확대(예: 110%)가 걸리면 placeholder 폭을 확대 비율만큼 더 넓게 잡아
+ * 빈 칸도 넘친다고 본다. 글이 있을 때도 1~2px 의 오차가 나므로 몇 px 의 여유는 넘침으로 치지 않는다.
+ * 입력·크기 변화뿐 아니라 코드가 value 를 바꿀 때도 다시 잰다.
+ */
+export function autoHorizontalScroll(textarea) {
+  textarea.style.whiteSpace = 'pre';
+  textarea.style.overflowWrap = 'normal';
+  textarea.style.overflowX = 'hidden';
+  const fit = () => {
+    const over = textarea.value !== '' && textarea.scrollWidth - textarea.clientWidth > 4;
+    textarea.style.overflowX = over ? 'auto' : 'hidden';
+  };
+  const proto = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  Object.defineProperty(textarea, 'value', {
+    configurable: true,
+    get() { return proto.get.call(this); },
+    set(v) { proto.set.call(this, v); fit(); },
+  });
+  textarea.addEventListener('input', fit);
+  new ResizeObserver(fit).observe(textarea);
+  return textarea;
+}

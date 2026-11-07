@@ -13,22 +13,37 @@ pub enum LineKind {
     NoNewline,
 }
 
+/// 줄마다 되풀이되는 기본값(0·false)은 JSON 에 싣지 않는다 — 큰 파일의 응답이 셋 중 하나 크기로 줄어 화면에 더 빨리 닿는다.
+/// 화면(ui/diff.js)은 없는 필드를 0·false 로 읽는다.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiffLine {
     pub kind: LineKind,
     /// 옛 판 줄 번호(0 = 없음).
+    #[serde(skip_serializing_if = "is_zero")]
     pub old: u32,
     /// 새 판 줄 번호(0 = 없음).
+    #[serde(skip_serializing_if = "is_zero")]
     pub new: u32,
     /// 앞 표시(' ', '+', '-')를 뗀 글. hunk 머리 줄과 NoNewline 은 줄 전체.
     pub text: String,
     /// CRLF 파일의 '\r'. 화면에는 안 보이지만 패치로 돌려줄 때 필요하다.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub cr: bool,
     pub hunk: usize,
     /// 짝지은 줄과 실제로 다른 구간(글자 단위, UTF-16 이 아닌 char 기준). 없으면 0, 0.
+    #[serde(skip_serializing_if = "is_zero_usize")]
     pub change_start: usize,
+    #[serde(skip_serializing_if = "is_zero_usize")]
     pub change_len: usize,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+fn is_zero_usize(n: &usize) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]

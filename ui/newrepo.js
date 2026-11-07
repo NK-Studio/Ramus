@@ -1,10 +1,11 @@
-// 레포지토리 만들기 창(원본에 없음 · 확장). GitKraken 의 "Initialize a Repository" 처럼 왼쪽에 [로컬만][GitHub.com], 오른쪽에 그 양식.
+// 레포지토리 만들기 창(원본에 없음 · 확장). 제목 옆 토글 [로컬 | GitHub] 로 양식을 바꾼다 — Clone·설정 창과 같은 창 틀(sheet.js).
 // 로컬만: 폴더 만들기 → git init → .gitignore·LICENSE → (LFS) → 첫 커밋 → 새 탭.
 // GitHub.com: GitHub 에 만들기 → (만든 뒤 clone) → 새 탭. clone 하지 않으면 주소를 알리고 브라우저로 열 수 있게 한다.
 
 import { el, isComposing } from './util.js';
 import { icon } from './icons.js';
 import { searchSelect, confirmDialog } from './dialogs.js';
+import { sheetHead, sheetBody, sheetFoot, sheetMessage, sheetModes, morph } from './sheet.js';
 
 const COPYRIGHT = { value: 'copyright', label: 'Copyright (C) [year] [name]' };
 /** 내장 틀에만 있는 이름(GitHub 에는 없다 — GitHub 에 만들 때는 뺀다). */
@@ -43,7 +44,7 @@ export function newRepoDialog(ctx, preset = {}) {
   const { call, state, prefs } = ctx;
   return new Promise((resolve) => {
     const backdrop = el('div', { class: 'modal-backdrop' });
-    const box = el('div', { class: 'modal newrepo', role: 'dialog' });
+    const box = el('div', { class: 'modal sheet wide newrepo', role: 'dialog' });
     let busy = false;
     let closed = false;
     const cleanups = [];
@@ -63,7 +64,10 @@ export function newRepoDialog(ctx, preset = {}) {
     const cloneDir = state.settings.cloneDir || prefs.get('newRepo.dir') || repoParent || '';
 
     // ── 공통 부품 ──
-    const row = (label, control, extra) => [el('label', { class: 'newrepo-label', text: label }), el('div', { class: 'newrepo-control' }, control, extra ?? null)];
+    // 칸 하나: 라벨은 칸 위(Clone·설정 창과 같다).
+    const row = (label, control, extra) => el('div', { class: 'modal-field' }, el('span', { class: 'modal-label', text: label }), control, extra ?? null);
+    const pair = (...fields) => el('div', { class: 'sheet-pair' }, ...fields);
+    const target = () => el('div', { class: 'muted small sheet-target' });
     const text = (value = '', attrs = {}) => {
       const node = el('input', { class: 'field', autocomplete: 'off', spellcheck: 'false', ...attrs });
       node.value = value;
@@ -75,7 +79,7 @@ export function newRepoDialog(ctx, preset = {}) {
       return { box, node: el('label', { class: 'check' }, box, label) };
     };
     const browseButton = (target, title, after) => el('button', {
-      class: 'btn', text: '찾아보기',
+      class: 'btn', text: '찾아보기…',
       onclick: async () => {
         const picked = await call('pick', { kind: 'folder', start: target.value, title }).catch(() => null);
         if (picked) {
@@ -84,7 +88,7 @@ export function newRepoDialog(ctx, preset = {}) {
         }
       },
     });
-    const okButton = (label) => el('button', { class: 'btn newrepo-ok', text: label });
+    const okButton = (label) => el('button', { class: 'btn primary', text: label });
     const setBusy = (button, on, label) => {
       button.disabled = on;
       button.replaceChildren(...(on ? [el('span', { class: 'spinner' }), el('span', { text: '만드는 중…' })] : [label]));
@@ -115,21 +119,23 @@ export function newRepoDialog(ctx, preset = {}) {
     const local = (() => {
       const name = text(presetPath ? splitParts(presetPath).pop() : '', { placeholder: '레포지토리 이름' });
       const dir = text(localDir, { placeholder: '만들 위치' });
-      const full = text('', { readonly: true, tabindex: '-1' });
+      const full = { value: '' }; // 이름과 위치를 합친 전체 경로(아래 "만들 곳" 줄로 보인다)
+      const where = target();
       const branch = text('', { placeholder: 'main' });
       const gitignore = gitignoreSelect(false);
       const license = licenseSelect();
       const lfs = check(false, 'LFS 로 초기화');
-      const problem = el('div', { class: 'newrepo-problem' });
-      const ok = okButton('레포지토리 만들기');
+      const problem = sheetMessage();
+      const ok = okButton('만들기');
       let reason = '';
       let checkId = 0;
       let timer = 0;
       const update = () => {
         full.value = join(dir.value, name.value);
         const n = name.value.trim();
+        where.textContent = n && dir.value.trim() ? `만들 곳: ${full.value}` : '';
         reason = !n ? '레포지토리 이름을 적어 주세요.' : folderNameProblem(n) || (!dir.value.trim() ? '만들 위치를 정해 주세요.' : '');
-        problem.textContent = reason;
+        problem.say(reason, !!n && !!folderNameProblem(n));
         ok.disabled = busy || !!reason;
         clearTimeout(timer);
         if (reason) return;
@@ -139,7 +145,7 @@ export function newRepoDialog(ctx, preset = {}) {
           const info = await pathState(path);
           if (id !== checkId) return;
           reason = pathProblem(info, !!presetPath && path === presetPath);
-          problem.textContent = reason;
+          problem.say(reason, true);
           ok.disabled = busy || !!reason;
         }, PATH_CHECK_MS);
       };
@@ -152,7 +158,7 @@ export function newRepoDialog(ctx, preset = {}) {
         const late = pathProblem(await pathState(path), !!presetPath && path === presetPath);
         if (late) {
           reason = late;
-          problem.textContent = late;
+          problem.say(late, true);
           ok.disabled = true;
           return;
         }
@@ -169,24 +175,20 @@ export function newRepoDialog(ctx, preset = {}) {
           close(repo);
         } catch (error) {
           busy = false;
-          setBusy(ok, false, '레포지토리 만들기');
+          setBusy(ok, false, '만들기');
           update();
           ctx.showError(error, '레포지토리를 만들지 못했습니다');
         }
       };
       ok.addEventListener('click', submit);
       const pane = el('div', { class: 'newrepo-pane' },
-        el('div', { class: 'newrepo-grid' },
-          ...row('이름', name),
-          ...row('만들 위치', el('div', { class: 'newrepo-inline' }, dir, browseButton(dir, '레포지토리를 만들 위치', update))),
-          ...row('전체 경로', full),
-          ...row('기본 브랜치 이름', branch),
-          ...row('.gitignore 템플릿', gitignore.element),
-          ...row('라이선스', license.element),
-          el('span'), el('div', { class: 'newrepo-control' }, lfs.node)),
-        el('div', { class: 'newrepo-foot' }, problem, ok));
+        row('이름', name),
+        row('만들 위치', el('div', { class: 'row' }, dir, browseButton(dir, '레포지토리를 만들 위치', update))),
+        where,
+        pair(row('기본 브랜치 이름', branch), row('.gitignore 템플릿', gitignore.element)),
+        pair(row('라이선스', license.element), el('div', { class: 'sheet-check' }, lfs.node)));
       update();
-      return { pane, submit, focus: () => (name.value ? dir : name).focus() };
+      return { pane, problem, ok, submit, focus: () => (name.value ? dir : name).focus() };
     })();
 
     // ── GitHub.com ──
@@ -205,17 +207,17 @@ export function newRepoDialog(ctx, preset = {}) {
       const privateRadio = radio('private', '비공개');
       privateRadio.input.checked = privateRadio.input.defaultChecked = true;
       visibility.append(publicRadio.node, privateRadio.node);
-      const cloneAfter = check(true, '만든 뒤 클론');
-      const dir = text(cloneDir, { placeholder: '클론할 위치' });
-      const browse = browseButton(dir, '클론할 위치', () => update());
-      const prefix = el('span', { class: 'newrepo-prefix' });
+      const cloneAfter = check(true, '만든 뒤 이 PC 로 Clone');
+      const dir = text(cloneDir, { placeholder: '받을 폴더' });
+      const browse = browseButton(dir, '받을 폴더 고르기', () => update());
+      const where = target();
       const folder = text('', { placeholder: '폴더 이름' });
       const branch = text('', { placeholder: 'main' });
       const gitignore = gitignoreSelect(true);
       const license = licenseSelect();
       const lfs = check(false, 'LFS 로 초기화');
-      const problem = el('div', { class: 'newrepo-problem' });
-      const ok = okButton('레포지토리 만들고 클론');
+      const problem = sheetMessage();
+      const ok = okButton('만들고 Clone');
       let folderTouched = false;
       let reason = '';
       let checkId = 0;
@@ -227,16 +229,13 @@ export function newRepoDialog(ctx, preset = {}) {
       });
       dir.addEventListener('input', () => update());
       cloneAfter.box.addEventListener('change', () => update());
-      const okLabel = () => (cloneAfter.box.checked ? '레포지토리 만들고 클론' : '레포지토리 만들기');
+      const okLabel = () => (cloneAfter.box.checked ? '만들고 Clone' : '만들기');
       function update() {
         const cloning = cloneAfter.box.checked;
         for (const node of [dir, browse, folder]) node.disabled = !cloning || busy;
         lfs.box.disabled = !cloning;
         lfs.node.classList.toggle('disabled', !cloning);
-        // 긴 경로는 앞을 줄인다(rtl 상자) — LRM 으로 감싸 '/' 가 엉뚱한 쪽으로 가지 않게.
-        const parentText = `${dir.value.trim().replace(/[\\/]+$/, '')}${sepOf(dir.value)}`;
-        prefix.textContent = `\u200E${parentText}\u200E`;
-        prefix.dataset.tip = parentText;
+        where.textContent = cloning && dir.value.trim() && folder.value.trim() ? `받을 곳: ${join(dir.value, folder.value)}` : '';
         if (!busy) setBusy(ok, false, okLabel());
         const n = name.value.trim();
         reason = !info ? '계정을 읽는 중…'
@@ -244,10 +243,10 @@ export function newRepoDialog(ctx, preset = {}) {
           : !n ? '레포지토리 이름을 적어 주세요.'
             : /[^A-Za-z0-9._-]/.test(n) ? 'GitHub 레포지토리 이름에는 영문·숫자·. _ - 만 쓸 수 있습니다.'
               : !cloning ? ''
-                : !dir.value.trim() ? '클론할 위치를 정해 주세요.'
+                : !dir.value.trim() ? '받을 폴더를 정해 주세요.'
                   : !folder.value.trim() ? '폴더 이름을 적어 주세요.'
                     : folderNameProblem(folder.value.trim());
-        problem.textContent = reason;
+        problem.say(reason, /쓸 수/.test(reason));
         ok.disabled = busy || !!reason;
         clearTimeout(timer);
         if (reason || !cloning) return;
@@ -257,7 +256,7 @@ export function newRepoDialog(ctx, preset = {}) {
           const state = await pathState(path);
           if (id !== checkId) return;
           reason = pathProblem(state, false);
-          problem.textContent = reason;
+          problem.say(reason, true);
           ok.disabled = busy || !!reason;
         }, PATH_CHECK_MS);
       }
@@ -338,7 +337,7 @@ export function newRepoDialog(ctx, preset = {}) {
           const late = pathProblem(await pathState(dest), false);
           if (late) {
             reason = late;
-            problem.textContent = late;
+            problem.say(late, true);
             ok.disabled = true;
             return;
           }
@@ -372,28 +371,24 @@ export function newRepoDialog(ctx, preset = {}) {
         } catch (error) {
           close(null);
           ctx.toast(`${created.fullName} 는 GitHub 에 만들었지만 받지 못했습니다. ${created.htmlUrl}`, 'warning');
-          ctx.showError(error, '만든 레포지토리를 클론하지 못했습니다');
+          ctx.showError(error, '만든 레포지토리를 Clone 하지 못했습니다');
         }
       };
       ok.addEventListener('click', submit);
 
       const pane = el('div', { class: 'newrepo-pane' },
-        el('div', { class: 'newrepo-grid' },
-          ...row('계정', accountArea),
-          ...row('이름', name),
-          ...row('설명', description),
-          ...row('공개 범위', visibility),
-          el('span'), el('div', { class: 'newrepo-control' }, cloneAfter.node),
-          ...row('클론할 위치', el('div', { class: 'newrepo-inline' }, dir, browse)),
-          ...row('전체 경로', el('div', { class: 'newrepo-inline newrepo-path' }, prefix, folder)),
-          ...row('기본 브랜치 이름', branch),
-          ...row('.gitignore 템플릿', gitignore.element),
-          ...row('라이선스', license.element),
-          el('span'), el('div', { class: 'newrepo-control' }, lfs.node)),
-        el('div', { class: 'newrepo-foot' }, problem, ok));
+        row('계정', accountArea),
+        pair(row('이름', name), row('공개 범위', visibility)),
+        row('설명', description),
+        el('div', { class: 'newrepo-check' }, cloneAfter.node),
+        // 받을 폴더 · 폴더 이름 · 받을 곳 줄은 Clone 창과 같은 모양.
+        pair(row('받을 폴더', el('div', { class: 'row' }, dir, browse)), row('폴더 이름', folder)),
+        where,
+        pair(row('기본 브랜치 이름', branch), row('.gitignore 템플릿', gitignore.element)),
+        pair(row('라이선스', license.element), el('div', { class: 'sheet-check' }, lfs.node)));
       let loaded = false;
       return {
-        pane, submit,
+        pane, problem, ok, submit,
         focus: () => (info?.signedIn ? name : accountArea.querySelector('button') ?? name).focus(),
         show() {
           if (loaded) return;
@@ -405,27 +400,31 @@ export function newRepoDialog(ctx, preset = {}) {
 
     // ── 틀 ──
     const TABS = [
-      { id: 'local', label: '로컬만', glyph: 'laptop', form: local },
-      { id: 'github', label: 'GitHub.com', glyph: 'github', form: hub },
+      { id: 'local', label: '로컬', glyph: 'laptop', form: local },
+      { id: 'github', label: 'GitHub', glyph: 'github', form: hub },
     ];
     let tab = presetPath ? 'local' : (prefs.get('newRepo.tab') === 'github' ? 'github' : 'local');
-    const nav = el('div', { class: 'newrepo-nav' });
-    const body = el('div', { class: 'newrepo-panes' });
+    const modes = sheetModes(TABS.map((t) => ({ value: t.id, label: t.label, icon: t.glyph })), (id) => { if (!busy) select(id); });
     const select = (id, focus = true) => {
-      tab = id;
-      if (!presetPath) prefs.set('newRepo.tab', id);
-      nav.replaceChildren(...TABS.map((t) => el('button', { class: `newrepo-tab${t.id === tab ? ' on' : ''}`, onclick: () => select(t.id) }, icon(t.glyph, 16), el('span', { text: t.label }))));
-      for (const t of TABS) t.form.pane.hidden = t.id !== tab;
-      const form = TABS.find((t) => t.id === tab).form;
-      form.show?.();
-      if (focus) form.focus();
+      const change = () => {
+        tab = id;
+        if (!presetPath) prefs.set('newRepo.tab', id);
+        modes.set(tab);
+        // 양식·안내 글·주 버튼을 그 쪽 것으로.
+        for (const t of TABS) t.form.pane.hidden = t.form.problem.hidden = t.form.ok.hidden = t.id !== tab;
+        TABS.find((t) => t.id === tab).form.show?.();
+      };
+      // 처음 그릴 때는 바로, 그 뒤로는 Clone 창처럼 높이를 부드럽게 잇는다.
+      if (box.isConnected) morph(box, change);
+      else change();
+      if (focus) TABS.find((t) => t.id === tab).form.focus();
     };
-    body.append(local.pane, hub.pane);
+    const cancel = el('button', { class: 'btn', text: '취소', onclick: () => { if (!busy) close(null); } });
     box.append(
-      el('div', { class: 'newrepo-head' },
-        el('div', { class: 'modal-title', text: '레포지토리 만들기' }),
-        el('button', { class: 'card-close', 'data-tip': '닫기', onclick: () => { if (!busy) close(null); } }, icon('close', 14))),
-      el('div', { class: 'newrepo-body' }, nav, body));
+      sheetHead('레포지토리 만들기', modes.node),
+      sheetBody(local.pane, hub.pane),
+      sheetFoot(el('div', { class: 'newrepo-messages' }, local.problem, hub.problem), cancel, local.ok, hub.ok));
+    select(tab, false);
     backdrop.append(box);
     document.body.append(backdrop);
 
@@ -446,8 +445,7 @@ export function newRepoDialog(ctx, preset = {}) {
       }
     };
     document.addEventListener('keydown', onKey, true);
-
-    select(tab);
+    TABS.find((t) => t.id === tab).form.focus();
 
     // 템플릿·라이선스 목록(GitHub API, 앱이 켜져 있는 동안 기억). 인터넷이 안 되면 내장 .gitignore 틀만, 라이선스는 끈다.
     (async () => {

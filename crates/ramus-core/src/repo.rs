@@ -26,6 +26,10 @@ pub struct GitError {
     pub login: Option<crate::login::LoginTarget>,
     /// 원인·해결 한 줄씩(오류 대화상자의 "설명").
     pub advice: crate::advice::Advice,
+    /// 화면이 보던 레포지토리와 열린 레포지토리가 달라 실행하지 않았다(탭을 바꾸는 사이에 보낸 요청). 화면은 조용히 버린다.
+    pub stale: bool,
+    /// 레포지토리 폴더가 앱 밖에서 사라졌다(지움·이름 바꿈·드라이브 분리). 화면은 오류 창 대신 그 탭을 거두고 한 줄만 알린다.
+    pub gone: bool,
 }
 
 impl GitError {
@@ -38,7 +42,19 @@ impl GitError {
             login: crate::login::parse_failure(&message),
             advice: crate::advice::explain(&message, None),
             message,
+            stale: false,
+            gone: false,
         }
+    }
+
+    /// 레포지토리 폴더가 사라져 아무것도 할 수 없다는 오류.
+    pub fn gone(path: &Path) -> Self {
+        GitError { gone: true, ..GitError::new(format!("레포지토리 폴더를 찾을 수 없습니다: {}", path.display())) }
+    }
+
+    /// 탭을 바꾸는 사이에 온 요청을 건너뛰었다는 오류.
+    pub fn stale() -> Self {
+        GitError { stale: true, ..GitError::new("다른 레포지토리로 바뀌어 이 요청을 건너뛰었습니다.") }
     }
 }
 
@@ -91,6 +107,8 @@ pub struct Snapshot {
     pub remotes: Vec<crate::ops::Remote>,
     pub worktrees: Vec<crate::ops::Worktree>,
     pub submodules: Vec<crate::ops::Submodule>,
+    /// `commit.template` 파일 내용(없으면 None).
+    pub template: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -264,7 +282,7 @@ impl Repository {
     /// `path` 가 든 레포지토리를 연다(하위 폴더를 골라도 레포지토리 루트를 찾는다).
     pub fn open(git: GitRunner, path: &Path) -> Result<Repository> {
         if !path.is_dir() {
-            return Err(GitError::new(format!("폴더가 없습니다: {}", path.display())));
+            return Err(GitError::gone(path));
         }
         let out = git.run(path, &["rev-parse", "--show-toplevel", "--absolute-git-dir"]);
         if !out.success() {
@@ -344,8 +362,17 @@ impl Repository {
     }
 
     pub fn identity(&self) -> Identity {
-        let get = |key: &str| self.git.run(&self.root, &["config", "--get", key]).stdout.trim().to_string();
-        Identity { name: get("user.name"), email: get("user.email") }
+        // 두 키를 한 번에(프로세스 하나). 같은 키가 여러 번 나오면 `--get` 처럼 마지막 값.
+        let out = self.git.run(&self.root, &["config", "--get-regexp", r"^user\.(name|email)$"]);
+        let mut identity = Identity { name: String::new(), email: String::new() };
+        for line in out.stdout.lines() {
+            match line.split_once(' ') {
+                Some(("user.name", value)) => identity.name = value.trim().to_string(),
+                Some(("user.email", value)) => identity.email = value.trim().to_string(),
+                _ => {}
+            }
+        }
+        identity
     }
 
     pub fn head(&self) -> Option<String> {
@@ -358,15 +385,36 @@ impl Repository {
     /// 만든 자리 위에 따로 끼운다 — 그래프는 점선 상자로 그린다.
     /// `head_first` 면 지금 브랜치가 맨 왼쪽 열을 갖는다 — 그래프 맨 위 작업 중 줄(WIP)이 지금 브랜치에 이어질 때.
     pub fn history(&self, max_count: usize, refs: &crate::refs::Refs, head_first: bool) -> Result<History> {
-        let head = self.head();
+        self.history_from(self.head(), max_count, refs, head_first)
+    }
+
+    /// [`history`] 에서 HEAD 를 이미 읽어 둔 경우(snapshot 이 다른 읽기와 나란히 읽는다).
+    pub fn history_from(&self, head: Option<String>, max_count: usize, refs: &crate::refs::Refs, head_first: bool) -> Result<History> {
+        match self.load_commits(head.as_deref(), max_count, refs)? {
+            Some(loaded) => Ok(Self::build_history(loaded, refs, head, head_first)),
+            None => Ok(Self::empty_history()),
+        }
+    }
+
+    fn empty_history() -> History {
+        History { commits: Vec::new(), graph: GraphLayout { lane_count: 1, ..Default::default() }, head: None, truncated: false }
+    }
+
+    /// 커밋 목록만 읽는다(그래프 배치 전): (커밋들, 잘렸는지). HEAD 가 없으면(커밋 없음) None.
+    fn load_commits(&self, head: Option<&str>, max_count: usize, refs: &crate::refs::Refs) -> Result<Option<(Vec<log::Commit>, bool)>> {
         if head.is_none() {
-            return Ok(History { commits: Vec::new(), graph: GraphLayout { lane_count: 1, ..Default::default() }, head, truncated: false });
+            return Ok(None);
         }
         let max = format!("--max-count={max_count}");
         let out = self.run(&["log", log::LOG_FORMAT, "--date-order", "--exclude=refs/stash", "--all", "HEAD", &max])?;
         let mut commits = log::parse_commits(&out.stdout, &refs.remotes);
         let truncated = commits.len() >= max_count;
         log::insert_stashes(&mut commits, self.stash_commits(&refs.stashes), truncated);
+        Ok(Some((commits, truncated)))
+    }
+
+    /// 읽은 커밋 목록으로 그래프를 배치한다(git 을 부르지 않는다).
+    fn build_history((commits, truncated): (Vec<log::Commit>, bool), refs: &crate::refs::Refs, head: Option<String>, head_first: bool) -> History {
         let tips: Vec<graph::BranchTip> = refs
             .local
             .iter()
@@ -374,7 +422,7 @@ impl Repository {
             .map(|b| graph::BranchTip { name: b.name.clone(), hash: b.hash.clone(), remote: b.remote.is_some(), current: b.current, time: b.time })
             .collect();
         let graph = graph::build(&commits, &tips, graph::ANONYMOUS_LANE, graph::Options { top_down: true, head_first });
-        Ok(History { commits, graph, head, truncated })
+        History { commits, graph, head, truncated }
     }
 
     /// stash 마다 (이름, 커밋). 새 stash 가 앞. 읽지 못하면 비운다(그래프에 stash 만 빠진다).
@@ -391,17 +439,29 @@ impl Repository {
 
     /// 화면을 새로 그릴 때 필요한 것을 한 번에 읽는다: 상태·참조·히스토리. 상태와 참조는 함께 읽고, 그래프는 작업 중 변경이 있는지에 따라 배치한다.
     pub fn snapshot(&self, max_count: usize) -> Result<Snapshot> {
-        let (status, refs, extra) = std::thread::scope(|scope| {
+        // 큰 레포지토리에서는 status 가 가장 오래 걸린다(작업 트리 전체). 참조 → 커밋 목록까지 모두 그 옆에서 읽고,
+        // status 가 끝나야 아는 것(작업 중 변경이 있는지)은 그래프 배치에만 쓴다.
+        let (status, loaded, extra) = std::thread::scope(|scope| {
             let status = scope.spawn(|| self.status());
-            let extra = scope.spawn(|| (self.remote_list().unwrap_or_default(), self.worktrees().unwrap_or_default(), self.submodules().unwrap_or_default()));
-            let refs = self.refs();
-            (status.join().unwrap_or_else(|_| Err(GitError::new("상태를 읽지 못했습니다."))), refs, extra.join().unwrap_or_default())
+            let extra = scope.spawn(|| (self.remote_list().unwrap_or_default(), self.worktrees().unwrap_or_default(), self.submodules().unwrap_or_default(), self.commit_template()));
+            let head = scope.spawn(|| self.head());
+            let loaded = (|| {
+                let refs = self.refs()?;
+                let head = head.join().unwrap_or(None);
+                let commits = self.load_commits(head.as_deref(), max_count, &refs)?;
+                Ok::<_, GitError>((refs, head, commits))
+            })();
+            (status.join().unwrap_or_else(|_| Err(GitError::new("상태를 읽지 못했습니다."))), loaded, extra.join().unwrap_or_default())
         });
-        let (status, refs) = (status?, refs?);
+        let status = status?;
+        let (refs, head, commits) = loaded?;
         let wip = !status.staged.is_empty() || !status.unstaged.is_empty();
-        let history = self.history(max_count, &refs, wip)?;
-        let (remotes, worktrees, submodules) = extra;
-        Ok(Snapshot { status, refs, history, remotes, worktrees, submodules })
+        let history = match commits {
+            Some(loaded) => Self::build_history(loaded, &refs, head, wip),
+            None => Self::empty_history(),
+        };
+        let (remotes, worktrees, submodules, template) = extra;
+        Ok(Snapshot { status, refs, history, remotes, worktrees, submodules, template })
     }
 
     pub fn commit_detail(&self, hash: &str) -> Result<CommitDetail> {

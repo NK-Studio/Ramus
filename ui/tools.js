@@ -759,7 +759,7 @@ export function createTools(ctx) {
     // 위 막대: 파일 · 상태 · 닫기(코드 diff 막대 자리).
     const bar = el('div', { class: 'diff-bar' },
       el('div', { class: 'dbar-left' }, el('div', { class: 'diff-title' }, fileIcon(target.path), el('span', { class: 'diff-path', text: target.path, 'data-tip': target.path }),
-        el('span', { class: 'muted small', text: before && after ? '수정' : before ? '삭제' : '추가' }))),
+        el('span', { class: 'diff-state muted small', text: before && after ? '수정' : before ? '삭제' : '추가' }))),
       el('div', { class: 'dbar-right' }, el('button', { class: 'dbar-btn', 'data-tip': '닫기 (Esc)', onclick: () => diffState.api.close() }, icon('close', 14))));
     // 보기 막대: [나란히 보기|스와이프|겹쳐 보기|차이 강조] (불투명도)   151% [화면에 맞춤|100%] [속성 보기]
     const modeButtons = Object.entries(MODES).map(([key, text]) => el('button', { class: 'dbar-text', text, onclick: () => { mode = key; ctx.prefs.set('image.mode', key); syncModes(); build(); } }));

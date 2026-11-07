@@ -180,8 +180,8 @@ export function formDialog({ title, message, fields = [], ok = '확인', cancel 
 }
 
 /** 예/아니오 카드. 위험하면 빨간 확인. Enter 는 채운 버튼(기본은 확인, Tab 으로 옮기면 그 버튼). alert 면 Fork(macOS 경고창) 모양. cancel 로 취소 버튼 글을 바꾼다(예: "원격은 남기기"). */
-export async function confirmDialog({ title, message, ok = '확인', cancel = '취소', danger = false, glyph, tone, alert = false }) {
-  return (await formDialog({ title, message, ok, cancel, danger, glyph: glyph ?? (danger ? 'warning' : 'info'), tone, alert })) !== null;
+export async function confirmDialog({ title, message, ok = '확인', cancel = '취소', danger = false, glyph, tone, alert = false, extra, className }) {
+  return (await formDialog({ title, message, ok, cancel, danger, glyph: glyph ?? (danger ? 'warning' : 'info'), tone, alert, extra, className })) !== null;
 }
 
 /**
@@ -541,31 +541,47 @@ export function searchSelect({ items, value, placeholder = '', onChange, clearab
 let openMenu = null;
 
 /**
- * 우클릭 메뉴. items: [{label, action, danger, disabled, checked, submenu:[…], hint} | '-']
- * 하위 메뉴(›), 체크 표시, 키보드(↑↓·Enter·→·←·Esc).
+ * 메뉴의 "다른 항목" 보조키: macOS 는 Option(Finder 처럼), Windows·Linux 는 Shift.
+ * (Windows 에서 Alt 는 창 메뉴 막대로 키를 가져가고, 탐색기의 영구 삭제도 Shift+Delete 다.)
  */
-export function showMenu(x, y, items) {
+export function altModifier(event) {
+  return document.documentElement.dataset.platform === 'macos' ? !!event?.altKey : !!event?.shiftKey;
+}
+
+/**
+ * 우클릭 메뉴. items: [{label, action, danger, disabled, checked, submenu:[…], hint, alt} | '-']
+ * 하위 메뉴(›), 체크 표시, 키보드(↑↓·Enter·→·←·Esc).
+ * alt: 보조키(altModifier)를 누르고 있는 동안 그 자리에 대신 보일 항목({label, action, danger, disabled}).
+ * 메뉴가 떠 있는 동안 키를 누르고 떼면 바로 바뀐다. `alt` 옵션은 메뉴를 열 때 이미 누르고 있었는지.
+ */
+export function showMenu(x, y, items, { alt: altHeld = false } = {}) {
   openMenu?.();
   const menus = [];
+  let altOn = altHeld;
+  const variant = (item) => (altOn && item.alt ? item.alt : item);
 
   function build(entries, left, top, parentItem) {
     const usable = entries.filter((e) => e !== '-' && !e.disabled);
-    const menu = el('div', { class: 'menu', role: 'menu' });
+    // 체크 표시를 쓰는 항목이 없으면 왼쪽 체크 칸을 접는다(JetBrains 팝업처럼 글자가 왼쪽에 붙는다).
+    const checks = entries.some((e) => e !== '-' && e.checked !== undefined);
+    const menu = el('div', { class: `menu${checks ? '' : ' no-check'}`, role: 'menu' });
     const buttons = [];
     for (const item of entries) {
       if (item === '-') {
         menu.append(el('div', { class: 'menu-sep' }));
         continue;
       }
+      const shown = variant(item);
       const button = el('button', {
-        class: `menu-item${item.danger ? ' danger' : ''}${item.submenu ? ' has-sub' : ''}`,
-        disabled: item.disabled,
+        class: `menu-item${shown.danger ? ' danger' : ''}${item.submenu ? ' has-sub' : ''}`,
+        disabled: shown.disabled,
       },
       el('span', { class: 'menu-check' }, item.checked ? icon('check', 14) : null),
-      el('span', { class: 'menu-label', text: item.label }),
+      el('span', { class: 'menu-label', text: shown.label }),
       item.hint ? el('span', { class: 'menu-hint', text: item.hint }) : null,
       item.submenu ? el('span', { class: 'menu-arrow' }, icon('chevronRight', 12)) : null);
-      button.item = item;
+      button.base = item;
+      button.item = shown;
       button.addEventListener('mouseenter', () => focus(menu, buttons.indexOf(button), true));
       button.addEventListener('click', () => activate(menu, button));
       buttons.push(button);
@@ -620,10 +636,28 @@ export function showMenu(x, y, items) {
 
   build(items, x, y, null);
 
+  /** 보조키 상태가 바뀌면 alt 가 있는 항목을 그 자리에서 바꿔 보인다(크기가 달라지지 않게 글자·색·켜짐만). */
+  function applyAlt(on) {
+    if (on === altOn) return;
+    altOn = on;
+    for (const menu of menus) {
+      for (const button of menu.buttons) {
+        if (!button.base.alt) continue;
+        const shown = variant(button.base);
+        button.item = shown;
+        button.disabled = !!shown.disabled;
+        button.classList.toggle('danger', !!shown.danger);
+        button.querySelector('.menu-label').textContent = shown.label;
+      }
+    }
+  }
+  const onModifier = (event) => applyAlt(altModifier(event));
+
   const onDown = (event) => {
     if (!menus.some((m) => m.contains(event.target))) close();
   };
   const onKey = (event) => {
+    onModifier(event);
     const menu = menus[menus.length - 1];
     const move = (delta) => {
       const n = menu.buttons.length;
@@ -656,19 +690,24 @@ export function showMenu(x, y, items) {
     menus.splice(0).forEach((m) => m.remove());
     document.removeEventListener('pointerdown', onDown, true);
     document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('keyup', onModifier, true);
+    document.removeEventListener('pointermove', onModifier, true);
     window.removeEventListener('blur', close);
     openMenu = null;
   }
   setTimeout(() => {
     document.addEventListener('pointerdown', onDown, true);
     document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keyup', onModifier, true);
+    // 메뉴 밖에서 키를 떼고 돌아와도 맞게, 마우스가 움직일 때도 보조키 상태를 다시 본다.
+    document.addEventListener('pointermove', onModifier, true);
     window.addEventListener('blur', close);
   });
   openMenu = close;
 }
 
 /** 버튼 아래로 메뉴를 연다. */
-export function menuBelow(button, items) {
+export function menuBelow(button, items, options) {
   const rect = button.getBoundingClientRect();
-  showMenu(rect.left, rect.bottom + 4, items);
+  showMenu(rect.left, rect.bottom + 4, items, options);
 }

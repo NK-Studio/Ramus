@@ -80,12 +80,12 @@ impl AppMenu {
 
         #[cfg(target_os = "macos")]
         {
-            let about = muda::AboutMetadata { name: Some("Ramus".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
+            // "Ramus 정보" 는 운영체제 기본 창 대신 화면이 그린다(ui/about.js) — 빌드·git·웹뷰 정보를 함께 보이려고.
             let app = Submenu::with_items(
                 "Ramus",
                 true,
                 &[
-                    &PredefinedMenuItem::about(Some("Ramus 정보"), Some(about)),
+                    &item("about", "Ramus 정보"),
                     &sep(),
                     &item("settings", "설정…"),
                     &sep(),
@@ -203,10 +203,7 @@ impl AppMenu {
 
         let help = Submenu::with_items("도움말", true, &[&item("shortcuts", "키보드 단축키 보기")]).expect("도움말 메뉴");
         #[cfg(not(target_os = "macos"))]
-        {
-            let about = muda::AboutMetadata { name: Some("Ramus".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
-            help.append_items(&[&sep(), &PredefinedMenuItem::about(Some("Ramus 정보"), Some(about))]).expect("도움말 메뉴");
-        }
+        help.append_items(&[&sep(), &item("about", "Ramus 정보")]).expect("도움말 메뉴");
         // macOS 가 도움말 메뉴 맨 위에 검색 칸을 넣는다.
         #[cfg(target_os = "macos")]
         help.set_as_help_menu_for_nsapp();

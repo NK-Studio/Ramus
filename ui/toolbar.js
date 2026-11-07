@@ -69,7 +69,7 @@ export function createToolbar(container, ctx) {
   const stash = action('act-stash', 'stash', '스태시', () => ctx.stash(), { tip: '작업 중인 변경(새 파일 포함)을 stash 에 넣고 작업 트리를 비웁니다.' });
   const pop = action('act-pop', 'pop', '팝', () => ctx.pop());
   const terminal = action('act-terminal', 'terminal', '터미널', () => ctx.terminal(), { tip: '레포지토리 폴더에서 터미널을 엽니다.' });
-  const refresh = action('act-refresh', 'refresh', '새로고침', () => ctx.refresh(), { tip: '레포지토리 상태와 지금 보고 있는 탭을 다시 읽습니다.' });
+  const refresh = action('act-refresh', 'reload', '새로고침', () => ctx.refresh(), { tip: '레포지토리 상태와 지금 보고 있는 탭을 다시 읽습니다.' });
   const more = el('button', { class: 'tb-more', id: 'act-more', 'data-tip': '메뉴', onclick: (e) => ctx.windowMenu(e.currentTarget) }, icon('moreVert', 18));
   const status = el('div', { class: 'tb-status', id: 'tb-status' }, el('span', { class: 'spinner', hidden: true }), el('span', { class: 'tb-status-text' }));
   const group = (...children) => el('div', { class: 'tb-group' }, children);
@@ -314,7 +314,7 @@ export function createToolbar(container, ctx) {
       setBadge(fetch, fetchState.auth ? '!' : 0, 'danger');
       // 받을 커밋 수는 마지막 fetch 기준이다. 0 이 "확인했더니 없음" 인지 "아직 안 봄" 인지 알 수 있게 언제 봤는지 붙인다.
       disable(pull, !idle || noRemote || !br.upstream || inProgress,
-        blocked ?? (noRemote ? '원격이 없습니다.' : `원격의 새 커밋을 받아 현재 브랜치에 합칩니다. 갈라졌으면 병합·리베이스를 묻습니다. 받을 커밋 ${br.behind}개.\n${fetchAgeText(lastFetch)}`));
+        blocked ?? (noRemote ? '원격이 없습니다.' : `원격 커밋을 받아 현재 브랜치에 합칩니다.\n${fetchAgeText(lastFetch)}`));
       pullCaret.disabled = !idle;
       disable(push, !idle || inProgress || br.detached || !br.hasCommits, blocked ?? `현재 브랜치를 원격에 올립니다. 올릴 커밋 ${br.ahead}개.`);
       setBadge(push, br.ahead);

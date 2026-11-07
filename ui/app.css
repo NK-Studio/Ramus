@@ -1,9 +1,20 @@
+/* ── 글꼴: IBM Plex Sans KR (Regular 400 · Medium 500 · SemiBold 600 · Bold 700). 다른 굵기는 가까운 것으로 그려진다. ── */
+@font-face { font-family: "IBM Plex Sans KR"; font-style: normal; font-weight: 400; font-display: block; src: url("fonts/IBMPlexSansKR-Regular.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans KR"; font-style: normal; font-weight: 500; font-display: block; src: url("fonts/IBMPlexSansKR-Medium.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans KR"; font-style: normal; font-weight: 600; font-display: block; src: url("fonts/IBMPlexSansKR-SemiBold.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans KR"; font-style: normal; font-weight: 700; font-display: block; src: url("fonts/IBMPlexSansKR-Bold.woff2") format("woff2"); }
+
 /* 색은 원본 패키지의 Themes/JetBrainsDark.tss·JetBrainsLight.tss 토큰을 그대로 옮겼다. */
 
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
   --git-bg: #191a1c;
+  /* 큰 창(Clone·만들기·설정) — JetBrains 설정 창: 바탕 = 칸 바탕, 드롭다운만 한 단 밝게, 구분선은 바탕보다 한 단. */
+  --git-dialog-bg: #191a1c;
+  --git-dialog-border: #33353b;
+  --git-dialog-divider: #25282c;
+  --git-combo-bg: #25282c;
   /* 가운데(그래프·목록) 값. 양쪽 패널(사이드바·오른쪽 패널)은 아래 .sidebar·.detail 에서 한 단계 밝게 덮어쓴다(원본과 같다). */
   --git-sidebar-bg: #191a1c;
   --git-toolbar-bg: #191a1c;
@@ -103,6 +114,8 @@
   --git-graph-empty: #6a6d74;
   --git-graph-tooltip-bg: #26282c;
   --git-graph-tooltip-text: #d1d3d9;
+  --git-graph-tooltip-border: #43454a;
+  --git-graph-tooltip-shadow: rgba(0,0,0,0.45);
   --git-graph-selection: #d1d3d9;
   --git-graph-search: #d6ae58;
   --git-graph-head: #5fb865;
@@ -111,16 +124,32 @@
   --git-graph-truncated: rgba(128,131,138,0.5);
   --git-diff-gutter: #191a1c;
   --git-diff-text-selection: rgba(33,66,131,0.95);
-  --git-code-keyword: #cf8e6d;
-  --git-code-string: #6aab73;
-  --git-code-number: #2aacb8;
-  --git-code-comment: #7a7e85;
-  --git-code-key: #c77dbb;
-  --git-code-tag: #569cd6;
-  --git-code-attribute: #9cdcfe;
-  --git-code-punctuation: #808080;
+  /* 코드 색: JetBrains Rider Dark. 흐름 키워드도 다른 키워드와 같은 파랑이고, 괄호·구두점은 본문 글 색 그대로다. */
+  --git-code-keyword: #6c95eb;
+  --git-code-control: #6c95eb;
+  --git-code-string: #c9a26d;
+  --git-code-number: #ed94c0;
+  --git-code-comment: #85c46c;
+  --git-code-key: #66c3cc;
+  --git-code-tag: #6c95eb;
+  --git-code-attribute: #66c3cc;
+  --git-code-punctuation: var(--git-diff-text);
   --git-code-type: #c191ff;
-  --git-code-function: #56a8f5;
+  --git-code-function: #39cc9b;
+  --git-code-bracket-0: var(--git-diff-text);
+  --git-code-bracket-1: var(--git-diff-text);
+  --git-code-bracket-2: var(--git-diff-text);
+  /* 파이썬 코드 색: PyCharm Dark. */
+  --git-code-py-keyword: #cf8e6d;
+  --git-code-py-self: #cf8e6d;
+  --git-code-py-string: #6aab73;
+  --git-code-py-escape: #cf8e6d;
+  --git-code-py-docstring: #5f826b;
+  --git-code-py-number: #2aacb8;
+  --git-code-py-comment: #7a7e85;
+  --git-code-py-kwarg: #aa4926;
+  --git-code-py-function: var(--git-diff-text);
+  --git-code-py-decorator: #b3ae60;
   --git-editor-current-line: rgba(255,255,255,0.045);
   --git-editor-indent-guide: rgba(255,255,255,0.09);
   --git-editor-caret: #cecfd2;
@@ -130,6 +159,10 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --git-bg: #ffffff;
+  --git-dialog-bg: #f7f8fa;
+  --git-dialog-border: #dfe1e5;
+  --git-dialog-divider: #ebecf0;
+  --git-combo-bg: #ffffff;
   --git-sidebar-bg: #f7f8fa;
   --git-toolbar-bg: #f7f8fa;
   --git-header-bg: #f7f8fa;
@@ -228,6 +261,8 @@
   --git-graph-empty: #818594;
   --git-graph-tooltip-bg: #ffffff;
   --git-graph-tooltip-text: #000000;
+  --git-graph-tooltip-border: #dfe1e5;
+  --git-graph-tooltip-shadow: rgba(0,0,0,0.14);
   --git-graph-selection: #3574f0;
   --git-graph-search: #e5a823;
   --git-graph-head: #208a3c;
@@ -236,16 +271,32 @@
   --git-graph-truncated: rgba(108,112,126,0.5);
   --git-diff-gutter: #ffffff;
   --git-diff-text-selection: rgba(166,210,255,0.9);
-  --git-code-keyword: #0033b3;
-  --git-code-string: #067d17;
-  --git-code-number: #1750eb;
-  --git-code-comment: #8c8c8c;
-  --git-code-key: #871094;
-  --git-code-tag: #0033b3;
-  --git-code-attribute: #174ad4;
-  --git-code-punctuation: #8c8c8c;
-  --git-code-type: #7a3e9d;
-  --git-code-function: #00627a;
+  /* 코드 색: JetBrains Rider Light. */
+  --git-code-keyword: #0f54d6;
+  --git-code-control: #0f54d6;
+  --git-code-string: #8c6c41;
+  --git-code-number: #a7336a;
+  --git-code-comment: #288307;
+  --git-code-key: #0091a0;
+  --git-code-tag: #0f54d6;
+  --git-code-attribute: #0091a0;
+  --git-code-punctuation: var(--git-diff-text);
+  --git-code-type: #6c32b8;
+  --git-code-function: #00855f;
+  --git-code-bracket-0: var(--git-diff-text);
+  --git-code-bracket-1: var(--git-diff-text);
+  --git-code-bracket-2: var(--git-diff-text);
+  /* 파이썬 코드 색: PyCharm Light. */
+  --git-code-py-keyword: #0033b3;
+  --git-code-py-self: #94558d;
+  --git-code-py-string: #067d17;
+  --git-code-py-escape: #0037a6;
+  --git-code-py-docstring: #8c8c8c;
+  --git-code-py-number: #1750eb;
+  --git-code-py-comment: #8c8c8c;
+  --git-code-py-kwarg: #660099;
+  --git-code-py-function: #00627a;
+  --git-code-py-decorator: #9e880d;
   --git-editor-current-line: rgba(0,0,0,0.045);
   --git-editor-indent-guide: rgba(0,0,0,0.10);
   --git-editor-caret: #000000;
@@ -270,8 +321,14 @@
 :root {
   --radius: 6px;
   --radius-small: 4px;
-  --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  /* 기본 글꼴: 앱에 묻은 IBM Plex Sans KR(ui/fonts, SIL OFL 1.1 — ui/fonts/OFL.txt). 못 읽으면 시스템 글꼴. */
+  --font: "IBM Plex Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  /* 패널 머리 줄(도구 막대) 공통 치수: 높이 · 좌우 안쪽 여백 · 항목 사이 · 줄 안 컨트롤 높이. */
+  --bar-h: 32px;
+  --bar-pad: 10px;
+  --bar-gap: 8px;
+  --ctl-h: 22px;
 }
 
 * { box-sizing: border-box; }
@@ -347,13 +404,23 @@ input, textarea { font: inherit; user-select: text; -webkit-user-select: text; }
 .recent-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--git-divider); }
 .recent-item:last-child { border-bottom: 0; }
 .recent-item:hover { background: var(--git-hover); }
-.recent-icon { width: 28px; height: 28px; flex: none; border-radius: var(--radius); background: var(--git-accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
 .recent-text { flex: 1; min-width: 0; }
-.recent-name { font-weight: 600; }
+.recent-name { font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.recent-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 폴더가 없는 레포지토리: 이름 옆 뱃지(Unity Hub 의 "프로젝트를 찾을 수 없음"). 누르면 안내 창.
+   경고 삼각형은 채운 아이콘이라 글자용 경고색(라이트는 갈색)이 아니라 밝은 호박색을 따로 쓴다. */
+:root { --recent-badge-bg: var(--git-pressed); --recent-badge-text: var(--git-text-secondary); --alert-icon: var(--git-warning); }
+:root[data-theme="light"] { --recent-badge-bg: #ebecf0; --recent-badge-text: #4e5260; --alert-icon: #f0a30a; }
+.recent-badge { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 4px; background: var(--recent-badge-bg); color: var(--recent-badge-text); font-size: 10.5px; font-weight: 500; line-height: 15px; white-space: nowrap; }
+.recent-badge svg { color: var(--alert-icon); }
+.recent-item.missing .recent-name > span:first-child, .recent-item.missing .recent-path { opacity: 0.7; }
+.missing-repo p { margin: 0 0 10px; word-break: keep-all; }
+.missing-repo p:last-child { margin-bottom: 0; }
+.missing-repo b { color: var(--git-text); word-break: break-all; }
 .recent-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-remove { visibility: hidden; border: 0; background: none; color: var(--git-text-muted); font-size: 16px; cursor: pointer; width: 24px; height: 24px; border-radius: var(--radius-small); }
-.recent-item:hover .recent-remove { visibility: visible; }
-.recent-remove:hover { background: var(--git-pressed); color: var(--git-text); }
+/* 줄 오른쪽 ⋮: 늘 보인다. 누르면 Finder 에서 열기·목록에서 제거 메뉴. */
+.recent-more { flex: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--radius-small); background: none; color: var(--git-text-muted); cursor: pointer; }
+.recent-more:hover { background: var(--git-pressed); color: var(--git-text); }
 
 /* ── 레포지토리 화면 배치 ───────────────────────────────── */
 
@@ -479,7 +546,7 @@ body.reordering-col, body.reordering-col * { cursor: grab !important; }
 .detail { min-width: 0; }
 
 /* GitKraken 작업 패널 머리 줄(원본 graph-workspace__panel-header): 왼쪽 휴지통(모든 변경 버리기), 줄 가운데 제목. */
-.wip-header { flex: none; display: flex; align-items: center; height: 32px; padding: 0 6px; border-bottom: 1px solid var(--git-border); }
+.wip-header { flex: none; display: flex; align-items: center; height: var(--bar-h); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-border); }
 .wip-title { flex: 1 1 auto; min-width: 0; margin-right: 24px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-weight: 700; color: var(--git-text); }
 .wip-header.merging .wip-warning { margin-left: auto; margin-right: 6px; display: flex; color: var(--git-warning); }
 .wip-header.merging .wip-title { flex: 0 1 auto; margin: 0 auto 0 0; padding-right: 30px; }
@@ -524,7 +591,7 @@ body.reordering-col, body.reordering-col * { cursor: grab !important; }
 .stage-split { flex: none; height: 1px; background: var(--git-border); cursor: row-resize; position: relative; }
 .stage-split::after { content: ""; position: absolute; inset: -3px 0; }
 .list-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.stage-header { flex: none; display: flex; align-items: center; height: 34px; padding: 0 8px; background: var(--git-header-bg); border-bottom: 1px solid var(--git-border); }
+.stage-header { flex: none; display: flex; align-items: center; height: var(--bar-h); padding: 0 var(--bar-pad); background: var(--git-header-bg); border-bottom: 1px solid var(--git-border); }
 .stage-title { flex: 1; min-width: 0; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; font-size: 12px; color: var(--git-text); }
 
 /* 머리 줄 버튼(원본 staging__button): Stage 는 초록·Unstage 는 빨강 테두리에 옅은 바탕, 올리면 꽉 채운다. Fork 배치는 무채색. */
@@ -634,12 +701,17 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 /* 파일 목록만 스크롤한다. */
 .cd-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 10px 4px; }
 .cd-title { flex: none; margin-bottom: 6px; font-weight: 600; }
-.cd-card { flex: none; max-height: 40%; min-height: 56px; overflow: auto; padding: 8px 10px; border: 1px solid var(--git-border); border-radius: var(--git-radius); background: var(--git-field-bg); user-select: text; -webkit-user-select: text; }
+.cd-card { flex: none; box-sizing: border-box; overflow: auto; padding: 8px 10px; border: 1px solid var(--git-border); border-radius: var(--git-radius); background: var(--git-field-bg); user-select: text; -webkit-user-select: text; }
+/* 메시지 칸 아래 손잡이(가운데 짧은 막대). 끌면 칸 높이가 바뀐다. */
+.cd-grip { flex: none; height: 12px; display: flex; align-items: center; justify-content: center; cursor: row-resize; touch-action: none; }
+.cd-grip::after { content: ''; width: 44px; height: 4px; border-radius: 2px; background: var(--git-border); transition: background-color 120ms; }
+.cd-grip:hover::after, .cd-grip.dragging::after { background: var(--git-text-muted); }
+.cd-grip + .cd-meta { margin-top: 2px; }
 .cd-subject { margin-bottom: 6px; font-size: 15px; color: var(--git-text); white-space: pre-wrap; word-break: break-word; }
 .cd-message { color: var(--git-text); white-space: pre-wrap; word-break: break-word; }
 .cd-meta { flex: none; display: flex; align-items: center; margin-top: 10px; }
 .cd-avatar { width: 36px; height: 36px; flex: none; margin-right: 8px; border-radius: 18px; display: grid; place-items: center; overflow: hidden; color: #fff; font-weight: 700; }
-.cd-avatar img, .cd-coauthor-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.cd-avatar img, .cd-coauthor-avatar img, .cd-avatar canvas, .cd-coauthor-avatar canvas { width: 100%; height: 100%; object-fit: cover; }
 .cd-author-block { flex: 1 1 auto; min-width: 0; }
 .cd-author { font-size: 13px; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cd-authored { color: var(--git-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -651,16 +723,14 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .cd-coauthors-label { margin-right: 6px; color: var(--git-text-muted); }
 .cd-coauthor { display: inline-flex; align-items: center; margin-right: 8px; color: var(--git-text); }
 .cd-coauthor-avatar { width: 20px; height: 20px; flex: none; margin-right: 4px; border-radius: 4px; display: grid; place-items: center; overflow: hidden; color: #fff; font-size: 9px; font-weight: 700; }
-.cd-files-head { flex: none; display: flex; flex-wrap: wrap; align-items: center; margin-top: 12px; padding-bottom: 4px; border-bottom: 1px solid var(--git-border); }
-.cd-summary { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; }
-.cd-files-head > .view-switch { margin-left: auto; }
-.cd-count { margin-right: 10px; color: var(--git-text); }
-.cd-count-modified { color: var(--git-state-modified); }
-.cd-count-added { color: var(--git-state-added); }
-.cd-count-deleted { color: var(--git-state-deleted); }
-.cd-count-renamed { color: var(--git-state-renamed); }
+/* 파일 칸 머리: 늘 같은 두 줄. 위 = 바뀜 요약(한 줄 고정, 넘치면 가린다), 아래 = 보기 전환(오른쪽). 줄마다 높이를 정해 두어 내용과 상관없이 같은 자리다. */
+.cd-files-head { flex: none; display: flex; flex-direction: column; margin-top: 14px; border-bottom: 1px solid var(--git-border); }
+.cd-summary { flex: none; height: 32px; min-width: 0; display: flex; align-items: center; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.cd-files-tools { flex: none; height: 36px; display: flex; align-items: center; justify-content: flex-end; padding-bottom: 6px; }
+.cd-count { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-right: 14px; color: var(--git-text); }
+.cd-count-sign { color: var(--git-text-muted); }
+.cd-count > .state-icon { margin: 0; }
 .cd-files { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.cd-skeleton { gap: 8px; padding-top: 8px; }
 .sk-gap { height: 10px; }
 
 /* ── 알림·작업 중 ───────────────────────────────────── */
@@ -668,14 +738,20 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 /* 알림·진행 카드는 창 아래 가운데에 쌓인다(새 것이 아래). 아래에서 위로 올라오며 나타나고, 사라질 때는 아래로 가라앉는다. */
 .toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 10; width: max-content; max-width: min(520px, calc(100% - 32px)); pointer-events: none; }
 .toasts > * { pointer-events: auto; }
-.toast { position: relative; min-width: 220px; max-width: 100%; padding: 10px 32px 10px 12px; border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 8px 24px var(--git-menu-shadow); user-select: text; -webkit-user-select: text; animation: toast-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.toast { position: relative; display: flex; align-items: flex-start; gap: 10px; box-sizing: border-box; min-width: 260px; max-width: 100%; padding: 12px 36px 12px 14px; border-radius: 10px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 10px 30px var(--git-menu-shadow), 0 1px 3px var(--git-menu-shadow); color: var(--git-text); font-size: 13px; line-height: 1.45; user-select: text; -webkit-user-select: text; animation: toast-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* 종류 아이콘(JetBrains 풍선 알림처럼 테두리 색 대신 아이콘 색으로 종류를 알린다). 첫 줄 글자 가운데에 맞춘다. */
+.toast-icon { flex: none; display: flex; margin-top: 1px; color: var(--git-accent-fg); }
+.toast.success .toast-icon { color: var(--git-success); }
+.toast.warning .toast-icon { color: var(--git-warning); }
+.toast.error .toast-icon { color: var(--git-danger); }
 .toast.leaving { opacity: 0; transform: translateY(12px); transition: opacity 200ms ease-in, transform 200ms ease-in; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
-.toast.error { border-left: 3px solid var(--git-danger); }
-.toast.success { border-left: 3px solid var(--git-success); }
-.toast-text { white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; }
+.toast-text { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; }
 .toast-hint { margin-top: 6px; color: var(--git-warning); font-size: 12px; }
-.toast-close { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); border: 0; background: none; cursor: pointer; color: var(--git-text-muted); font-size: 16px; }
+.toast-close { position: absolute; top: 9px; right: 8px; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: none; cursor: pointer; color: var(--git-text-muted); opacity: 0; transition: opacity 120ms, background-color 120ms; }
+/* 닫기 단추는 JetBrains 처럼 알림 위에 마우스를 올렸을 때만 드러난다. */
+.toast:hover .toast-close, .toast-close:focus-visible { opacity: 1; }
+.toast-close:hover { background: var(--git-hover); color: var(--git-text); }
 
 .busy { position: fixed; left: 50%; top: 62px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 16px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 4px 12px var(--git-menu-shadow); z-index: 10; font-size: 12px; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--git-text-muted); border-top-color: var(--git-accent); animation: spin 0.8s linear infinite; }
@@ -714,7 +790,7 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .diff-close:hover { color: var(--git-text); }
 
 /* 막대(원본 git-diff__bar, 32px): 왼쪽·오른쪽 묶음이 남는 폭을 반씩 가져 가운데 묶음이 늘 가운데에 온다. 모든 버튼 22px·1px·모서리·12px. */
-.diff-bar { flex: none; display: flex; align-items: center; height: 32px; padding: 0 8px; overflow: hidden; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
+.diff-bar { flex: none; display: flex; align-items: center; height: var(--bar-h); padding: 0 var(--bar-pad); overflow: hidden; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
 .dbar-side { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
 .dbar-side.right { justify-content: flex-end; }
 .dbar-center { flex: none; display: flex; align-items: center; margin: 0 12px; }
@@ -738,7 +814,7 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .diff-bar.compact .dbar-label.with-icon { display: none; }
 .diff-bar.compact .dbar-btn.outlined { width: 28px; padding: 0; }
 .diff-bar.compact .dbar-side, .diff-bar.compact .dbar-center { flex: none; }
-.diff-bar.compact .dbar-center { margin: 0 0 0 12px; }
+.diff-bar.compact .dbar-center { margin: 0 12px; }
 .diff-bar.compact .dbar-side.right { flex: 1 0 auto; }
 .diff-bar.narrow .seg-file-tools { display: none; }
 .diff-bar.tiny .seg-display { display: none; }
@@ -753,6 +829,8 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .dbar-text.outlined { height: 22px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); }
 .diff-bar .dbar-left .diff-title, .diff-bar .dbar-right .diff-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .diff-path { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+/* 경로가 길어도 상태 글자(수정·추가·삭제)는 줄지 않고 한 줄로 — 줄어들면 글자마다 줄을 바꿔 세로로 선다. */
+.diff-state { flex: none; white-space: nowrap; }
 .png-icon { width: 16px; height: 16px; display: inline-block; background: currentColor; -webkit-mask: var(--png) center / contain no-repeat; mask: var(--png) center / contain no-repeat; flex: none; }
 .btn .png-icon { margin-right: 4px; }
 .diff-empty { padding: 24px; text-align: center; }
@@ -782,6 +860,7 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .dr.k-added:hover .gut-btn, .dr.k-removed:hover .gut-btn, .half.k-added:hover .gut-btn, .half.k-removed:hover .gut-btn, .picked .gut-btn { visibility: visible; }
 .dr .mk { flex: none; width: 16px; text-align: center; color: var(--git-diff-number); user-select: none; -webkit-user-select: none; }
 .dr .tx { flex: 1; white-space: pre; padding-right: 16px; cursor: text; }
+.tx-cut { color: var(--git-text-muted); font-style: italic; user-select: none; -webkit-user-select: none; }
 /* 바뀐 덩어리 머리(@@ …)·"\ No newline": Fork 처럼 바탕을 칠하지 않고 흐린 글자로. Hunk 보기는 버튼이 들어가게 30px. */
 .dr-hunk { align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 0 10px; color: var(--git-text-muted); border-bottom: 1px solid var(--git-border); position: sticky; left: 0; }
 .dr-hunk.tall { height: 30px; }
@@ -857,16 +936,20 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .modal-error { color: var(--git-danger); font-size: 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 select.field { height: 30px; }
-.menu { position: fixed; z-index: 30; min-width: 200px; max-height: calc(100vh - 16px); overflow: auto; padding: 4px; border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 8px 24px var(--git-menu-shadow); }
-.menu-item { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; padding: 4px 8px 4px 4px; border: 0; border-radius: 5px; background: none; cursor: pointer; white-space: nowrap; }
+.menu { position: fixed; z-index: 30; min-width: 180px; max-height: calc(100vh - 16px); overflow: auto; padding: 6px; border-radius: 10px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 10px 28px var(--git-menu-shadow), 0 1px 3px var(--git-menu-shadow); }
+/* JetBrains 새 UI 팝업처럼: 항목 줄이 넉넉하고, 선택 배경은 상자 안쪽으로 들여 둥글게 칠한다. */
+.menu-item { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 28px; text-align: left; padding: 4px 12px 4px 6px; border: 0; border-radius: 6px; background: none; color: var(--git-text); font-size: 13px; cursor: pointer; white-space: nowrap; }
 .menu-item:hover:not(:disabled), .menu-item.active:not(:disabled) { background: var(--git-menu-hover); color: var(--git-menu-hover-text); }
 .menu-check { width: 16px; flex: none; display: flex; justify-content: center; }
+/* 체크 표시가 하나도 없는 메뉴는 체크 칸을 비워 두지 않는다. */
+.menu.no-check .menu-check { display: none; }
+.menu.no-check .menu-item { padding-left: 12px; }
 .menu-label { flex: 1; }
 .menu-hint { margin-left: 18px; color: var(--git-text-muted); font-size: 11.5px; }
-.menu-arrow { display: flex; color: var(--git-text-muted); margin-left: 12px; }
-.menu-item:disabled { opacity: 0.4; cursor: default; }
+.menu-arrow { display: flex; color: var(--git-text-muted); margin-left: 16px; }
+.menu-item:disabled { color: var(--git-text-muted); opacity: 0.75; cursor: default; }
 .menu-item.danger { color: var(--git-danger); }
-.menu-sep { height: 1px; margin: 4px 6px; background: var(--git-menu-border); }
+.menu-sep { height: 1px; margin: 5px 8px; background: var(--git-menu-border); }
 
 /* ── 4단계: 병합 충돌 ─────────────────────────────────── */
 
@@ -877,7 +960,7 @@ select.field { height: 30px; }
 .mode-conflict { color: var(--git-state-conflicted); }
 /* 병합 편집기(원본 GitDiff.uss git-merge__* · merge-row__*): A 청록 #2fa4c2 · B 노랑 #d9a732. */
 .merge-view { display: flex; flex-direction: column; background: var(--git-bg); color: var(--git-text); }
-.merge-head { flex: none; display: flex; align-items: center; height: 30px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--git-border); background: var(--git-toolbar-bg, var(--git-header-bg)); }
+.merge-head { flex: none; display: flex; align-items: center; height: var(--bar-h); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-border); background: var(--git-toolbar-bg, var(--git-header-bg)); }
 .warn-glyph { display: flex; flex: none; margin-right: 8px; color: var(--git-warning); }
 .merge-path { flex: 0 1 auto; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .merge-count { flex: none; margin-left: 8px; font-size: 11px; color: var(--git-text-muted); }
@@ -1157,7 +1240,8 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .modal.card.overwrite { width: 540px; }
 /* 도움말 > 키보드 단축키: 두 단으로 묶음(파일·편집 …)마다 이름과 키. */
 .modal.card.shortcuts-card { width: 640px; }
-.shortcut-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; max-height: 60vh; overflow: auto; margin: 0 0 4px; }
+/* 스크롤바가 목록 위에 겹쳐 그려지므로(자리를 차지하지 않는다) 오른쪽에 그 몫을 비워 둔다 — 오른쪽 열의 단축키가 가려지지 않게. */
+.shortcut-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 24px; max-height: 60vh; overflow: auto; margin: 0 0 4px; padding-right: 16px; scrollbar-gutter: stable; }
 .shortcut-group { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .shortcut-title { margin: 6px 0 2px; font-size: 11px; font-weight: 700; color: var(--git-text-muted); }
 .shortcut-row { display: flex; align-items: center; gap: 8px; min-height: 22px; font-size: 12px; color: var(--git-text); }
@@ -1178,6 +1262,9 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 /* 강조색 원 안의 흰 그림(오류는 빨간 원에 "!"). */
 .card-badge { width: 44px; height: 44px; border-radius: 22px; margin-right: 14px; display: flex; align-items: center; justify-content: center; flex: none; background: var(--git-accent); color: var(--git-accent-text); }
 .card-badge.tone-error, .card-badge.tone-danger { background: var(--git-danger); }
+/* "레포지토리를 찾을 수 없음" 카드: 동그라미 없이 채운 노란 삼각형만(느낌표 구멍으로 카드 바탕이 비친다). */
+.missing-repo-card .card-badge { background: none; color: var(--alert-icon); }
+.missing-repo-card .card-badge svg { width: 34px; height: 34px; }
 .card-mark { font-size: 26px; font-weight: 700; line-height: 1; color: #fff; }
 .card-titles { flex: 1; min-width: 0; }
 .card .modal-title { font-size: 15px; font-weight: 700; color: var(--git-text); white-space: normal; word-break: break-word; }
@@ -1206,6 +1293,15 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .card .modal-actions .btn.card-cancel { background: var(--git-button-bg); border-color: var(--git-button-border); color: var(--git-text); }
 .card .modal-actions .btn.card-cancel:hover:not(:disabled):not(.default) { background: var(--git-button-hover); }
 .card .modal-actions .btn.card-cancel.default { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); }
+/* macOS 식 버튼(라이트·다크 공통) — 주 버튼은 늘 강조색으로 채우고 흰 글자, 보조 버튼은 버튼 바탕 + 회색 테두리.
+   Enter 대상이 취소로 옮겨 가도 채우지 않고 강조색 테두리로만 알린다. */
+:root .btn.card-ok,
+:root .commit-btn:not(:disabled) { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); font-weight: 500; }
+:root .btn.card-ok:hover:not(:disabled),
+:root .commit-btn:hover:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); }
+:root .btn.card-ok.danger { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+:root .card .modal-actions .btn.card-cancel.default { background: var(--git-button-bg); border-color: var(--git-accent); color: var(--git-text); box-shadow: 0 0 0 1px var(--git-accent); }
+:root .card .modal-actions .btn.card-cancel.default:hover:not(:disabled) { background: var(--git-button-hover); }
 
 /* 경고창(Fork·macOS 경고 모양, 원본 confirm-dialog--alert): 좁은 둥근 카드에 아이콘·질문·안내를 위아래로, 버튼 둘을 같은 폭으로. × 는 없다. */
 .modal.card.confirm.alert { width: 260px; padding: 18px 16px 16px; border-radius: 14px; }
@@ -1339,7 +1435,10 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 /* ── 말풍선 툴팁(원본 HoverCallout) ─────────────────── */
 
 /* 원본 hover-callout: 테마와 상관없이 검은 말풍선에 흰 12px 글자, 둥글기 4, 꼭지 6. */
-.callout { position: fixed; z-index: 50; max-width: 360px; padding: 3px 8px; border-radius: 4px; background: #000; color: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; pointer-events: none; }
+.callout { position: fixed; z-index: 50; max-width: 360px; padding: 3px 8px; border-radius: 4px; background: #000; color: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 140ms ease-out, visibility 0s linear 140ms; }
+/* 알파 페이드: 나타날 때는 곧바로 보이게 하고 알파를 올린다. 사라질 때는 알파를 다 내린 뒤 visibility 를 끈다. */
+.callout.shown { opacity: 1; visibility: visible; transition: opacity 140ms ease-out, visibility 0s; }
+@media (prefers-reduced-motion: reduce) { .callout, .callout.shown { transition: none; } }
 .callout-arrow { position: absolute; width: 6px; height: 6px; background: #000; transform: rotate(45deg); }
 .callout.side-right .callout-arrow { left: -3px; margin-top: -3px; }
 .callout.side-below .callout-arrow { top: -3px; margin-left: -3px; }
@@ -1351,8 +1450,6 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .notice-row { display: flex; align-items: center; gap: 10px; }
 .notice-row span { flex: 1; }
 .op-banner > .ico { color: var(--git-warning); flex: none; }
-.toast.warning { border-left: 3px solid var(--git-warning); }
-.toast-close { display: flex; }
 .ico { flex: none; }
 
 /* ── 커밋 검색 ─────────────────────────────────────── */
@@ -1367,7 +1464,7 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 
 .tool-view { display: flex; flex-direction: column; background: var(--git-bg); }
 /* 머리 줄(원본 file-history__header): 32px · 굵은 13px 제목 · × */
-.tool-head { flex: none; display: flex; align-items: center; height: 32px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
+.tool-head { flex: none; display: flex; align-items: center; height: var(--bar-h); padding: 0 6px 0 var(--bar-pad); border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
 .tool-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--git-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-close { width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--git-radius); background: none; font-size: 18px; line-height: 1; color: var(--git-text-muted); cursor: pointer; }
 .tool-close:hover { background: var(--git-hover); color: var(--git-text); }
@@ -1414,21 +1511,39 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .bl-ln { width: 44px; flex: none; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-size: 11px; color: var(--git-diff-number); background: var(--git-diff-gutter); }
 .bl-code { flex: 1; padding-left: 8px; font-family: var(--mono); font-size: 12px; white-space: pre; tab-size: 4; color: var(--git-diff-text); }
 /* 비교(원본 GitCompareWindow): 요약 줄 · 위 바뀐 파일 · 아래 diff */
-.cmp-bar { flex: none; height: 22px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--git-border); }
+.cmp-bar { flex: none; height: var(--bar-h); display: flex; align-items: center; gap: var(--bar-gap); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-border); }
 .cmp-summary { font-size: 12px; color: var(--git-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmp-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .cmp-files { flex: 1; min-height: 60px; overflow: auto; background: var(--git-sidebar-bg); }
+/* 목록이 왼쪽 위 모서리에 붙지 않도록 변경 칸(.chx-side)과 같은 안쪽 여백·둥근 줄을 준다. */
+.cmp-files .file-list { padding: 6px 8px; }
+.cmp-files .file-row { border-radius: 5px; }
 .cmp-diff { min-height: 0; }
 .sx-keyword { color: var(--git-code-keyword); }
 .sx-string { color: var(--git-code-string); }
 .sx-number { color: var(--git-code-number); }
-.sx-comment { color: var(--git-code-comment); }
+.sx-comment { color: var(--git-code-comment); font-style: italic; }
 .sx-key { color: var(--git-code-key); }
 .sx-tag { color: var(--git-code-tag); }
 .sx-attribute { color: var(--git-code-attribute); }
 .sx-punctuation { color: var(--git-code-punctuation); }
 .sx-type { color: var(--git-code-type); }
 .sx-function { color: var(--git-code-function); }
+.sx-control { color: var(--git-code-control); }
+.sx-bracket-0 { color: var(--git-code-bracket-0); }
+.sx-bracket-1 { color: var(--git-code-bracket-1); }
+.sx-bracket-2 { color: var(--git-code-bracket-2); }
+/* 파이썬(py-* 갈래, PyCharm 색). 주석 · 문서 문자열은 기울임꼴. */
+.sx-py-keyword { color: var(--git-code-py-keyword); }
+.sx-py-self { color: var(--git-code-py-self); }
+.sx-py-string { color: var(--git-code-py-string); }
+.sx-py-escape { color: var(--git-code-py-escape); }
+.sx-py-docstring { color: var(--git-code-py-docstring); font-style: italic; }
+.sx-py-number { color: var(--git-code-py-number); }
+.sx-py-comment { color: var(--git-code-py-comment); font-style: italic; }
+.sx-py-kwarg { color: var(--git-code-py-kwarg); }
+.sx-py-function { color: var(--git-code-py-function); }
+.sx-py-decorator { color: var(--git-code-py-decorator); }
 /* 코드 편집기(원본 GitCodeEditor · git-diff__editing): 12px · 줄 18px, 보이는 줄만 그린다. */
 .dbar-text.outlined { border: 1px solid var(--git-button-border); border-radius: var(--git-radius-small); height: 22px; }
 .ed-bar .dbar-left { gap: 6px; }
@@ -1513,13 +1628,13 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 
 .view-hidden { display: none !important; }
 /* 사이드바 위 탭(원본 git-sidebar__views · git-sidebar__tab): 세로 목록, 22px 줄, 제목 + 오른쪽 개수 배지. */
-.side-tabs { flex: none; display: flex; flex-direction: column; padding: 4px 0; border-bottom: 1px solid var(--git-border); }
-.side-tab { display: flex; align-items: center; height: 22px; padding: 0 10px; color: var(--git-text); cursor: default; }
+.side-tabs { flex: none; display: flex; flex-direction: column; padding: 6px 0; gap: 2px; border-bottom: 1px solid var(--git-border); }
+.side-tab { display: flex; align-items: center; height: 28px; padding: 0 12px; color: var(--git-text); cursor: default; }
 .side-tab:hover { background: var(--git-hover); }
 .side-tab.on, .side-tab.on:hover { background: var(--git-selected); }
 .side-tab-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-tab.on .side-tab-text { color: var(--git-selected-text); }
-.side-tab-badge { flex: none; padding: 0 5px; border-radius: 8px; background: var(--git-badge-bg); color: var(--git-text); font-size: 10px; line-height: 15px; }
+.side-tab-badge { flex: none; padding: 0 5px; border-radius: 8px; background: var(--git-badge-bg); color: var(--git-text); font-size: 10px; line-height: 16px; }
 .view-host { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--git-bg); position: relative; }
 .workspace > .tool-view { position: absolute; top: 0; right: 0; bottom: 0; left: 45px; z-index: 7; }
 .diff-view.docked, .merge-view.docked { position: relative; inset: auto; flex: 1; min-height: 0; }
@@ -1540,19 +1655,21 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .pending-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .pending-layout { flex: 1; min-height: 0; display: flex; }
 .pending-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.pending-actions { flex: none; display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--git-divider); }
+.pending-actions { flex: none; display: flex; gap: 6px; align-items: center; height: var(--bar-h); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-divider); }
 .pending-actions .btn[hidden] { display: none; }
 .btn.on { background: var(--git-selected); }
 .pending-commit { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--git-border); }
 .pending-message { width: 100%; flex: none; resize: vertical; }
 .pending-author[hidden] { display: none; }
-.pending-head { flex: none; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--git-divider); }
+.pending-head { flex: none; display: flex; align-items: center; gap: var(--bar-gap); height: var(--bar-h); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-divider); }
 .pending-head .check { margin: 0; }
 .pending-summary { font-size: 12px; color: var(--git-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pending-filter { width: 180px; height: 22px; padding: 2px 6px; }
+.pending-filter { width: 180px; height: var(--ctl-h); padding: 0 8px; }
 .pending-filter[hidden], .pending-head .dbar-btn[hidden] { display: none; }
 .pending-split { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.pending-list { min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+/* 위·왼쪽 여백: 행 체크박스가 머리 줄 체크박스(왼쪽 10px)와 같은 세로줄에 오도록 6px + 행 안쪽 4px. */
+.pending-list { min-height: 0; display: flex; flex-direction: column; overflow: auto; padding: 4px 6px; }
+.pending-list .file-row { flex: none; border-radius: 5px; }
 .pending-list .row-check { margin: 0 4px 0 0; flex: none; }
 .pending-diff { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .pending-diff > .fork-empty { position: absolute; inset: 0; display: grid; place-items: center; }
@@ -1561,10 +1678,10 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .info-table { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .info-row { display: grid; grid-template-columns: 60px 1fr; gap: 6px; word-break: break-all; user-select: text; -webkit-user-select: text; }
 /* 탐색 화면 머리(원본 branch-explorer__toolbar): 기간 · 요약 | 찾기 · [다음] · 탐색기 모양 */
-.explorer-bar { flex: none; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
+.explorer-bar { flex: none; display: flex; align-items: center; gap: var(--bar-gap); height: var(--bar-h); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-border); background: var(--git-header-bg); }
 .explorer-bar .check { margin: 0; font-size: 12px; white-space: nowrap; }
-.small-select { width: auto; height: 22px; padding: 0 6px; }
-.explorer-search { width: 220px; height: 22px; padding: 2px 8px; }
+.field.small-select { width: auto; height: var(--ctl-h); padding: 0 6px; }
+.explorer-search { width: 220px; height: var(--ctl-h); padding: 0 8px; }
 .explorer-search.no-match { border-color: var(--git-warning); }
 .explorer-summary { white-space: nowrap; }
 .explorer-style { display: inline-flex; align-items: center; gap: 4px; }
@@ -1575,8 +1692,8 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .chx-notice { flex: none; padding: 6px 12px; font-size: 12px; color: var(--git-text-muted); border-bottom: 1px solid var(--git-border); }
 .chx-notice.error { color: var(--git-danger); background: var(--git-danger-soft); }
 .chx-notice[hidden], .explorer-split[hidden] { display: none; }
-.chx-tabs { flex: none; display: flex; padding: 6px 10px; border-bottom: 1px solid var(--git-border); }
-.chx-tab { margin: 0 4px 0 0; padding: 3px 12px; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); font-size: 13px; font-family: inherit; cursor: pointer; }
+.chx-tabs { flex: none; display: flex; align-items: center; height: var(--bar-h); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-border); }
+.chx-tab { margin: 0 4px 0 0; height: 24px; padding: 0 12px; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); font-size: 13px; font-family: inherit; cursor: pointer; }
 .chx-tab:hover { background: var(--git-hover); color: var(--git-text); }
 .chx-tab.on, .chx-tab.on:hover { background: var(--git-selected); color: var(--git-selected-text); }
 .chx-placeholder { margin-top: 12px; padding: 0 12px; text-align: center; color: var(--git-text-muted); font-size: 12px; }
@@ -1598,6 +1715,10 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .chx-field-label { width: 72px; flex: none; margin-right: 10px; text-align: right; font-size: 11px; color: var(--git-text-muted); }
 .chx-field-value { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; }
 .chx-sha { font-family: var(--mono); font-size: 12px; color: var(--git-text); cursor: pointer; }
+.chx-github { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-left: 0; padding: 0; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); cursor: pointer; }
+.chx-github:hover { background: var(--git-hover); color: var(--git-text); }
+.chx-committer { display: inline-flex; align-items: center; margin-left: 8px; color: var(--git-text-muted); }
+.chx-committer .chx-avatar.small { width: 16px; height: 16px; margin-right: 0; font-size: 8px; }
 .chx-parent { margin-right: 8px; font-family: var(--mono); font-size: 12px; color: var(--git-text); cursor: pointer; }
 .chx-parent:hover { color: var(--git-accent-fg); }
 .chx-ref { margin: 1px 6px 1px 0; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: var(--git-graph-pill-text); background: var(--git-graph-pill-bg); }
@@ -1618,7 +1739,7 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .chx-file:hover .chx-file-arrow { display: block; }
 .chx-file-more { margin: 6px 0 0 6px; color: var(--git-accent-fg); cursor: pointer; }
 /* 변경 · 파일 트리 칸 위 한 줄: 아바타, 작성자, 해시, 날짜, 제목. */
-.chx-header-line { flex: none; display: flex; align-items: center; height: 30px; padding: 0 12px; border-bottom: 1px solid var(--git-border); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.chx-header-line { flex: none; display: flex; align-items: center; height: var(--bar-h); padding: 0 var(--bar-pad); border-bottom: 1px solid var(--git-border); font-size: 12px; white-space: nowrap; overflow: hidden; }
 .chx-header-line > span:not(.chx-avatar) { flex: none; margin-right: 10px; }
 .chx-h-author { color: var(--git-text); }
 .chx-h-hash { font-family: var(--mono); color: var(--git-text-muted); }
@@ -1627,13 +1748,8 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 /* 왼쪽 파일 칸(320, 180~640)과 오른쪽 diff · 내용. */
 .chx-split { flex: 1; min-height: 0; display: flex; }
 .chx-side { min-width: 180px; max-width: 640px; display: flex; flex-direction: column; padding: 6px 8px; overflow: hidden; }
-.chx-list-header { flex: none; display: flex; align-items: center; gap: 6px; height: 24px; margin: -6px -8px 4px; padding: 0 6px 0 10px; border-bottom: 1px solid var(--git-border); font-size: 12px; }
-.chx-summary { display: flex; flex-wrap: wrap; min-width: 0; overflow: hidden; white-space: nowrap; }
-.chx-count { margin-right: 10px; color: var(--git-text); }
-.chx-count.modified { color: var(--git-state-modified); }
-.chx-count.added { color: var(--git-state-added); }
-.chx-count.deleted { color: var(--git-state-deleted); }
-.chx-count.renamed { color: var(--git-state-renamed); }
+.chx-list-header { flex: none; display: flex; align-items: center; gap: 6px; height: var(--bar-h); margin: -6px -8px 4px; padding: 0 8px; border-bottom: 1px solid var(--git-border); font-size: 12px; }
+.staging-filter.chx-filter { flex: 1 1 auto; min-width: 0; height: 22px; cursor: text; }
 .chx-tools { display: flex; flex: none; }
 .chx-files { flex: 1; min-height: 0; overflow: auto; }
 .chx-files .file-row { border-radius: 5px; }
@@ -1666,6 +1782,8 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .bx-avatar { position: absolute; border-radius: 50%; background: center / cover no-repeat; pointer-events: none; }
 /* 가지 선이 커밋 이름 아래를 지나면 글자 사이로 비쳐 읽기 어려웠다 — 글자 폭만 한 바탕색 상자를 깔아 그 자리에서만 선을 끊는다. */
 .bx-subject { padding: 0 3px; border-radius: 3px; color: var(--git-graph-subject); background: var(--git-graph-bg); overflow: hidden; text-overflow: ellipsis; text-align: center; }
+/* 병합된 가지의 커밋 메시지: 살짝 흐리게(branchgraph.js MERGED_LANE_OPACITY 와 같은 60%). */
+.bx-subject--dim { color: color-mix(in srgb, var(--git-graph-subject) 60%, var(--git-graph-bg)); }
 .bx-pill { padding: 1px 5px; border-radius: 4px; font-size: 9px; line-height: 14px; font-weight: 700; color: var(--git-graph-pill-text); background: var(--git-graph-pill-bg); box-shadow: 0 0.5px 2.5px var(--git-graph-shadow); }
 .bx-pill--head { background: var(--git-graph-pill-head); }
 /* 태그(레이블): Unity VCS 처럼 상자 없이 커밋 위에 글자로(커밋 원에는 초록 고리). */
@@ -1677,7 +1795,15 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .bx-header { position: absolute; left: 0; right: 0; top: 0; height: 24px; box-sizing: border-box; background: var(--git-graph-header-bg); border-bottom: 1px solid var(--git-graph-header-border); pointer-events: none; }
 /* 날짜 띠가 좁으면 한 줄로 두고 넘치면 "2026-10…" 처럼 자른다. 양옆 4px 는 띠 경계에 붙지 않게. */
 .bx-date { padding: 0 4px; font-size: 12px; line-height: 24px; color: var(--git-graph-date); text-align: center; overflow: hidden; text-overflow: ellipsis; }
-.bx-tooltip { z-index: 3; max-width: 420px; padding: 6px 8px; border: 1px solid var(--git-border); border-radius: 3px; background: var(--git-graph-tooltip-bg); color: var(--git-graph-tooltip-text); white-space: pre-line; box-shadow: 0 0.5px 2.5px var(--git-graph-shadow); }
+.bx-tooltip { z-index: 3; width: max-content; max-width: min(420px, calc(100% - 8px)); padding: 12px 14px 11px; border: 1px solid var(--git-graph-tooltip-border); border-radius: 10px; background: var(--git-graph-tooltip-bg); color: var(--git-graph-tooltip-text); white-space: normal; box-shadow: 0 6px 20px var(--git-graph-tooltip-shadow), 0 0 0 0.5px rgba(0,0,0,0.04); }
+/* 툴팁 머리줄: 가지 색 아이콘 + 가지 이름(링크 색). */
+.bx-tip-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12px; color: var(--git-accent-fg); }
+.bx-tip-icon { flex: none; }
+.bx-tip-lane { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bx-tip-subject { font-size: 13px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.bx-tip-rule { height: 1px; margin: 10px 0 9px; background: var(--git-graph-tooltip-border); }
+.bx-tip-meta { font-size: 12px; color: var(--git-text-muted); white-space: nowrap; }
+.bx-tip-hash { font-family: var(--mono); font-size: 11.5px; color: var(--git-accent-fg); }
 .bx-empty { position: absolute; left: 0; right: 0; top: 40%; text-align: center; color: var(--git-graph-empty); pointer-events: none; }
 .bx-graph--hidden-text .bx-initials,
 .bx-graph--hidden-text .bx-subject,
@@ -1713,18 +1839,11 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .cl-row { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 8px; font-size: 12px; white-space: nowrap; cursor: default; }
 .cl-row:hover { background: var(--git-hover); }
 .cl-row.active { background: var(--git-selected); color: var(--git-selected-text); }
-.cl-head { position: sticky; top: 0; z-index: 1; font-size: 11px; color: var(--git-text-muted); background: var(--git-header-bg); border-bottom: 1px solid var(--git-border); }
-.cl-head:hover { background: var(--git-header-bg); }
 .cl-hash { width: 70px; flex: none; font-family: var(--mono); font-size: 11px; color: var(--git-text-muted); }
 .cl-subject { flex: 3 1 0; min-width: 80px; overflow: hidden; text-overflow: ellipsis; }
 .cl-author { width: 130px; flex: none; overflow: hidden; text-overflow: ellipsis; }
 .cl-date { width: 112px; flex: none; color: var(--git-text-muted); }
 .ws-side .cl-author, .ws-side .cl-date { display: none; }
-/* 체인지 세트(원본 ChangesetsView): 위 목록 · 아래 상세(260) */
-.cs-layout { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.cs-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.cs-list { flex: 1; min-height: 0; overflow: auto; }
-.cs-detail { width: auto !important; min-height: 0; overflow: auto; }
 .explorer-bar .btn[hidden] { display: none; }
 .fork-head .lbl-shift { display: none; }
 body.shift-held .fork-head .lbl-normal { display: none; }
@@ -1887,30 +2006,10 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .pr-read-failure .modal-actions .btn[hidden] { display: none; }
 
 /* ── 레포지토리 만들기(원본에 없음 · 확장 — GitKraken "Initialize a Repository") ── */
-.modal.newrepo { width: 880px; height: min(720px, calc(100% - 40px)); padding: 0; gap: 0; overflow: hidden; border-radius: 8px; background: var(--git-bg); border-color: var(--git-border); }
-.newrepo-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 10px 18px; border-bottom: 1px solid var(--git-border); }
-.newrepo-body { flex: 1; min-height: 0; display: flex; }
-.newrepo-nav { width: 200px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; border-right: 1px solid var(--git-border); background: var(--git-sidebar-bg); }
-.newrepo-tab { display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 12px; border: 0; border-radius: var(--radius); background: none; color: var(--git-text-secondary); font-size: 13px; text-align: left; cursor: pointer; }
-.newrepo-tab:hover { background: var(--git-hover); color: var(--git-text); }
-.newrepo-tab.on { background: var(--git-selected); color: var(--git-selected-text); font-weight: 600; }
-.newrepo-panes { flex: 1; min-width: 0; display: flex; }
-.newrepo-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: auto; padding: 20px 28px 16px 14px; }
-.newrepo-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 9px 14px; align-items: center; }
-.newrepo-label { align-self: start; padding-top: 7px; text-align: right; font-size: 12px; color: var(--git-text-secondary); }
-.newrepo-control { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.newrepo .field { height: 30px; }
-.newrepo .field:disabled, .newrepo .btn:disabled { opacity: 0.5; }
 .newrepo .check.disabled { opacity: 0.5; cursor: default; }
-.newrepo .search-select { min-height: 30px; }
 .newrepo-inline { display: flex; align-items: center; gap: 6px; }
 .newrepo-inline > .field { flex: 1; min-width: 0; }
 .newrepo-inline > .btn { height: 30px; flex: none; }
-/* 전체 경로: "위치/" 는 흐린 글(긴 경로는 앞을 줄인다) + 폴더 이름 칸. */
-.newrepo-path { gap: 0; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-badge-bg); overflow: hidden; }
-.newrepo-path:focus-within { border-color: var(--git-accent); box-shadow: 0 0 0 1px var(--git-accent); }
-.newrepo-path > .field { border: 0; border-radius: 0; box-shadow: none !important; background: var(--git-field-bg); }
-.newrepo-prefix { flex: 0 1 auto; max-width: 62%; min-width: 0; padding: 0 2px 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font-size: 12px; color: var(--git-text-muted); }
 .newrepo-radios { display: flex; gap: 18px; min-height: 30px; align-items: center; }
 .newrepo-account { display: flex; flex-direction: column; gap: 6px; min-height: 30px; justify-content: center; }
 .newrepo-login { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
@@ -1918,11 +2017,6 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .newrepo-code { display: flex; align-items: center; gap: 8px; }
 .newrepo-code-text { font-family: var(--mono); font-size: 16px; font-weight: 700; letter-spacing: 2px; color: var(--git-text-strong); user-select: text; -webkit-user-select: text; }
 .newrepo-warn { font-size: 12px; color: var(--git-warning); }
-.newrepo-foot { flex: none; display: flex; align-items: center; gap: 14px; margin-top: auto; padding-top: 18px; }
-.newrepo-problem { flex: 1; min-width: 0; text-align: right; font-size: 12px; color: var(--git-danger); }
-.btn.newrepo-ok { height: 32px; min-width: 160px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--git-success); background: var(--git-success-soft); color: var(--git-text); font-weight: 700; }
-.btn.newrepo-ok:hover:not(:disabled) { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
-.btn.newrepo-ok:disabled { opacity: 0.5; }
 
 /* ── GitHub 로그인 전용 창(github.js deviceLogin): 뒤를 어둡게 흐리고, 가운데 창이 살짝 커지며 나타난다. ── */
 .gh-login-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(8, 9, 12, 0.5); -webkit-backdrop-filter: blur(10px) saturate(120%); backdrop-filter: blur(10px) saturate(120%); opacity: 0; transition: opacity 180ms ease-out; }
@@ -1980,55 +2074,227 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 @keyframes gh-login-pop { from { transform: scale(0.6); opacity: 0; } }
 .gh-login-code.failed .gh-login-cell.empty { animation: none; opacity: 0.45; }
 
-/* Clone 대화상자의 진행 표시(글 + 도구 막대와 같은 막대). */
-.clone-progress { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.clone-progress-text { font-size: 12px; color: var(--git-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.clone-progress-bar.tb-progress { position: relative; left: auto; right: auto; bottom: auto; height: 3px; opacity: 1; border-radius: 2px; background: var(--git-border); }
+/* ── Clone 진행 무대(clonestage.js) ──────────────────────
+   폼을 걷고 대화상자 높이가 부드럽게 바뀐 뒤, 흐린 빛 위에 그라데이션 고리·큰 숫자·단계 점이 차례로 떠오른다. */
+.clone-form { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* Clone 창의 GitHub/URL 전환과 GitHub 레포지토리 목록(clonepicker.js). */
+.modal.wide.clone-dialog { width: 640px; }
+.clone-extra { display: flex; align-items: center; height: 20px; min-width: 0; }
+.clone-extra > * { min-width: 0; }
+.clone-target { min-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clone-already { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--git-success); }
+.clone-already[hidden] { display: none; }
+.clone-already-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--git-text-secondary); }
 
-/* ── 앱을 켜는 동안의 스켈레톤(boot.js) ──────────────────
-   실제 화면과 같은 배치(탭·도구 막대·사이드바·그래프·작업 패널·상태 줄)에 회색 막대를 두고,
-   밝은 띠 하나가 창 전체를 왼쪽에서 오른쪽으로 지나간다(막대마다 따로가 아니라 창 기준이라 한 줄기로 보인다). */
-:root { --boot-shine: rgba(255, 255, 255, 0.07); }
-:root[data-theme="light"] { --boot-shine: rgba(255, 255, 255, 0.75); }
-.boot { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; background: var(--git-bg); color: transparent; transition: opacity 240ms ease-out; user-select: none; -webkit-user-select: none; cursor: progress; }
-.boot.out { opacity: 0; pointer-events: none; }
-.boot .bk {
-  flex: none; border-radius: 3px;
-  background-color: var(--git-skeleton);
-  background-image: linear-gradient(90deg, transparent 0, var(--boot-shine) 50%, transparent 100%);
-  background-repeat: no-repeat; background-size: 45% 100%; background-attachment: fixed;
-  animation: boot-shine 1.7s ease-in-out infinite;
+.cgh { display: flex; flex-direction: column; gap: 8px; }
+.cgh[hidden] { display: none; }
+.cgh-bar { display: flex; align-items: stretch; gap: 6px; }
+.cgh-bar .cgh-search { flex: 1; min-width: 0; }
+.cgh-account { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 200px; padding: 0 8px 0 4px; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-field-bg); color: var(--git-text); font: inherit; font-size: 12px; cursor: pointer; }
+.cgh-account:hover { background: var(--git-hover); }
+.cgh-account svg { flex: none; color: var(--git-text-muted); }
+.cgh-account-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cgh-avatar { position: relative; flex: none; width: 20px; height: 20px; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--git-accent); color: var(--git-accent-text); font-size: 10px; font-weight: 700; }
+.cgh-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.clone-upstream { align-self: flex-start; }
+.cgh-search { display: flex; align-items: center; gap: 6px; padding-left: 8px; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-field-bg); color: var(--git-text-muted); }
+.cgh-search[hidden] { display: none; }
+.cgh-search:focus-within { border-color: var(--git-accent); box-shadow: 0 0 0 1px var(--git-accent); }
+.cgh-search .field { flex: 1; min-width: 0; border: 0; box-shadow: none !important; background: transparent; padding-left: 0; }
+.cgh-select { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 200px; padding: 0 8px 0 10px; border: 1px solid var(--git-field-border); border-radius: var(--radius); background: var(--git-field-bg); color: var(--git-text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.cgh-select:hover { background: var(--git-hover); color: var(--git-text); }
+.cgh-select.on { border-color: var(--git-accent); color: var(--git-text); }
+.cgh-select svg { flex: none; color: var(--git-text-muted); }
+.cgh-select-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 마우스를 올린 레포지토리의 카드(clonepicker.js): Clone 창 오른쪽 바깥. 마우스를 받지 않는다. */
+.cgh-card { position: fixed; z-index: 25; width: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 10px 30px var(--git-menu-shadow); pointer-events: none; font-size: 12px; color: var(--git-text); }
+.cgh-card-head { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--git-text-muted); }
+.cgh-card-owner { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--git-text-secondary); }
+.cgh-card-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--git-text); }
+.cgh-card-desc { line-height: 1.45; color: var(--git-text-secondary); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.cgh-card-desc.none { color: var(--git-text-muted); font-style: italic; }
+.cgh-card-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding-top: 8px; border-top: 1px solid var(--git-menu-border); }
+.cgh-card-label { color: var(--git-text-muted); white-space: nowrap; }
+.cgh-card-value { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.cgh-card-path { font-family: var(--mono); font-size: 11px; color: var(--git-text-secondary); }
+/* 소유자 드롭다운: 위에 찾기 칸, 아래 소유자 목록(이름 · 레포지토리 수). */
+.menu.cgh-pop { display: flex; flex-direction: column; min-width: 0; padding: 0; overflow: hidden; }
+.cgh-pop-search { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--git-menu-border); color: var(--git-text-muted); }
+.cgh-pop-search .field { flex: 1; min-width: 0; height: 26px; border: 0; box-shadow: none !important; background: transparent; padding: 0; }
+.cgh-pop-list { flex: 1; min-height: 0; overflow: auto; padding: 4px; }
+.cgh-pop-item { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 4px; border-radius: 5px; font-size: 13px; color: var(--git-text); cursor: default; }
+.cgh-pop-item.active { background: var(--git-menu-hover); color: var(--git-menu-hover-text); }
+.cgh-pop-item.active .cgh-count { color: inherit; opacity: 0.8; }
+.cgh-pop-item.all { margin-bottom: 4px; box-shadow: 0 5px 0 -4px var(--git-menu-border); }
+.cgh-pop-check { flex: none; width: 16px; display: flex; justify-content: center; }
+.cgh-pop-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cgh-pop-hint { flex: none; font-size: 12px; color: var(--git-text-muted); }
+.cgh-pop-item.active .cgh-pop-hint { color: inherit; opacity: 0.8; }
+.cgh-pop-loading { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px 0 26px; }
+.cgh-pop-accounts .cgh-pop-item { height: 30px; }
+.cgh-avatar.small { width: 18px; height: 18px; border-radius: 9px; font-size: 9px; }
+.cgh-pop:focus { outline: none; }
+.cgh-pop-empty { padding: 10px; text-align: center; }
+.cgh-count { font-size: 11px; color: var(--git-text-muted); font-variant-numeric: tabular-nums; }
+.cgh-list { height: 300px; overflow: auto; border: 1px solid var(--git-border); border-radius: var(--radius); background: var(--git-field-bg); outline: none; }
+.cgh-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--git-border); cursor: default; }
+.cgh-row:last-child { border-bottom: 0; }
+.cgh-row:hover { background: var(--git-hover); }
+.cgh-row.on { background: var(--git-selected); color: var(--git-selected-text); }
+.cgh-row.archived .cgh-main { opacity: 0.6; }
+.cgh-icon { flex: none; display: flex; color: var(--git-text-muted); }
+.cgh-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cgh-title { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; white-space: nowrap; }
+.cgh-owner { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--git-text-secondary); }
+.cgh-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--git-text); }
+.cgh-row.on .cgh-owner, .cgh-row.on .cgh-name, .cgh-row.on .cgh-desc, .cgh-row.on .cgh-icon { color: inherit; }
+.cgh-badge { flex: none; height: 16px; padding: 0 6px; border: 1px solid var(--git-border); border-radius: 8px; font-size: 10.5px; line-height: 14px; color: var(--git-text-muted); }
+.cgh-badge.local { border-color: var(--git-success); color: var(--git-success); }
+.cgh-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--git-text-muted); }
+.cgh-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px; text-align: center; box-sizing: border-box; }
+.cgh-empty-mark { width: 48px; height: 48px; border-radius: 24px; display: flex; align-items: center; justify-content: center; background: var(--git-text); color: var(--git-bg); }
+.cgh-empty-title { font-size: 13px; font-weight: 600; color: var(--git-text); }
+.btn.cgh-signin { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; margin-top: 4px; }
+.cgh-error { font-size: 12px; color: var(--git-danger); }
+.cgh-note { display: flex; align-items: center; gap: 0; min-height: 16px; }
+.cgh-refresh { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 6px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--git-text-muted); cursor: pointer; }
+.cgh-refresh:hover:not(:disabled) { background: var(--git-hover); color: var(--git-text); }
+.cgh-refresh:disabled { cursor: default; }
+.cgh-refresh.spinning svg { animation: spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .cgh-refresh.spinning svg { animation-duration: 2.4s; } }
+.cgh-refreshing { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; }
+.cgh-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--git-border); border-top-color: var(--git-accent); animation: spin 0.8s linear infinite; box-sizing: border-box; }
+.cgh-spinner.small { width: 10px; height: 10px; border-width: 1.5px; }
+@media (prefers-reduced-motion: reduce) { .cgh-spinner { animation-duration: 2.4s; }  }
+.modal.locked { overflow: hidden; }
+.modal-backdrop:has(> .modal.locked) { background: rgba(0, 0, 0, 0.38); -webkit-backdrop-filter: blur(14px) saturate(150%); backdrop-filter: blur(14px) saturate(150%); transition: background 300ms; }
+.modal-backdrop.leaving { opacity: 0; transition: opacity 260ms ease-out; }
+.modal-backdrop.leaving > .modal { transform: scale(0.965); transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1); }
+
+:root { --cs-a: #5b8cff; --cs-b: #8f6bff; --cs-c: #3fd0e0; --cs-ok-a: #5fd38a; --cs-ok-b: #3fbf9b; --cs-aura-opacity: 0.42; }
+:root[data-theme="light"] { --cs-a: #3574f0; --cs-b: #7b5cf5; --cs-c: #1fb6c9; --cs-ok-a: #34b56a; --cs-ok-b: #1fa58a; --cs-aura-opacity: 0.22; }
+
+.clone-stage { position: relative; margin: 0; padding: 34px 28px 24px; overflow: hidden; isolation: isolate; }
+.cs-aura { position: absolute; left: 50%; top: 104px; width: 720px; height: 720px; margin: -360px 0 0 -360px; z-index: -1; pointer-events: none; opacity: var(--cs-aura-opacity); animation: cs-aura-in 1.2s ease-out both, cs-orbit 18s linear infinite; }
+.cs-blob { position: absolute; width: 190px; height: 190px; border-radius: 50%; filter: blur(46px); }
+.cs-blob.a { left: 200px; top: 215px; background: var(--cs-a); animation: cs-drift 7s ease-in-out infinite alternate; }
+.cs-blob.b { right: 195px; top: 250px; background: var(--cs-b); animation: cs-drift 9s ease-in-out -3s infinite alternate-reverse; }
+.cs-blob.c { left: 270px; bottom: 200px; background: var(--cs-c); animation: cs-drift 8s ease-in-out -5s infinite alternate; }
+.clone-stage.done .cs-blob { background: var(--cs-ok-a); transition: background 900ms; }
+.clone-stage.done .cs-blob.b { background: var(--cs-ok-b); }
+@keyframes cs-aura-in { from { opacity: 0; transform: scale(0.7); } }
+@keyframes cs-orbit { to { rotate: 360deg; } }
+@keyframes cs-drift { from { transform: translate(-14px, 8px) scale(0.92); } to { transform: translate(16px, -10px) scale(1.08); } }
+
+.cs-body { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.cs-body > * { animation: cs-rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cs-body > :nth-child(2) { animation-delay: 80ms; }
+.cs-body > :nth-child(3) { animation-delay: 130ms; }
+.cs-body > :nth-child(4) { animation-delay: 180ms; }
+.cs-body > :nth-child(5) { animation-delay: 230ms; }
+.cs-body > :nth-child(6) { animation-delay: 270ms; }
+@keyframes cs-rise { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } }
+
+/* 고리 */
+.cs-dial { position: relative; width: 140px; height: 140px; margin-bottom: 18px; }
+.cs-body > .cs-dial { animation: cs-dial-in 820ms cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+@keyframes cs-dial-in { from { opacity: 0; transform: scale(0.6); filter: blur(10px); } }
+.cs-halo { position: absolute; inset: 14px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--cs-a) 38%, transparent) 0%, transparent 70%); animation: cs-breathe 3.2s ease-in-out infinite; }
+.clone-stage.done .cs-halo { background: radial-gradient(circle, color-mix(in srgb, var(--cs-ok-a) 45%, transparent) 0%, transparent 70%); }
+@keyframes cs-breathe { 0%, 100% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1.12); opacity: 1; } }
+.cs-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; rotate: -90deg; }
+.cs-ring circle { fill: none; stroke-width: 6; }
+.cs-track { stroke: color-mix(in srgb, var(--git-text) 10%, transparent); }
+.cs-arc { stroke-linecap: round; opacity: 0; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--cs-a) 70%, transparent)); transition: opacity 500ms, filter 900ms; }
+.clone-stage.known .cs-arc { opacity: 1; }
+.clone-stage.done .cs-arc { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--cs-ok-a) 80%, transparent)); }
+.cs-comet { stroke-linecap: round; transform-origin: 64px 64px; animation: spin 1.15s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite; transition: opacity 500ms; }
+.clone-stage.known .cs-comet { opacity: 0; }
+.cs-stop-a { stop-color: var(--cs-c); transition: stop-color 900ms; }
+.cs-stop-b { stop-color: var(--cs-a); transition: stop-color 900ms; }
+.cs-stop-c { stop-color: var(--cs-b); transition: stop-color 900ms; }
+.clone-stage.done .cs-stop-a { stop-color: var(--cs-ok-b); }
+.clone-stage.done .cs-stop-b, .clone-stage.done .cs-stop-c { stop-color: var(--cs-ok-a); }
+.cs-check { fill: none; stroke: var(--git-text-strong); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; stroke-dashoffset: 60; rotate: 90deg; transform-origin: 64px 64px; }
+.clone-stage.done .cs-check { stroke-dashoffset: 0; transition: stroke-dashoffset 460ms cubic-bezier(0.65, 0, 0.35, 1) 160ms; }
+.clone-stage.done .cs-body > .cs-dial { animation: cs-pop 620ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes cs-pop { 40% { transform: scale(1.07); } }
+
+.cs-percent { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 1px; color: var(--git-text-strong); font-variant-numeric: tabular-nums; opacity: 0.38; transition: opacity 500ms, transform 400ms cubic-bezier(0.32, 0.72, 0, 1), filter 400ms; }
+.clone-stage.known .cs-percent { opacity: 1; }
+.clone-stage.done .cs-percent { opacity: 0; transform: scale(0.7); filter: blur(4px); }
+.cs-digits { font-size: 36px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
+.cs-unit { align-self: flex-start; margin-top: 46px; font-size: 14px; font-weight: 600; opacity: 0.6; }
+
+/* 글 */
+.cs-name { max-width: 100%; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; color: var(--git-text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-headline { position: relative; width: 100%; height: 20px; margin-top: 4px; overflow: hidden; }
+.cs-line { position: absolute; inset: 0; font-size: 13px; font-weight: 500; line-height: 20px; color: var(--git-text-secondary); white-space: nowrap; }
+.cs-line.in { animation: cs-line-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cs-line.out { animation: cs-line-out 360ms cubic-bezier(0.4, 0, 1, 1) both; }
+@keyframes cs-line-in { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
+@keyframes cs-line-out { to { opacity: 0; transform: translateY(-12px); filter: blur(4px); } }
+
+/* 지금 단계 캡슐: ● 받기  2/4 */
+.cs-step { display: inline-flex; align-items: center; gap: 8px; height: 26px; margin-top: 16px; padding: 0 12px 0 11px; border-radius: 13px; background: color-mix(in srgb, var(--git-text) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--git-text) 9%, transparent); font-size: 12px; color: var(--git-text-strong); }
+.cs-step-dot { position: relative; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--cs-a); transition: background 600ms; }
+.cs-step-dot::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid var(--cs-a); animation: cs-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+.clone-stage.done .cs-step-dot { background: var(--cs-ok-a); }
+.clone-stage.done .cs-step-dot::after { animation: none; opacity: 0; }
+.cs-step-label { position: relative; display: block; width: 44px; height: 18px; overflow: hidden; }
+.cs-step-label .cs-line { font-size: 12px; line-height: 18px; color: inherit; text-align: left; font-weight: 600; }
+.cs-step-count { font-size: 11px; color: var(--git-text-muted); font-variant-numeric: tabular-nums; }
+.cs-step-count:empty { display: none; }
+@keyframes cs-ping { from { opacity: 0.9; transform: scale(0.6); } to { opacity: 0; transform: scale(1.8); } }
+
+.cs-meta { display: flex; justify-content: center; gap: 10px; width: 100%; margin-top: 18px; font-size: 11px; color: var(--git-text-muted); font-variant-numeric: tabular-nums; }
+.cs-counts { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-counts:empty { display: none; }
+.cs-elapsed:empty { display: none; }
+.cs-counts:not(:empty) + .cs-elapsed::before { content: '·'; margin-right: 10px; }
+.cs-where { max-width: 100%; margin-top: 6px; font-size: 11px; color: var(--git-text-muted); opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (prefers-reduced-motion: reduce) {
+  .clone-stage *, .clone-stage *::before, .clone-stage *::after { animation: none !important; transition: none !important; }
+  .modal-backdrop.leaving, .modal-backdrop.leaving > .modal { transition: none; }
 }
-@keyframes boot-shine { from { background-position: -90% 0; } to { background-position: 190% 0; } }
-.boot-grow { flex: 1; min-width: 0; }
-.boot-row { display: flex; align-items: center; }
-.boot-tabs { flex: none; display: flex; align-items: flex-end; height: 38px; padding: 0 8px; background: var(--git-titlebar-bg); border-bottom: 1px solid var(--git-border); }
-:root[data-platform="macos"] .boot-tabs { padding-left: 80px; }
-.boot-tab { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px 0 14px; border-radius: 8px 8px 0 0; }
-.boot-tab.on { background: var(--git-toolbar-bg); box-shadow: inset 1px 0 0 var(--git-border), inset -1px 0 0 var(--git-border), inset 0 1px 0 var(--git-border); margin-bottom: -1px; height: 33px; }
-.boot-toolbar { flex: none; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 10px; background: var(--git-toolbar-bg); border-bottom: 1px solid var(--git-border); }
-.boot-picker { display: flex; flex-direction: column; gap: 5px; margin-right: 34px; }
-.boot-action { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 52px; }
-.boot-sep { width: 1px; height: 26px; margin: 0 6px; background: var(--git-border); }
-.boot-body { flex: 1; min-height: 0; display: flex; }
-.boot-side, .boot-detail { flex: none; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--git-sidebar-bg); }
-:root:not([data-theme="light"]) .boot-side, :root:not([data-theme="light"]) .boot-detail { background: #26282c; }
-.boot-side { padding-top: 6px; border-right: 1px solid var(--git-border); }
-.boot-detail { border-left: 1px solid var(--git-border); }
-.boot-detail.fork { flex: 0 0 38%; border-left: 0; border-top: 1px solid var(--git-border); }
-.boot-column { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.boot-graph { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.boot-graph-head { flex: none; height: 28px; padding: 0 14px; gap: 12px; border-bottom: 1px solid var(--git-border); }
-.boot-graph-rows { position: relative; flex: 1; min-height: 0; overflow: hidden; }
-.boot-commit { height: 34px; gap: 0; }
-.boot-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--git-skeleton); box-shadow: 0 0 0 3px var(--git-bg); position: relative; z-index: 1; }
-.boot-lane { position: absolute; top: 17px; bottom: 0; width: 2px; background: var(--git-skeleton); opacity: 0.6; }
-.boot-commitbox { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
-.boot-footer { flex: none; display: flex; align-items: center; gap: 12px; height: 24px; padding: 0 10px; border-top: 1px solid var(--git-border); background: var(--git-header-bg); }
-.boot-start-card { width: 560px; max-width: calc(100% - 32px); margin: auto; display: flex; flex-direction: column; }
+
+/* ── Ramus 정보(about.js): PyCharm 의 정보 창처럼 왼쪽 큰 앱 아이콘, 오른쪽 글 묶음(이름·버전 / 빌드 / 실행 환경), 아래 [닫기][복사하고 닫기]. */
+.modal.card.about { width: 560px; padding: 28px 28px 22px; gap: 0; }
+.about-body { display: flex; align-items: flex-start; gap: 26px; }
+.about-icon { flex: none; width: 108px; height: 108px; margin-top: 2px; filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.32)); }
+:root[data-theme="light"] .about-icon { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.14)); }
+.about-icon svg { display: block; width: 100%; height: 100%; }
+.about-text { flex: 1; min-width: 0; font-size: 13px; line-height: 1.6; color: var(--git-text); user-select: text; -webkit-user-select: text; }
+.about-title { margin: 0 0 12px; font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; color: var(--git-text-strong, var(--git-text)); }
+.about-group { margin-bottom: 14px; }
+.about-group:last-child { margin-bottom: 0; }
+.about .modal-actions { margin-top: 24px; }
+.about .modal-actions .btn.card-ok.default { font-weight: 600; }
+
+/* ── 앱을 켜는 동안의 시작 화면(boot.js) ──────────────────
+   macOS 가 켜질 때의 사과처럼: 빈 바탕 가운데에 단색의 큼직한 가지 표식이 조용히 떠오르고 그 아래 이름이 뒤따른다.
+   적어도 1.1초는 보이고(boot.js 의 MIN_MS), 1.4초가 넘도록 열리지 않으면 그 아래 가는 막대가 흐른다. 걷어 낼 때는 조용히 흐려진다. */
+.boot { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--git-bg); transition: opacity 360ms ease-out; user-select: none; -webkit-user-select: none; cursor: default; }
+.boot.out { opacity: 0; pointer-events: none; }
+.boot-mark { display: flex; flex-direction: column; align-items: center; gap: 26px; margin-top: -32px; }
+.boot-glyph { width: 150px; height: 150px; display: block; color: var(--git-text); opacity: 0; animation: boot-in 900ms cubic-bezier(0.2, 0.7, 0.2, 1) 60ms forwards; }
+.boot-name { font-size: 28px; font-weight: 500; letter-spacing: 0.08em; margin-left: 0.08em; line-height: 1; color: var(--git-text-secondary, var(--git-text)); opacity: 0; animation: boot-in 800ms cubic-bezier(0.2, 0.7, 0.2, 1) 260ms forwards; }
+@keyframes boot-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+/* 오래 걸릴 때의 가는 막대: 밝은 토막이 왼쪽→오른쪽으로 되풀이해 흐른다(macOS 켜질 때의 막대 느낌). */
+.boot-bar { position: relative; width: 180px; height: 4px; margin-top: 64px; border-radius: 2px; overflow: hidden; background: var(--git-divider, rgba(128, 131, 138, 0.3)); opacity: 0; animation: boot-fade 500ms ease-out 1400ms forwards; }
+.boot-bar i { position: absolute; top: 0; bottom: 0; left: 0; width: 40%; border-radius: 2px; background: var(--git-text-secondary, var(--git-text)); animation: boot-slide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+@keyframes boot-fade { to { opacity: 1; } }
+@keyframes boot-slide { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
+@media (prefers-reduced-motion: reduce) {
+  .boot { transition: none; }
+  .boot-glyph, .boot-name { animation: none; opacity: 1; }
+  .boot-bar { animation: boot-fade 1ms linear 1400ms forwards; }
+  .boot-bar i { animation: none; width: 100%; opacity: 0.5; }
+}
 
 /* 오래 걸리는 작업의 진행 카드(opcard.js): 아래 가운데 알림 자리. 왼쪽 원 배지(돌아가는 고리), 제목·지난 시간, 단계 글, 진행 막대. */
-.op-card { display: flex; align-items: flex-start; gap: 12px; width: 340px; max-width: 100%; padding: 12px 14px; border-radius: 8px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 8px 24px var(--git-menu-shadow); animation: op-card-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.op-card { display: flex; align-items: flex-start; gap: 12px; width: 340px; max-width: 100%; padding: 12px 14px; border-radius: 10px; background: var(--git-menu-bg); border: 1px solid var(--git-menu-border); box-shadow: 0 10px 30px var(--git-menu-shadow), 0 1px 3px var(--git-menu-shadow); animation: op-card-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .op-card.leaving { opacity: 0; transform: translateY(6px); transition: opacity 200ms, transform 200ms; }
 @keyframes op-card-in { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
 /* 움직임 줄이기를 켠 사용자는 알림·진행 카드를 그 자리에 바로 보이고 바로 지운다. */
@@ -2045,3 +2311,149 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .op-card-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 30%; border-radius: 2px; background: var(--git-accent); animation: tb-flow 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 .op-card-bar.known .op-card-fill { animation: none; transition: width 160ms linear; }
 .op-card.done .op-card-fill { background: var(--git-success, #3fa66b); }
+
+/* ── 공통 창 틀(sheet): Clone · 레포지토리 만들기 · 설정 ─────────────
+   머리(제목 · 오른쪽 모드 토글) / 본문 / 바닥(왼쪽 안내 글 · 오른쪽 취소·주 버튼).
+   세 창이 바탕·모서리·여백·칸 높이·버튼·토글을 같이 쓴다. 라벨은 칸 위, 주 버튼은 파란 accent 하나. */
+.modal.sheet { padding: 0; gap: 0; overflow: hidden; border-radius: 12px; background: var(--git-dialog-bg); border: 1px solid var(--git-dialog-border); }
+.modal.sheet.wide { width: 640px; }
+.sheet-head { flex: none; display: flex; align-items: center; gap: 12px; min-height: 30px; padding: 16px 20px 12px; }
+.sheet-head .modal-title { flex: 1; min-width: 0; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 20px 18px; }
+.sheet-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--git-dialog-divider); }
+.sheet-foot .btn { height: 30px; min-width: 80px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+/* 바닥 왼쪽 글: 무엇이 모자란지(흐린 글) 또는 막힌 까닭(.error). 길면 줄인다 — 창 높이가 바뀌지 않게. */
+.sheet-message { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--git-text-muted); }
+.sheet-message.error { color: var(--git-danger); }
+.sheet .field, .sheet select.field { height: 30px; }
+.sheet .search-select { min-height: 30px; }
+/* 드롭다운(고르기 칸)은 글 칸보다 한 단 밝은 바탕 — JetBrains 콤보 상자. */
+.sheet select.field, .sheet .search-select, .sheet .cgh-select, .sheet .cgh-account { background-color: var(--git-combo-bg); }
+.sheet .section-divider, .sheet .settings-section h3 { border-color: var(--git-dialog-divider); }
+/* 목록 상자도 창 바탕과 같은 색, 테두리로만 나눈다. */
+.sheet .cgh-list { background: var(--git-dialog-bg); border-color: var(--git-field-border); }
+.sheet .cgh-row { border-bottom-color: var(--git-dialog-divider); }
+.sheet .row > .btn { height: 30px; flex: none; }
+.sheet .field:disabled, .sheet .btn:disabled, .sheet .check.disabled { opacity: 0.5; }
+.sheet .check.disabled { cursor: default; }
+/* 칸 둘을 나란히. */
+.sheet-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; }
+.sheet-pair > .sheet-check { min-height: 30px; display: flex; align-items: center; }
+/* 받을 곳·만들 곳처럼 칸들이 합쳐진 경로 한 줄. 비어도 자리를 둔다. */
+.sheet-target { min-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 모드 토글(GitHub | URL, 로컬 | GitHub): 제목 오른쪽. */
+.sheet-modes { flex: none; display: inline-flex; padding: 2px; gap: 2px; border-radius: 7px; background: var(--git-field-bg); border: 1px solid var(--git-field-border); }
+.sheet-mode { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border: 0; border-radius: 5px; background: none; color: var(--git-text-secondary); font: inherit; font-size: 12px; cursor: pointer; transition: background-color 140ms, color 140ms; }
+.sheet-mode:hover { color: var(--git-text); }
+.sheet-mode.on { background: var(--git-selected); color: var(--git-selected-text); font-weight: 600; }
+.sheet-mode:disabled { opacity: 0.5; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .sheet-mode { transition: none; } }
+/* 레포지토리 만들기: 칸이 많아 창이 화면보다 길면 본문만 스크롤한다. */
+.modal.sheet.newrepo { max-height: calc(100% - 48px); }
+.newrepo-pane { display: flex; flex-direction: column; gap: 12px; }
+.newrepo-check { min-height: 20px; display: flex; align-items: center; }
+.newrepo-messages { flex: 1; min-width: 0; display: flex; }
+.newrepo-messages > .sheet-message { flex: 1; }
+/* 설정: 왼쪽 칸 목록 + 오른쪽 스크롤. 본문 틀은 스크롤하지 않고 안의 settings-body 가 스크롤한다. */
+.modal.sheet.settings { width: 780px; height: min(640px, calc(100% - 48px)); }
+.modal.sheet.settings .sheet-body { overflow: hidden; padding-bottom: 0; }
+.modal.sheet.settings .settings-layout { padding-bottom: 14px; }
+
+/* ── 탭 전환 로딩 HUD (macOS 반투명 HUD 창) ───────────────── */
+:root {
+  --hud-bg: rgba(38, 39, 43, 0.62);
+  --hud-border: rgba(255, 255, 255, 0.10);
+  --hud-highlight: rgba(255, 255, 255, 0.08);
+  --hud-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --hud-text: rgba(255, 255, 255, 0.94);
+  --hud-sub: rgba(235, 235, 245, 0.55);
+  --hud-blade: #f2f2f7;
+  --tab-shine: rgba(255, 255, 255, 0.95);
+  --scrim-bg: rgba(0, 0, 0, 0.32);
+}
+:root[data-theme="light"] {
+  --hud-bg: rgba(250, 250, 252, 0.66);
+  --hud-border: rgba(0, 0, 0, 0.08);
+  --hud-highlight: rgba(255, 255, 255, 0.7);
+  --hud-shadow: 0 18px 50px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --hud-text: rgba(0, 0, 0, 0.88);
+  --hud-sub: rgba(60, 60, 67, 0.6);
+  --hud-blade: #3c3c43;
+  --tab-shine: rgba(120, 160, 255, 1);
+  --scrim-bg: rgba(0, 0, 0, 0.16);
+}
+
+/* HUD 뒤 작업 화면: 살짝 흐림 + 어두운 막 */
+.switch-scrim {
+  position: fixed; left: 0; right: 0; bottom: 0; top: 0; z-index: 39;
+  background: var(--scrim-bg);
+  -webkit-backdrop-filter: blur(5px) saturate(120%);
+  backdrop-filter: blur(5px) saturate(120%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.switch-scrim.visible { opacity: 1; }
+.switch-scrim.leaving { opacity: 0; transition: opacity 260ms ease-out; }
+
+.switch-hud {
+  position: fixed; left: 50%; top: 46%; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  min-width: 240px; min-height: 190px; max-width: 420px; padding: 34px 40px 28px;
+  border-radius: 24px;
+  background: var(--hud-bg);
+  border: 0.5px solid var(--hud-border);
+  box-shadow: inset 0 1px 0 var(--hud-highlight), var(--hud-shadow);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  color: var(--hud-text);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.94);
+  transition: opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 320ms cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+.switch-hud.visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.switch-hud.leaving {
+  opacity: 0; transform: translate(-50%, -50%) scale(0.98);
+  transition: opacity 240ms ease-out, transform 240ms ease-out;
+}
+
+/* 12살 회전 표시(NSProgressIndicator) */
+.hud-spinner { position: relative; flex: none; width: 44px; height: 44px; }
+.hud-spinner i {
+  position: absolute; left: 50%; top: 50%;
+  width: 4px; height: 12px; margin: -6px 0 0 -2px; border-radius: 2px;
+  background: var(--hud-blade);
+  transform-origin: 50% 50%;
+  animation: hud-blade 1s linear infinite;
+}
+@keyframes hud-blade { from { opacity: 1; } to { opacity: 0.14; } }
+
+.hud-text { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; max-width: 100%; text-align: center; }
+.hud-name {
+  max-width: 100%; font-size: 19px; font-weight: 600; letter-spacing: -0.015em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hud-sub { font-size: 13px; color: var(--hud-sub); }
+
+/* 활성 탭 이름 위로 빛 줄기가 지나간다("밀어서 잠금 해제"). */
+body.repo-loading .tab.active .tab-name {
+  background: linear-gradient(100deg, currentColor 0%, currentColor 38%, var(--tab-shine) 50%, currentColor 62%, currentColor 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tab-shine 1.25s linear infinite;
+}
+@keyframes tab-shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
+/* 바뀐 화면이 살짝 떠오르듯 들어온다. */
+#main.switch-in { animation: switch-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes switch-in { from { opacity: 0.55; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-hud, .switch-hud.visible, .switch-hud.leaving { transition: opacity 120ms linear; transform: translate(-50%, -50%); }
+  .switch-scrim, .switch-scrim.leaving { transition: opacity 120ms linear; }
+  .hud-spinner i { animation-duration: 2s; }
+  body.repo-loading .tab.active .tab-name { animation: none; }
+  #main.switch-in { animation: none; }
+}

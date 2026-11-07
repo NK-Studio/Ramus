@@ -1,12 +1,15 @@
 // 앱 전체의 흐름: 시작 화면 ↔ 레포지토리 화면, 새로고침, 작업 뒤 다시 읽기, 도구 막대·사이드바·그래프·오른쪽 패널을 잇는다.
 
-import { call, on, onMenu } from './bridge.js';
+import { call, on, onMenu, beginRepoSwitch, setRepoPath } from './bridge.js';
+import { showAbout } from './about.js';
+import { createRepoCache } from './repocache.js';
+import { createSwitchHud } from './switchhud.js';
 import { el, relativeTime, josa, isComposing } from './util.js';
 import { icon } from './icons.js';
 import { createGraph, createAvatars, laneColor, stashLabel } from './graph.js';
 import { renderStaging, renderCommit, renderCommitSkeleton, diffKey, openStagingFilter } from './changes.js';
 import { createDiffView } from './diff.js';
-import { confirmDialog, overwriteDialog, choiceDialog, pickDialog, formDialog, errorDialog, showMenu, menuBelow, closeDrawer } from './dialogs.js';
+import { confirmDialog, overwriteDialog, choiceDialog, pickDialog, formDialog, errorDialog, showMenu, menuBelow, altModifier, closeDrawer } from './dialogs.js';
 import { createRefs } from './refs.js';
 import { createSidebar } from './sidebar.js';
 import { createToolbar } from './toolbar.js';
@@ -63,25 +66,45 @@ const mergeView = createMergeView($('merge-view'));
 
 // ── 알림 ─────────────────────────────────────────────
 
-/** 가벼운 알림(성공·안내). 실패는 오류 대화상자로 보인다. */
-/** 알림: 창 아래 가운데에서 위로 올라오고, 시간이 지나거나 닫으면 아래로 가라앉으며 사라진다. 여럿이면 새 것이 아래에 쌓인다. */
+/**
+ * 알림: JetBrains 풍선 알림처럼 왼쪽에 종류 아이콘(안내·성공·주의·오류)을 두고 글을 보인다. 창 아래 가운데에서 위로 올라오고,
+ * 시간이 지나거나 닫으면 아래로 가라앉으며 사라진다. 마우스를 올려 두는 동안은 사라지지 않는다. 여럿이면 새 것이 아래에 쌓인다.
+ */
 function toast(message, kind = 'info') {
   let leaving = false;
+  let timer = 0;
   const leave = () => {
     if (leaving) return;
     leaving = true;
+    clearTimeout(timer);
     node.classList.add('leaving');
     setTimeout(() => node.remove(), 220);
   };
-  const node = el('div', { class: `toast ${kind}` },
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(leave, kind === 'warning' || kind === 'error' ? 7000 : 4000);
+  };
+  // 오류 아이콘은 안내(i) 아이콘을 뒤집어 동그라미 속 느낌표로 쓴다.
+  const glyph = { success: icon('check', 16), warning: icon('warning', 16), error: icon('info', 16, 'flip') }[kind] ?? icon('info', 16);
+  const node = el('div', { class: `toast ${kind}`, role: kind === 'error' || kind === 'warning' ? 'alert' : 'status' },
+    el('span', { class: 'toast-icon' }, glyph),
     el('div', { class: 'toast-text', text: message }),
-    el('button', { class: 'toast-close', 'data-tip': '닫기', onclick: leave }, icon('close', 12)));
+    el('button', { class: 'toast-close', 'data-tip': '닫기', 'aria-label': '닫기', onclick: leave }, icon('close', 12)));
+  node.addEventListener('mouseenter', () => clearTimeout(timer));
+  node.addEventListener('mouseleave', () => { if (!leaving) arm(); });
   $('toasts').append(node);
-  setTimeout(leave, kind === 'warning' ? 7000 : 4000);
+  arm();
 }
 
 /** git 실패를 오류 대화상자로 보인다(설명 / git 원문, 원인·해결, SSL 이면 설정, 충돌이면 충돌 보기). */
 function showError(error, title) {
+  // 탭을 바꾸는 사이에 보낸 요청을 백엔드가 건너뛰었다 — 알릴 일이 아니다.
+  if (error?.stale) return undefined;
+  // 레포지토리 폴더가 앱 밖에서 사라졌다 — 오류 창 대신 그 탭을 거두고 한 줄만 알린다.
+  if (error?.gone) {
+    if (state.repo) repoGone(state.repo.path);
+    return undefined;
+  }
   return errorDialog(error, {
     title,
     prefs,
@@ -320,10 +343,11 @@ window.addEventListener('wheel', (event) => {
 
 // ── 탭·시작 화면 ──────────────────────────────────────
 
-function drawTabs() {
+/** 탭 막대. `active` 를 주면 그 탭을 활성으로 그린다(열리기를 기다리지 않고 누르자마자). */
+function drawTabs(active = state.repo?.path ?? null) {
   renderTabs($('tabs'), {
     tabs: state.settings.openTabs ?? [],
-    active: state.repo?.path ?? null,
+    active,
     onOpen: (path) => openRepo(path),
     onClose: (path) => closeTab(path),
     onNew: () => newTab(),
@@ -336,7 +360,10 @@ function drawTabs() {
 const closedTabs = [];
 
 async function newTab() {
+  // 탭은 남으니 지금 상태를 보관해 두면 돌아올 때 바로 보인다.
+  stashRepoState();
   await call('closeRepo').catch(showError);
+  setRepoPath(null);
   state.settings = await call('getSettings').catch(() => state.settings);
   showStart();
 }
@@ -354,8 +381,7 @@ async function reopenTab() {
 }
 
 async function closeTab(path) {
-  state.settings = await call('closeTab', { path });
-  closedTabs.splice(0, closedTabs.length, ...closedTabs.filter((p) => p !== path), path);
+  await dropTab(path);
   if (state.repo?.path !== path) {
     drawTabs();
     return;
@@ -363,6 +389,42 @@ async function closeTab(path) {
   const next = state.settings.openTabs[0];
   if (next) await openRepo(next.path);
   else await newTab();
+}
+
+/** 탭 목록에서 뺀다(설정·캐시·"다시 열기" 기록). 화면은 바꾸지 않는다 — 부른 쪽이 다음 탭으로 가거나 다시 그린다. */
+async function dropTab(path) {
+  state.settings = await call('closeTab', { path });
+  repoCache.delete(path);
+  closedTabs.splice(0, closedTabs.length, ...closedTabs.filter((p) => p !== path), path);
+}
+
+/** 지금 거두는 중인 사라진 레포지토리. 감시·주기 점검·실패한 요청이 같은 일을 겹쳐 알려도 한 번만 처리한다. */
+const goneHandling = new Set();
+
+/**
+ * 레포지토리 폴더가 앱 밖에서 사라졌다(지움·이름 바꿈·드라이브 분리). 오류 창으로 괴롭히지 않고 탭을 조용히 거둔 뒤
+ * 아래 알림 한 줄로만 알린다. 최근 목록에는 남겨 둔다 — 드라이브를 다시 꽂으면 거기서 다시 열 수 있다.
+ * `previous` 는 그 탭을 열다 실패했을 때 돌아갈(캐시로 먼저 그려 둔 화면을 되돌릴) 레포지토리.
+ */
+async function repoGone(path, previous = null) {
+  if (!path || goneHandling.has(path)) return;
+  goneHandling.add(path);
+  try {
+    const tab = (state.settings.openTabs ?? []).find((t) => t.path === path);
+    const name = tab?.name ?? path.split(/[\\/]/).filter(Boolean).pop();
+    await dropTab(path);
+    if (previous && previous !== path) await openRepo(previous);
+    else if (state.repo?.path === path) {
+      const next = state.settings.openTabs[0];
+      if (next) await openRepo(next.path);
+      else await newTab();
+    } else drawTabs();
+    // 시작 화면·"다시 열기" 가 사라진 레포지토리를 캐시로 그리지 않게(newTab 이 보관해 둔 것도 함께).
+    repoCache.delete(path);
+    toast(tab ? `'${name}' 폴더를 찾을 수 없어 탭을 닫았습니다.` : `'${name}' 폴더를 찾을 수 없습니다.`, 'info');
+  } finally {
+    goneHandling.delete(path);
+  }
 }
 
 /**
@@ -409,9 +471,16 @@ async function openSettings(section) {
 }
 
 async function startClone() {
-  const repo = await cloneDialog({ call, cloneDir: state.settings.cloneDir, withLogin, showError });
+  const status = await github.refreshSignedIn();
+  const repo = await cloneDialog({ call, cloneDir: state.settings.cloneDir, withLogin, showError, login: github.login, signedIn: !!status?.signedIn });
+  // GitHub 목록에서 이미 받아 둔 레포지토리를 골랐다 — 그 폴더를 연다.
+  if (repo?.open) {
+    await openRepo(repo.open);
+    return;
+  }
   if (repo) {
     toast(`${repo.name} 를 받았습니다.`, 'success');
+    if (repo.warning) toast(repo.warning, 'warning');
     await enterRepo(repo);
   }
 }
@@ -427,18 +496,69 @@ function showStart(notice) {
   const list = $('recent-list');
   const recent = state.settings.recent || [];
   $('recent-empty').hidden = recent.length > 0;
-  list.replaceChildren(...recent.map((r) => el('li', { class: 'recent-item', 'data-tip': r.path, onclick: () => openRepo(r.path) },
-    el('div', { class: 'recent-icon', text: r.name.slice(0, 1).toUpperCase() }),
-    el('div', { class: 'recent-text' }, el('div', { class: 'recent-name', text: r.name }), el('div', { class: 'recent-path muted small', text: r.path })),
+  // 폴더가 없는 레포지토리(옮김·이름 바꿈·지움·드라이브 분리)는 이름 옆에 뱃지를 달고, 누르면 여는 대신 안내 창을 띄운다(Unity Hub 식).
+  list.replaceChildren(...recent.map((r) => el('li', { class: `recent-item${r.missing ? ' missing' : ''}`, 'data-tip': r.path, onclick: () => (r.missing ? missingRepoDialog(r) : openRepo(r.path)),
+    oncontextmenu: (event) => {
+      event.preventDefault();
+      showMenu(event.clientX, event.clientY, recentMenu(r), { alt: altModifier(event) });
+    } },
+    el('div', { class: 'recent-text' },
+      el('div', { class: 'recent-name' }, el('span', { text: r.name }), r.missing ? el('span', { class: 'recent-badge' }, icon('alert', 11), '레포지토리를 찾을 수 없음') : null),
+      el('div', { class: 'recent-path muted small', text: r.path })),
     el('div', { class: 'recent-time muted small', text: relativeTime(r.openedAt) }),
     el('button', {
-      class: 'recent-remove', 'data-tip': '목록에서 빼기 (폴더는 지우지 않음)',
-      onclick: async (event) => {
+      class: 'recent-more', 'data-tip': '옵션', 'aria-label': '옵션',
+      onclick: (event) => {
         event.stopPropagation();
+        menuBelow(event.currentTarget, recentMenu(r), { alt: altModifier(event) });
+      },
+    }, icon('moreVert', 16)))));
+}
+
+/**
+ * 최근 목록 한 줄의 ⋮ 메뉴(우클릭도 같다). "목록에서 제거" 는 목록에서만 빼고 폴더는 지우지 않는다.
+ * Option(macOS)·Shift(Windows) 를 누르고 있으면 그 자리가 "휴지통으로 이동…" 으로 바뀐다 — 한 번 더 묻고 폴더를 휴지통으로 옮긴다.
+ */
+function recentMenu(r) {
+  const fm = state.platform === 'windows' ? '탐색기' : 'Finder';
+  return [
+    { label: `${fm} 에서 열기`, disabled: r.missing, action: () => call('openFolder', { path: r.path }).catch(showError) },
+    '-',
+    {
+      label: '목록에서 제거',
+      action: async () => {
         state.settings = await call('removeRecent', { path: r.path });
         showStart();
       },
-    }, icon('close', 12)))));
+      alt: { label: '휴지통으로 이동…', danger: true, disabled: r.missing, action: () => trashRepo(r) },
+    },
+  ];
+}
+
+/** 레포지토리 폴더를 휴지통으로 옮긴다. 되돌리기 어려우니 한 번 더 묻는다(빨간 확인). */
+async function trashRepo(r) {
+  const body = el('div', { class: 'modal-message missing-repo' }, el('p', {}, el('b', { text: r.name }), ' 폴더를 휴지통으로 옮깁니다.'));
+  const ok = await confirmDialog({ title: '레포지토리 폴더 삭제', ok: '휴지통으로 이동', cancel: '취소', danger: true, glyph: 'trash', tone: 'danger', extra: body });
+  if (!ok) return;
+  try {
+    state.settings = await call('trashRepo', { path: r.path });
+    repoCache.delete(r.path);
+    toast(`'${r.name}' 폴더를 휴지통으로 옮겼습니다.`, 'success');
+  } catch (error) {
+    showError(error);
+  }
+  showStart();
+}
+
+/** 최근 목록에서 폴더가 없는 레포지토리를 눌렀다: 어디서 못 찾았는지 알리고 목록에서 뺄지 묻는다. 폴더는 건드리지 않는다. */
+async function missingRepoDialog(r) {
+  const body = el('div', { class: 'modal-message missing-repo' },
+    el('p', {}, '지정된 위치 ', el('b', { text: r.path }), ' 에서 ', el('b', { text: r.name }), ' 레포지토리를 찾을 수 없습니다.'),
+    el('p', {}, '레포지토리 폴더가 이동되었거나, 이름이 변경되었거나, 삭제되었을 수 있습니다.'));
+  const remove = await confirmDialog({ title: '레포지토리를 찾을 수 없음', ok: '목록에서 레포지토리 제거', cancel: '닫기', glyph: 'alert', tone: 'warning', className: 'missing-repo-card', extra: body });
+  if (!remove) return;
+  state.settings = await call('removeRecent', { path: r.path });
+  showStart();
 }
 
 /** 고른 폴더가 레포지토리가 아니거나 git 을 못 찾았을 때의 안내 띠. */
@@ -474,26 +594,52 @@ async function pickRepo() {
 }
 
 async function openRepo(path) {
+  // 다른 레포지토리로 가기 전에 도구 화면을 닫는다(편집 중이면 저장할지 묻고, 취소하면 머문다).
+  if (toolOpen() && state.repo && state.repo.path !== path && (await closeTool()) === false) return;
+  const previous = state.repo?.path ?? null;
+  // 누르자마자 활성 탭을 옮긴다 — 여는 동안 아무 반응이 없어 보이지 않게. 실패하면 아래 catch 가 되돌린다.
+  drawTabs(path);
+  // 가운데 로딩 HUD: 탭에 보이는 이름 그대로(없으면 폴더 이름).
+  const tabName = (state.settings.openTabs ?? []).find((t) => t.path === path)?.name ?? path.split(/[\\/]/).filter(Boolean).pop();
+  const hud = switchHud.show(tabName);
+  const entry = previous && previous !== path ? repoCache.get(path) : null;
+  const request = call('openRepo', { path });
+  // 응답이 올 때까지 레포지토리에 묶인 요청(diff·stage…)은 미룬다 — 백엔드는 아직 이전 레포지토리다.
+  beginRepoSwitch(path, request);
   try {
-    await enterRepo(await busy('레포지토리를 여는 중…', () => call('openRepo', { path })));
+    if (entry) {
+      // 전에 본 탭: 캐시로 바로 그리고, 응답이 오면 레포지토리 정보를 갱신한 뒤 뒤에서 다시 읽는다.
+      const epoch = enterCached(entry);
+      const info = await request;
+      if (epoch !== repoEpoch) return;
+      Object.assign(state.repo, info);
+      state.settings = info.settings ?? state.settings;
+      drawTabs();
+      await refresh();
+      switchHud.hide(hud);
+      if (epoch !== repoEpoch) return;
+      afterEnter();
+      return;
+    }
+    await enterRepo(await request);
+    switchHud.hide(hud);
   } catch (error) {
+    switchHud.hide(hud, { immediate: true });
+    if (error?.gone) {
+      // 폴더가 사라진 탭을 눌렀다 — 캐시로 먼저 그렸으면 보던 레포지토리로 돌아간다.
+      await repoGone(path, entry && previous ? previous : null);
+      return;
+    }
     const notice = openFailure(error, path);
     if (notice) {
       if (state.repo) await newTab();
       showStart(notice);
-    } else showError(error);
-  }
-}
-
-/** 시작 화면(툴바가 없을 때)용 작업 중 표시. */
-async function busy(text, work) {
-  $('busy-text').textContent = text;
-  const timer = setTimeout(() => { $('busy').hidden = false; }, 150);
-  try {
-    return await work();
-  } finally {
-    clearTimeout(timer);
-    $('busy').hidden = true;
+    } else {
+      showError(error);
+      // 캐시로 먼저 그렸는데 열지 못했다 — 백엔드는 이전 레포지토리 그대로이니 화면도 되돌린다.
+      if (entry && previous) await openRepo(previous);
+      else drawTabs();
+    }
   }
 }
 
@@ -504,13 +650,83 @@ $('start-settings').addEventListener('click', () => openSettings());
 
 // ── 레포지토리 화면 ───────────────────────────────────────
 
+/** 탭을 바꾸는 동안 가운데 뜨는 로딩 HUD. */
+const switchHud = createSwitchHud();
+
+/** 바뀐 화면이 살짝 떠오르듯 들어오게 한다. */
+function playSwitchIn() {
+  const main = $('main');
+  main.classList.remove('switch-in');
+  void main.offsetWidth;
+  main.classList.add('switch-in');
+}
+
+/** 전에 열었던 탭의 마지막 snapshot 과 화면 상태(LRU). 그 탭으로 돌아가면 백엔드를 기다리지 않고 이것으로 먼저 그린다. */
+const repoCache = createRepoCache({ limit: 6 });
+/** 레포지토리를 바꿀 때마다 1 오른다. 늦게 온 응답(snapshot·lastFetch)이 지금 레포지토리 것인지 가리는 데 쓴다. */
+let repoEpoch = 0;
+
+/** 개발 점검용 구간 시간: `performance.measure('switch:…')` 로 남겨 점검 통로에서 읽는다. */
+function perfMeasure(name, started) {
+  try { performance.measure(`switch:${name}`, { start: started, end: performance.now() }); } catch { /* 지원 안 하는 웹뷰 */ }
+}
+
+/** 백엔드가 연 레포지토리로 화면을 바꾼다(앱 시작·Clone·만들기·처음 여는 탭). 다 읽을 때까지 skeleton 을 보인다. */
 async function enterRepo(repo) {
+  const t0 = performance.now();
   // 다른 레포지토리로 가기 전에 도구 화면을 닫는다(편집 중이면 저장할지 묻고, 취소하면 머문다).
   if (toolOpen() && state.repo && state.repo.path !== repo.path && (await closeTool()) === false) return;
-  state.repo = repo;
-  // 여는 동안 설정(탭 목록)이 바뀌었다.
-  state.settings = await call('getSettings').catch(() => state.settings);
+  const epoch = beginEnter(repo);
+  setRepoPath(repo.path);
+  // 여는 동안 설정(탭 목록)이 바뀌었다. openRepo 응답에 들어 있으면 그것을 쓴다(왕복 하나 덜).
+  state.settings = repo.settings ?? await call('getSettings').catch(() => state.settings);
+  if (epoch !== repoEpoch) return;
   drawTabs();
+  perfMeasure('enter:prepare', t0);
+  // 처음 읽는 동안 skeleton 을 덮는다(250ms 안에 읽히면 보이지 않는다).
+  graph.setLoading?.();
+  const skeleton = setTimeout(() => showSkeleton(true), 250);
+  const t1 = performance.now();
+  try {
+    await refresh();
+  } finally {
+    clearTimeout(skeleton);
+    showSkeleton(false);
+  }
+  perfMeasure('enter:refresh', t1);
+  if (epoch !== repoEpoch) return;
+  playSwitchIn();
+  afterEnter();
+  perfMeasure('enter:total', t0);
+}
+
+/** 전에 본 탭으로 돌아간다: 보관해 둔 snapshot·스크롤·고른 줄·커밋 메시지 초안으로 바로 그린다(백엔드를 기다리지 않는다). */
+function enterCached(entry) {
+  const t0 = performance.now();
+  const epoch = beginEnter(entry.repo);
+  drawTabs();
+  state.maxCount = entry.maxCount;
+  // 초안은 작업 패널을 그리기 전에 돌려놓아야 입력란에 들어간다.
+  state.draft = entry.draft;
+  graph.setWipSubject(entry.draft.summary);
+  applySnapshot(entry.snap, entry.fingerprint);
+  $('graph-scroll').scrollTop = entry.scrollTop;
+  // 고른 커밋이 있었으면 그 줄과 오른쪽 세부사항을 되살린다(세부사항 읽기는 openRepo 응답 뒤에 나간다).
+  if (entry.selected) graph.select(entry.selected);
+  playSwitchIn();
+  perfMeasure('enter:cached', t0);
+  return epoch;
+}
+
+/**
+ * 레포지토리를 바꾸는 공통 준비: 떠나는 레포지토리의 상태를 보관하고 화면 상태를 비운다. 새 에포크를 돌려준다.
+ * 뷰(브랜치 탐색기 등)는 여기서 다시 만든다 — 읽은 뒤에 만들면 두 번 그리고 두 번 읽는다.
+ */
+function beginEnter(repo) {
+  stashRepoState();
+  const epoch = ++repoEpoch;
+  ++detailToken;
+  state.repo = repo;
   state.fingerprint = null;
   state.draft = { summary: '', description: '', amend: false };
   state.status = null;
@@ -525,22 +741,43 @@ async function enterRepo(repo) {
   github.reset();
   state.maxCount = prefs.get('graph.count') ?? 5000;
   graph.setWipSubject('');
-  // 처음 읽는 동안 skeleton 을 덮는다(300ms 안에 읽히면 보이지 않는다).
-  graph.setLoading?.();
-  const skeleton = setTimeout(() => showSkeleton(true), 250);
-  try {
-    await refresh();
-  } finally {
-    clearTimeout(skeleton);
-    showSkeleton(false);
-  }
-  updateFetchInfo();
-  // 원본처럼 고른 줄 없이 오른쪽에 작업 패널을 보인다.
+  // 원본처럼 고른 줄 없이 오른쪽에 작업 패널을 보인다(다 읽으면 refreshOnce 가 그린다).
   wipShown = true;
-  graph.select(null, false);
-  showDetail(null, false);
   views?.relayout();
+  return epoch;
+}
+
+/** 레포지토리 화면을 다 그린 뒤: 마지막 페치 시각, PR 목록. */
+function afterEnter() {
+  updateFetchInfo();
   github.load();
+}
+
+/**
+ * 떠나는 레포지토리의 상태를 캐시에 둔다. 아직 다 읽지 않았거나(스냅샷 없음) 너무 많이 읽었으면(무한 스크롤로 불어난 것) 두지 않는다.
+ * 보관하는 것은 자료뿐이다 — 화면 요소는 그래프·사이드바가 하나씩이라 다시 그린다(수 ms).
+ */
+function stashRepoState() {
+  const repo = state.repo;
+  if (!repo) return;
+  if (!state.fingerprint || !state.history || state.history.commits.length > 20000) {
+    repoCache.delete(repo.path);
+    return;
+  }
+  const { settings: _settings, ...info } = repo;
+  repoCache.set(repo.path, {
+    repo: info,
+    snap: {
+      status: state.status, history: state.history, refs: state.refs,
+      remotes: state.remotes, worktrees: state.worktrees, submodules: state.submodules,
+      undo: state.undo, template: state.template, mergeMessage: state.mergeMessage, mergeConflicts: state.mergeConflicts,
+    },
+    fingerprint: state.fingerprint,
+    maxCount: state.maxCount,
+    draft: state.draft,
+    selected: graph.selected,
+    scrollTop: $('graph-scroll').scrollTop,
+  });
 }
 
 // 새로고침 중에 또 요청이 오면(작업이 끝남·창 포커스) 버리지 않고 끝난 뒤 한 번 더 읽는다 — 먼저 읽은 상태가 작업 전 것일 수 있다.
@@ -563,10 +800,30 @@ function refresh() {
   return refreshPromise;
 }
 
+/** 바뀐 것이 있는지 비교하는 서명. 창에 포커스가 올 때도 새로고침하므로, 같으면 다시 그리지 않는다(누르던 버튼·입력란 포커스를 지킨다). */
+function snapshotFingerprint(snap) {
+  const { status, history, refs } = snap;
+  return JSON.stringify([status, refs, snap.remotes, snap.worktrees, snap.submodules, snap.undo, history.head, history.commits.length,
+    history.commits.map((c) => c.hash + c.refs.map((r) => r.name).join())]);
+}
+
 async function refreshOnce() {
+  const repo = state.repo;
+  const epoch = repoEpoch;
+  const maxCount = state.maxCount;
   try {
-    const snap = await call('snapshot', { maxCount: state.maxCount });
-    const { status, history, refs } = snap;
+    const t0 = performance.now();
+    const snap = await call('snapshot', { maxCount });
+    perfMeasure('refresh:ipc', t0);
+    const t1 = performance.now();
+    const fingerprint = snapshotFingerprint(snap);
+    perfMeasure('refresh:fingerprint', t1);
+    if (epoch !== repoEpoch) {
+      // 그새 다른 레포지토리로 갔다 — 버리지 말고 그 레포지토리의 캐시를 더 새것으로 바꿔 둔다.
+      repoCache.update(repo.path, { snap, fingerprint, maxCount });
+      return;
+    }
+    const { status } = snap;
     // 충돌을 다 풀어(또는 작업을 중단해) 그 파일이 더는 충돌이 아니면 병합 편집기를 닫는다.
     if (mergeView.isOpen && !status.unstaged.some((e) => e.path === mergeView.path && e.state === 'conflicted')) closeMerge();
     // 파일을 더 고쳐도 상태(M)는 그대로일 수 있으니, 열린 diff 는 늘 다시 읽는다(같으면 다시 그리지 않는다).
@@ -576,29 +833,35 @@ async function refreshOnce() {
       if (list.some((e) => e.path === target.path)) diffView.reload();
       else closeDiff();
     }
-    // 바뀐 것이 없으면 다시 그리지 않는다. 창에 포커스가 올 때도 새로고침하므로, 다시 그리면 그 클릭으로 누르던 버튼이 사라지고
-    // 입력란 포커스도 잃는다.
-    const fingerprint = JSON.stringify([status, refs, snap.remotes, snap.worktrees, snap.submodules, snap.undo, history.head, history.commits.length,
-      history.commits.map((c) => c.hash + c.refs.map((r) => r.name).join())]);
     if (fingerprint === state.fingerprint) return;
-    state.fingerprint = fingerprint;
-    const operationStarted = status.operation && !state.status?.operation;
-    Object.assign(state, {
-      status, history, refs,
-      remotes: snap.remotes, worktrees: snap.worktrees, submodules: snap.submodules,
-      undo: snap.undo, template: snap.template, mergeMessage: snap.mergeMessage, mergeConflicts: snap.mergeConflicts ?? [],
-    });
-    state.repo.remotes = refs.remotes;
-    render();
-    graph.setData(history, status);
-    graphSearch.refresh();
-    $('graph-empty').hidden = history.commits.length > 0;
-    // 충돌로 멈춘 작업이 새로 시작되면 변경 목록(WIP)을 보인다 — 거기서 충돌을 푼다.
-    if (operationStarted && graph.hasWip) graph.select('wip');
-    else if (graph.selected === 'wip' || graph.selected == null) showDetail(graph.selected, false);
+    applySnapshot(snap, fingerprint);
   } catch (error) {
     showError(error);
   }
+}
+
+/** snapshot 을 화면 상태에 넣고 전부 다시 그린다(새로 읽은 것이든 캐시든). */
+function applySnapshot(snap, fingerprint) {
+  const { status, history, refs } = snap;
+  state.fingerprint = fingerprint;
+  const t0 = performance.now();
+  const operationStarted = status.operation && !state.status?.operation;
+  Object.assign(state, {
+    status, history, refs,
+    remotes: snap.remotes, worktrees: snap.worktrees, submodules: snap.submodules,
+    undo: snap.undo, template: snap.template, mergeMessage: snap.mergeMessage, mergeConflicts: snap.mergeConflicts ?? [],
+  });
+  state.repo.remotes = refs.remotes;
+  render();
+  perfMeasure('refresh:render', t0);
+  const t1 = performance.now();
+  graph.setData(history, status);
+  graphSearch.refresh();
+  perfMeasure('refresh:graph', t1);
+  $('graph-empty').hidden = history.commits.length > 0;
+  // 충돌로 멈춘 작업이 새로 시작되면 변경 목록(WIP)을 보인다 — 거기서 충돌을 푼다.
+  if (operationStarted && graph.hasWip) graph.select('wip');
+  else if (graph.selected === 'wip' || graph.selected == null) showDetail(graph.selected, false);
 }
 
 function render() {
@@ -666,9 +929,9 @@ async function showDetail(key, fetch = true) {
     return;
   }
   if (!key || !fetch) return;
-  // 해시·제목·작성자는 그래프의 요약으로 바로 보이고, 파일 칸만 읽는 동안 회색 막대(원본 GraphCommitDetail.Show).
+  // 해시·제목·작성자는 그래프의 요약으로 바로 보이고, 파일 칸은 읽는 동안 비워 둔다.
   const commit = state.history?.commits.find((c) => c.hash === key);
-  renderCommitSkeleton(container, commit);
+  renderCommitSkeleton(container, commit, actions);
   try {
     const detail = await call('commitDetail', { hash: key });
     // stash 줄은 사이드바에서 열 때처럼 이름·메시지를 머리에.
@@ -781,9 +1044,42 @@ async function undoRedo(which) {
 
 // ── diff ─────────────────────────────────────────────
 
+/**
+ * 커밋의 diff 캐시. 커밋 diff 는 바뀌지 않으므로(해시가 내용을 정한다) 한 번 읽은 것은 다시 묻지 않고, 마우스를 올린 파일은
+ * 누르기 전에 미리 읽어 둔다 — 누르면 git 왕복 없이 바로 보인다. 작업 사본·스테이지 diff 는 파일이 바뀌므로 캐시하지 않는다.
+ * 값은 읽는 중인 Promise(같은 파일을 겹쳐 묻지 않게). 실패한 것은 지워 다음에 다시 읽는다. 오래된 것부터 버린다.
+ */
+const diffCache = new Map();
+const DIFF_CACHE_MAX = 60;
+let prefetchTimer = 0;
+
+function diffLoadKey(target, options) {
+  return JSON.stringify([target.hash, target.path, target.originalPath ?? null, options.context, !!options.ignoreWhitespace, options.algorithm ?? null]);
+}
+
+function loadDiff(target, options) {
+  const full = { ...options, algorithm: prefs.get('diff.algorithm') || null };
+  if (target.kind !== 'commit') return call('diff', { target, options: full });
+  const key = diffLoadKey(target, full);
+  const hit = diffCache.get(key);
+  if (hit) {
+    // 다시 쓴 것은 맨 뒤로(최근 순서 유지).
+    diffCache.delete(key);
+    diffCache.set(key, hit);
+    return hit;
+  }
+  const pending = call('diff', { target, options: full }).catch((error) => {
+    diffCache.delete(key);
+    throw error;
+  });
+  diffCache.set(key, pending);
+  while (diffCache.size > DIFF_CACHE_MAX) diffCache.delete(diffCache.keys().next().value);
+  return pending;
+}
+
 const diffApi = {
   prefs,
-  load: (target, options) => call('diff', { target, options: { ...options, algorithm: prefs.get('diff.algorithm') || null } }),
+  load: loadDiff,
   async applyLines(action, target, fingerprint, lines, context) {
     if (state.busy) return false;
     // 원본 GitDiffPanel.DiscardLinesAsync: 되돌릴 수 없어 한 번 묻는다. Stage 는 충돌 표시가 남았으면 묻는다(목록의 Stage 와 같은 규칙).
@@ -849,11 +1145,19 @@ async function openDiffView(key, target, mode, title, entryState) {
   renderRail();
 }
 
+/** 그 파일의 diff 가 이미 열려 있으면 닫고 true(목록에서 같은 파일을 다시 누를 때). */
+function toggleOffDiff(key) {
+  if (!diffView.isOpen || state.diffKey !== key) return false;
+  closeDiff();
+  return true;
+}
+
 function closeDiff() {
   if (!diffView.isOpen) return;
   diffView.close();
   state.diffKey = null;
   $('diff-view').hidden = true;
+  for (const row of document.querySelectorAll('.file-row.active[data-diff-key]')) row.classList.remove('active');
   showDetail(graph.selected, false);
   renderRail();
 }
@@ -957,7 +1261,8 @@ const actions = {
     closeMerge();
     await act('중단하는 중…', () => call('abortOperation'), { success: () => `${josa(OP_NAME[op], '을', '를')} 중단했습니다.` });
   },
-  openDiff(entry, mode) {
+  openDiff(entry, mode, { toggle = false } = {}) {
+    if (toggle && toggleOffDiff(diffKey(mode, entry.path))) return;
     if (entry.state === 'conflicted') {
       openMerge(entry.path);
       return;
@@ -967,8 +1272,21 @@ const actions = {
       : { kind: 'unstaged', path: entry.path, untracked: entry.state === 'untracked' };
     openDiffView(diffKey(mode, entry.path), target, mode, entry.path, entry.state);
   },
-  openCommitDiff(hash, file) {
+  openCommitDiff(hash, file, { toggle = false } = {}) {
+    if (toggle && toggleOffDiff(diffKey(`commit-${hash}`, file.path))) return;
     openDiffView(diffKey(`commit-${hash}`, file.path), { kind: 'commit', hash, path: file.path, originalPath: file.originalPath ?? null }, 'commit', file.path, file.state);
+  },
+  /**
+   * 커밋 파일에 마우스를 올렸을 때: 잠깐 머물면 그 diff 를 미리 읽어 캐시에 둔다(누르기 전에 읽기가 끝나 바로 보인다).
+   * 목록을 스치듯 지나갈 때 줄마다 읽지 않게 조금 기다리고, 그 사이 다른 줄로 옮기면 앞 것은 취소한다. 그림 파일은 뺀다(그림 diff 가 따로 읽는다).
+   */
+  prefetchCommitDiff(hash, file) {
+    clearTimeout(prefetchTimer);
+    if (state.busy || /\.(png|jpe?g|gif|bmp|webp|tga|psd)$/i.test(file.path)) return;
+    prefetchTimer = setTimeout(() => {
+      const target = { kind: 'commit', hash, path: file.path, originalPath: file.originalPath ?? null };
+      loadDiff(target, diffView.loadOptions(prefs, state.settings.diffLayout || 'inline')).catch(() => {});
+    }, 60);
   },
   activeDiffKey: () => state.diffKey,
   /** git 작업이 도는 중인지(원본 Runner.IsBusy). 목록 버튼·메뉴가 끈다. */
@@ -1201,6 +1519,8 @@ const actions = {
   identity: () => state.repo?.identity ?? { name: '', email: '' },
   onSummary: (text) => graph.setWipSubject(text),
   avatarUrl: (email, hash) => avatars.url(email, hash),
+  avatarPeek: (email) => avatars.peek(email),
+  avatarImage: (email) => avatars.image(email),
   revealCommit: (hash) => revealCommit(hash),
   hasRemote: () => (state.refs?.remotes.length ?? 0) > 0,
   template: () => state.template,
@@ -1395,12 +1715,22 @@ async function pull(mode) {
 /** 도구 막대 오른쪽의 "마지막 Fetch: 3분 전". */
 async function updateFetchInfo() {
   if (!state.repo) return;
-  toolbar.setLastFetch(await call('lastFetch').catch(() => null));
+  const epoch = repoEpoch;
+  const at = await call('lastFetch').catch(() => null);
+  if (epoch === repoEpoch) toolbar.setLastFetch(at);
 }
 
 setInterval(updateFetchInfo, 30000);
 
-on('changed', () => refresh());
+// 파일 변경 알림. 탭을 바꾼 직후 이전 레포지토리의 감시가 늦게 알린 것은 버린다.
+on('changed', (data) => {
+  if (data?.repo && state.repo && data.repo !== state.repo.path) return;
+  refresh();
+});
+// 레포지토리 폴더가 사라졌다(감시·5초 점검). 그 탭을 조용히 거둔다.
+on('gone', (data) => {
+  if (data?.repo && state.repo?.path === data.repo) repoGone(data.repo);
+});
 // macOS 전체 화면에서는 신호등 버튼이 사라지므로 탭 막대 왼쪽 여백을 거둔다.
 on('window', (data) => document.body.classList.toggle('fullscreen', !!data?.fullscreen));
 on('fetching', () => toolbar.setFetch({ fetching: true }));
@@ -1535,7 +1865,7 @@ function renderRail() {
     icon(glyph, 18, 'rail-icon'), badge ? el('span', { class: 'rail-badge', text: badge > 99 ? '99+' : String(badge) }) : null);
   const changes = new Set([...(state.status?.staged ?? []), ...(state.status?.unstaged ?? [])].map((e) => e.path)).size;
   const [mainGlyph, mainLabel] = MAIN_TAB[layoutName()] ?? MAIN_TAB.gitkraken;
-  const tabs = [['main', mainGlyph, mainLabel, changes], ['explorer', 'branch', '브랜치 탐색기', 0], ['workspace', 'folder', '워크스페이스', 0], ['changesets', 'history', '체인지 세트', 0]];
+  const tabs = [['main', mainGlyph, mainLabel, changes], ['explorer', 'branch', '브랜치 탐색기', 0], ['workspace', 'folder', '워크스페이스', 0]];
   const counts = {
     local: refs.local.length, remote: refs.remote.length, worktrees: state.worktrees?.filter((w) => !w.bare).length ?? 0, stash: refs.stashes.length,
     prs: github.count, submodules: state.submodules?.length ?? 0, tags: refs.tags.length,
@@ -1561,6 +1891,7 @@ const toolsUi = createTools({
   diffApi,
   revealCommit: (hash) => revealCommit(hash),
   avatarUrl: (email, hash) => avatars.url(email, hash),
+  avatarPeek: (email) => avatars.peek(email),
   openEditor: (path, line) => call('openInEditor', { path, line, editor: prefs.get('editor') ?? '' }).catch(showError),
   onSaved: () => refresh(),
   onOpen: () => {
@@ -1683,6 +2014,7 @@ const MENU = {
   newTag: { label: '새 태그', keys: 'mod+shift+KeyG', repo: true, on: () => !!state.history?.head, run: () => refsUi.createTag(state.history.head, 'HEAD') },
   newWorktree: { label: '새 워크트리', repo: true, run: () => refsUi.addWorktree() },
   shortcuts: { label: '키보드 단축키 보기', run: () => showShortcuts() },
+  about: { label: 'Ramus 정보', run: () => showAbout() },
 };
 
 /** 메뉴 항목 하나를 실행한다. 카드가 떠 있거나 연결 화면이면 크기·편집 말고는 무시한다(카드 뒤 화면을 바꾸지 않게). */
@@ -1965,12 +2297,16 @@ function createViewsOnce() {
 
 (async () => {
   try {
-    const [init, account] = await Promise.all([call('init'), github.refreshSignedIn()]);
+    // 글꼴(IBM Plex Sans KR)을 첫 화면 전에 다 읽어 둔다 — 그래프는 캔버스로 글자 폭을 재므로, 읽기 전에 재면 시스템 글꼴 폭으로 어긋난다.
+    const fontsReady = Promise.all([400, 500, 600, 700].map((w) => document.fonts?.load(`${w} 13px "IBM Plex Sans KR"`))).catch(() => {});
+    const [init, account] = await Promise.all([call('init'), github.refreshSignedIn(), fontsReady]);
     state.settings = init.settings;
     state.platform = init.platform;
     state.version = init.version;
     document.documentElement.dataset.platform = init.platform;
     if (init.platform === 'macos') bindTitlebar($('tabs'), call);
+    // 개발 빌드: 점검 통로(RAMUS_DEV_PORT)에서 탭 전환을 일으키고 시간을 읽는 손잡이.
+    if (window.__boot?.dev) window.__ramus = { switchHud, openRepo, closeTab, refresh, call, state, graph, measures: () => performance.getEntriesByType('measure').map((m) => [m.name, Math.round(m.duration)]), clearMeasures: () => performance.clearMeasures() };
     document.body.dataset.layout = prefs.get('layout') ?? 'gitkraken';
     for (const name of ['sidebar', 'detail']) applySplit(name, prefs.get(`split.${name}`) ?? SPLIT_DEFAULT[name]);
     if (uiScale() !== 1) call('setZoom', { scale: uiScale() });

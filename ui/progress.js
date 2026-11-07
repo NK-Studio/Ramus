@@ -27,7 +27,12 @@ export function onProgress(handler) {
   return () => handlers.delete(handler);
 }
 
-const number = (n) => Number(n).toLocaleString('ko-KR');
+/** git 단계 이름의 한국어("Receiving objects" → "받기"). 모르는 이름은 그대로. */
+export function phaseName(phase) {
+  return PHASES[phase] ?? phase;
+}
+
+export const number = (n) => Number(n).toLocaleString('ko-KR');
 
 /** "받기 45% (1,234/2,700) · 1.20 MiB | 2.00 MiB/s", 서버 단계는 앞에 "서버 ". */
 export function progressText(p) {

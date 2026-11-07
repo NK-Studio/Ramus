@@ -17,12 +17,44 @@ function test(name, fn) {
   }
 }
 
-/** 원본 Spans(): 조각을 [글, 갈래] 로. */
+/** 원본 Spans(): 조각을 [글, 갈래] 로. 괄호 짝 색(bracket-*)은 원본에 없으므로 빼고 본다(아래 따로 시험한다). */
 function spans(line, language, state = STATE_NORMAL) {
-  return tokenize(line, language, state).spans.map((span) => [line.substr(span.start, span.length), span.kind]);
+  return tokenize(line, language, state).spans
+    .filter((span) => !span.kind.startsWith('bracket-'))
+    .map((span) => [line.substr(span.start, span.length), span.kind]);
 }
 
 // ── GitSyntax ──
+
+test('Test_Tokenize_CLike_ControlKeywordsAreSeparate', () => {
+  // VSCode 처럼 흐름을 바꾸는 키워드(control)는 다른 키워드와 따로 칠한다.
+  assert.deepEqual(spans('public static string A { get { return x; } }', 'csharp'), [
+    ['public', 'keyword'], ['static', 'keyword'], ['string', 'keyword'], ['get', 'keyword'], ['return', 'control'],
+  ]);
+});
+
+test('Test_Tokenize_CLike_BracketDepthCarriesAcrossLines', () => {
+  // 괄호는 깊이마다 세 색을 돌려 쓰고, 깊이는 줄 끝 상태로 다음 줄에 이어진다.
+  const brackets = (line, state) => {
+    const r = tokenize(line, 'csharp', state);
+    return { kinds: r.spans.filter((x) => x.kind.startsWith('bracket-')).map((x) => `${line[x.start]}${x.kind.slice(8)}`), state: r.state };
+  };
+  const a = brackets('class A {', STATE_NORMAL);
+  assert.deepEqual(a.kinds, ['{0']);
+  const b = brackets('  void F() { G(x[1]); }', a.state);
+  assert.deepEqual(b.kinds, ['(1', ')1', '{1', '(2', '[0', ']0', ')2', '}1']);
+  const c = brackets('}', b.state);
+  assert.deepEqual(c.kinds, ['}0']);
+  assert.equal(c.state, STATE_NORMAL);
+});
+
+test('Test_Tokenize_CLike_BlockCommentStateSurvivesBracketDepth', () => {
+  // 괄호 깊이가 상태에 실려도 블록 주석은 이어진다.
+  const a = tokenize('{ /* open', 'clike', STATE_NORMAL);
+  const b = tokenize('still */ }', 'clike', a.state);
+  assert.deepEqual(b.spans.map((x) => [ 'still */ }'.substr(x.start, x.length), x.kind]), [['still */', 'comment'], ['}', 'bracket-0']]);
+  assert.equal(b.state, STATE_NORMAL);
+});
 
 test('Test_Tokenize_CSharp_KeywordsStringsNumbersComments', () => {
   assert.deepEqual(spans('public int x = 42; string s = "a\\"b"; // done', 'clike'), [
@@ -41,7 +73,7 @@ test('Test_Tokenize_BlockComment_CarriesStateAcrossLines', () => {
 
   assert.deepEqual(spans('still */ return 1;', 'clike', state), [
     ['still */', 'comment'],
-    ['return', 'keyword'],
+    ['return', 'control'],
     ['1', 'number'],
   ]);
 });
@@ -301,6 +333,68 @@ test('Test_LanguageOf_ByExtension', () => {
   assert.equal(languageOf('Assets/Web/style.css'), 'css');
   assert.equal(languageOf('Assets/Web/app.js'), 'clike');
   assert.equal(languageOf('README.md'), null);
+  assert.equal(languageOf('tools/build.py'), 'python');
+  assert.equal(languageOf('stubs/a.pyi'), 'python');
+});
+
+// ── Python(이 포트에서 더한 말, PyCharm 색 갈래 py-*) ──
+
+test('python_KeywordsSelfStringsKwargs', () => {
+  assert.deepEqual(spans("        self.assertEqual('', self.tool._classify('Passed', ['Skipped']))", 'python'), [
+    ['self', 'py-self'], ["''", 'py-string'], ['self', 'py-self'], ["'Passed'", 'py-string'], ["'Skipped'", 'py-string'],
+  ]);
+  assert.deepEqual(spans("(self.directory / 'a.json').write_text(json.dumps(x), encoding='utf-8')", 'python'), [
+    ['self', 'py-self'], ["'a.json'", 'py-string'], ['encoding', 'py-kwarg'], ["'utf-8'", 'py-string'],
+  ]);
+  assert.deepEqual(spans('if __name__ == \'__main__\':', 'python'), [['if', 'py-keyword'], ["'__main__'", 'py-string']]);
+  assert.deepEqual(spans('def find_font() -> str | None:', 'python'), [
+    ['def', 'py-keyword'], ['find_font', 'py-function'], ['None', 'py-keyword'],
+  ]);
+  // obj.self · obj.None 같은 멤버는 칠하지 않는다.
+  assert.deepEqual(spans('x = a.self', 'python'), []);
+});
+
+test('python_DefDefaultsAreNotKwargs', () => {
+  assert.deepEqual(spans('def f(a, b=1, *, c: int = 2):', 'python'), [
+    ['def', 'py-keyword'], ['f', 'py-function'], ['1', 'py-number'], ['2', 'py-number'],
+  ]);
+  // 여러 줄 def 머리도 괄호가 닫힐 때까지 기본값으로 본다.
+  const a = tokenize('def f(', 'python');
+  assert.deepEqual(tokenize('    b=1,', 'python', a.state).spans.map((s) => s.kind), ['py-number']);
+  // 여러 줄 호출은 이름=값 을 이어서 본다.
+  const call = tokenize("path.write_text('x',", 'python');
+  const next = '    encoding=\'utf-8\')';
+  assert.deepEqual(spans(next, 'python', call.state), [['encoding', 'py-kwarg'], ["'utf-8'", 'py-string']]);
+  assert.equal(tokenize(next, 'python', call.state).state, STATE_NORMAL);
+});
+
+test('python_EscapesPrefixesNumbersComments', () => {
+  assert.deepEqual(spans("t = '# 메모\\n  FAIL\\x41\\d'", 'python'), [
+    ["'# 메모", 'py-string'], ['\\n', 'py-escape'], ['  FAIL', 'py-string'], ['\\x41', 'py-escape'], ["\\d'", 'py-string'],
+  ]);
+  // raw 문자열은 이스케이프를 따로 칠하지 않는다.
+  assert.deepEqual(spans("re.sub(r'\\\\1', x)  # 바꾼다", 'python'), [["r'\\\\1'", 'py-string'], ['# 바꾼다', 'py-comment']]);
+  assert.deepEqual(spans('f"{a}" + b\'z\' + 0x1F + 1_000 + 2.5e3j', 'python'), [
+    ['f"{a}"', 'py-string'], ["b'z'", 'py-string'], ['0x1F', 'py-number'], ['1_000', 'py-number'], ['2.5e3j', 'py-number'],
+  ]);
+  assert.deepEqual(spans('#!/usr/bin/env python3', 'python'), [['#!/usr/bin/env python3', 'py-comment']]);
+  assert.deepEqual(spans('@dataclass.field(x=1)', 'python'), [['@dataclass.field', 'py-decorator'], ['x', 'py-kwarg'], ['1', 'py-number']]);
+});
+
+test('python_TripleQuotedStringsCarryAcrossLines', () => {
+  // 문장 첫자리의 삼중 따옴표는 문서 문자열.
+  const a = tokenize('"""자연 회복 고정 구도', 'python');
+  assert.deepEqual(a.spans.map((s) => s.kind), ['py-docstring']);
+  const b = tokenize('    python3 a.py \\n', 'python', a.state);
+  assert.deepEqual(b.spans.map((s) => s.kind), ['py-docstring']);
+  const c = tokenize('끝."""  # x', 'python', b.state);
+  assert.deepEqual(spans('끝."""  # x', 'python', b.state), [['끝."""', 'py-docstring'], ['# x', 'py-comment']]);
+  assert.equal(c.state, STATE_NORMAL);
+  // 대입의 삼중 따옴표는 보통 문자열이고 이스케이프도 칠한다.
+  const d = tokenize("X = '''a\\t", 'python');
+  assert.deepEqual(d.spans.map((s) => s.kind), ['py-string', 'py-escape']);
+  assert.deepEqual(spans("b'''", 'python', d.state), [["b'''", 'py-string']]);
+  assert.equal(tokenize("b'''", 'python', d.state).state, STATE_NORMAL);
 });
 
 // ── 이 포트의 HTML 출력(원본에 없는 몫: ui/tools.js 의 블레임 · 코드 편집기가 쓰는 모양) ──

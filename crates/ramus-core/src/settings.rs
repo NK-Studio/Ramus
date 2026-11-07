@@ -122,7 +122,7 @@ impl Settings {
 }
 
 /// Windows 는 경로의 대소문자·구분자를 가리지 않는다.
-fn same_path(a: &str, b: &str) -> bool {
+pub fn same_path(a: &str, b: &str) -> bool {
     if cfg!(windows) {
         a.replace('\\', "/").eq_ignore_ascii_case(&b.replace('\\', "/"))
     } else {

@@ -3,9 +3,9 @@ resolver = "3"
 members = ["crates/ramus-core", "crates/ramus-app"]
 
 [workspace.package]
-version = "0.3.0"
+version = "1.0.0"
 edition = "2024"
-license = "MIT"
+license = "Unlicense"
 authors = ["NK Studio"]
 
 [workspace.dependencies]
@@ -15,3 +15,11 @@ serde_json = "1"
 [profile.release]
 lto = "thin"
 strip = true
+
+# 개발 빌드도 매일 쓰는 앱이다: 의존 크레이트(serde·git 출력 파싱에 쓰는 것들)는 최적화해 두고(한 번만 컴파일된다),
+# 우리 코드는 디버그 정보를 남긴 채 가볍게만 최적화한다 — diff 파싱·JSON 직렬화가 디버그 빌드에서 5~10배 느렸다.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.ramus-core]
+opt-level = 1

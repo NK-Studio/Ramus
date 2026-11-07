@@ -271,10 +271,9 @@ export function createSidebar(container, ctx) {
     list.forEach((section, index) => {
       if (filtering && !section.rows.length) return;
       const key = `section:${section.id}`;
-      // 빈 구역은 원본처럼 늘 펼친 모양(⌄)으로 두고 안내 한 줄을 보인다. 누를 것이 없다.
-      const empty = !section.rows.length;
-      const expanded = filtering || empty || isOpen(key, DEFAULT_OPEN.has(section.id));
-      const flip = () => { if (!empty) toggle(key, DEFAULT_OPEN.has(section.id)); };
+      // 빈 구역도 다른 구역처럼 접고 펼친다. 펼쳐 두면 안내 한 줄("…이 없습니다")을 보인다.
+      const expanded = filtering || isOpen(key, DEFAULT_OPEN.has(section.id));
+      const flip = () => toggle(key, DEFAULT_OPEN.has(section.id));
       const header = el('div', {
         class: `side-section${expanded ? ' open' : ''}${key === focused ? ' focused' : ''}`,
         'data-key': key,

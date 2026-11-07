@@ -29,6 +29,19 @@ pub struct Progress {
 type ProgressSink = Box<dyn Fn(&Progress) + Send + Sync>;
 static PROGRESS_SINK: OnceLock<ProgressSink> = OnceLock::new();
 
+/// `RAMUS_TRACE` 환경 변수가 있으면 git 호출마다 걸린 시간을 stderr 에 적는다(개발 중 병목 찾기).
+pub fn trace_enabled() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("RAMUS_TRACE").is_some())
+}
+
+/// `[trace] 이름 12ms` 꼴로 stderr 에 적는다. `RAMUS_TRACE` 가 없으면 아무것도 하지 않는다.
+pub fn trace(name: &str, started: Instant) {
+    if trace_enabled() {
+        eprintln!("[trace] {name} {}ms", started.elapsed().as_millis());
+    }
+}
+
 /// git 진행 줄을 받을 곳을 한 번 정한다(앱이 화면으로 보낸다). 모든 GitRunner 가 함께 쓴다.
 pub fn set_progress_sink(sink: impl Fn(&Progress) + Send + Sync + 'static) {
     let _ = PROGRESS_SINK.set(Box::new(sink));
@@ -198,6 +211,19 @@ impl GitRunner {
 
     /// `input` 은 표준 입력으로 흘려 넣는다(`git apply --cached` 의 패치 등).
     pub fn run_with<S: AsRef<str>>(&self, dir: &Path, args: &[S], input: Option<&str>, extra_env: &HashMap<String, String>) -> GitOutput {
+        let started = Instant::now();
+        let out = self.run_inner(dir, args, input, extra_env);
+        if trace_enabled() {
+            let mut line = args.iter().map(|a| a.as_ref()).collect::<Vec<_>>().join(" ");
+            if line.len() > 72 {
+                line = format!("{}…", line.chars().take(72).collect::<String>());
+            }
+            trace(&format!("git {line} ({}B)", out.stdout.len()), started);
+        }
+        out
+    }
+
+    fn run_inner<S: AsRef<str>>(&self, dir: &Path, args: &[S], input: Option<&str>, extra_env: &HashMap<String, String>) -> GitOutput {
         let globals = self.globals();
         let git = globals.git_path.clone().unwrap_or_else(|| PathBuf::from("git"));
         let mut cmd = Command::new(&git);

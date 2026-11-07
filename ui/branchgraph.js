@@ -5,6 +5,7 @@
 
 import { namedLaneRgb } from './graph.js';
 import { formatDate, initials } from './util.js';
+import { icon } from './icons.js';
 
 // ── GraphStyle ──────────────────────────────────────
 const COLUMN_WIDTH = 110;
@@ -16,6 +17,8 @@ const NODE_RADIUS = 15;
 const HEADER_HEIGHT = 24;
 /** 이보다 작게 축소하면 글자를 숨긴다(읽을 수 없는 크기라). */
 const TEXT_ZOOM_THRESHOLD = 0.55;
+/** 병합되어 이름이 없는 가지(anonymous)의 커밋·선을 이만큼만 진하게 그린다 — 살아 있는 가지보다 한 발 물러나 보이게. */
+const MERGED_LANE_OPACITY = 0.6;
 /** 병합 선(Unity VCS Branch Explorer 처럼 가지 색과 따로 초록). */
 const MERGE_LINE = [0.42, 0.78, 0.55].map((c) => c * 255);
 /** 태그(레이블)가 붙은 커밋을 두르는 고리. */
@@ -105,7 +108,14 @@ export function buildModel(h) {
     node.refs = raw.join(', ');
   }
   const edges = (h?.graph?.edges ?? []).map((e) => ({ parent: nodes[n - 1 - e.parent], child: nodes[n - 1 - e.child], merge: !!e.merge }));
-  return { nodes, lanes, edges, nodeByHash, truncated: nodes.filter((node) => node.truncated) };
+  // 줄마다 그 줄을 쓰는 가지들(한 줄을 칸이 겹치지 않는 가지 여럿이 나눠 쓴다) — 선이 줄을 따라 달려도 되는지 볼 때 쓴다.
+  const lanesByRow = new Map();
+  for (const lane of lanes) {
+    if (lane.lastColumn < 0) continue;
+    if (!lanesByRow.has(lane.row)) lanesByRow.set(lane.row, []);
+    lanesByRow.get(lane.row).push(lane);
+  }
+  return { nodes, lanes, edges, nodeByHash, lanesByRow, truncated: nodes.filter((node) => node.truncated) };
 }
 
 /**
@@ -160,6 +170,12 @@ export function createBranchGraph(opts = {}) {
   const nodePos = (node) => toCanvas(worldOf(node));
   const tubeRadius = () => (NODE_RADIUS + 8) * viewport.zoom;
   const isVisibleX = (x, margin) => x >= -margin && x <= size.w + margin;
+  const isCompact = () => viewport.zoom < TEXT_ZOOM_THRESHOLD;
+  const selectedLane = () => (selectedHash ? graph?.nodeByHash.get(selectedHash)?.lane ?? null : null);
+  /** 가지 관을 칠하는 진하기(고른 가지는 진하게, 많이 축소하면 조금 더 진하게). */
+  const tubeFillAlpha = (lane) => (lane === selectedLane() ? (isCompact() ? 0.3 : 0.22) : isCompact() ? 0.15 : 0.07);
+  /** 병합된 가지의 커밋이 얼마나 진한지: 살짝 흐리게, 지금 커밋(HEAD)·고른 커밋은 그대로. */
+  const nodeOpacity = (node) => (node.lane.anonymous && !node.isHead && node.commit.hash !== selectedHash ? MERGED_LANE_OPACITY : 1);
 
   function panBy(dx, dy) {
     viewport.pan = { x: viewport.pan.x - dx, y: viewport.pan.y - dy };
@@ -302,7 +318,9 @@ export function createBranchGraph(opts = {}) {
    */
   function drawLaneTubes(g) {
     const radius = tubeRadius();
-    const selected = selectedHash ? graph.nodeByHash.get(selectedHash)?.lane : null;
+    const selected = selectedLane();
+    // 많이 축소하면 테두리를 빼고 띠만 조금 진하게 칠한다 — 얇은 관의 위·아래 테두리와 가운데 선이 세 줄로 겹쳐 보였다.
+    const compact = isCompact();
     g.lineWidth = Math.max(1, 1.5 * viewport.zoom);
     for (const lane of graph.lanes) {
       if (lane.lastColumn < 0) continue;
@@ -312,16 +330,28 @@ export function createBranchGraph(opts = {}) {
       const y = canvasY(lane);
       const isSelected = lane === selected;
       capsulePath(g, x0, x1, y, radius);
-      g.fillStyle = css(lane.rgb, isSelected ? 0.22 : 0.07);
+      g.fillStyle = css(lane.rgb, tubeFillAlpha(lane));
       g.fill();
+      if (compact && !isSelected) continue;
       g.strokeStyle = css(lane.rgb, isSelected ? 0.95 : 0.45);
       g.stroke();
     }
   }
 
+  /** row 줄의 c0..c1 칸에 어떤 가지도 없는지(선이 그 줄을 따라 달려도 다른 가지와 겹치지 않는지). */
+  function rowFree(row, c0, c1) {
+    if (c1 < c0) return true;
+    return !(graph.lanesByRow.get(row) ?? []).some((lane) => lane.lastColumn >= c0 && lane.firstColumn <= c1);
+  }
+
   function drawEdges(g) {
     const zoom = viewport.zoom;
     g.lineWidth = Math.max(1.5, 3 * zoom);
+    // 선은 가지의 줄을 따라 달리다가 상대 커밋 가까이에서 줄을 바꾼다 — 멀리 떨어진 두 커밋을 비스듬한 긴 선 하나로 이으면
+    // 가운데 줄들을 가로질러 어지럽다. 줄을 바꾸는 곳은 칼같이 꺾지 않고 늘어진 줄처럼 넓게 휜다: 커밋에서 위·아래로 나와
+    // 천천히 눕는 호. 호의 가로 폭은 건너는 높이에 비례한다(멀리 건널수록 길게 — 여러 가지가 한 커밋에서 갈라져도 부채꼴로 벌어진다).
+    const column = COLUMN_WIDTH * zoom;
+    const sweepOf = (dy, span) => Math.min(span, clamp(Math.abs(dy) * 1.7, column * 1.6, column * 6));
     for (const edge of graph.edges) {
       const from = nodePos(edge.parent);
       const to = nodePos(edge.child);
@@ -329,25 +359,40 @@ export function createBranchGraph(opts = {}) {
       // 같은 가지 안은 곧은 선 + 부모 쪽 화살촉, 가지를 만든 선은 부모에서 가지 관 머리까지 곧게, 병합 선은 초록 곡선.
       // 색은 새 커밋 쪽 가지 색이고 병합 선만 병합 색이다.
       const sameLane = edge.parent.lane === edge.child.lane;
-      const rgb = edge.merge ? MERGE_LINE : edge.child.lane.rgb;
-      const alpha = matches(edge.parent) || matches(edge.child) ? 0.9 : 0.25;
-      g.strokeStyle = css(rgb, alpha);
+      // 병합된 가지 안의 선(과 그 가지를 만든 선)은 커밋처럼 살짝 흐리게. 병합 선은 그대로 — 어디로 합쳐졌는지가 그 가지의 핵심이다.
+      const color = css(edge.merge ? MERGE_LINE : edge.child.lane.rgb, !edge.merge && edge.child.lane.anonymous ? 0.9 * MERGED_LANE_OPACITY : 0.9);
+      g.strokeStyle = color;
       g.beginPath();
       g.moveTo(from.x, from.y);
       const sameY = Math.abs(from.y - to.y) < 1e-3;
+      const span = to.x - from.x;
       if (edge.merge && !sameY) {
-        // 병합 선: 들어오는 커밋에서 오른쪽으로 나가 둥글게 휘어 병합 커밋에 위·아래로 꽂힌다.
-        const dx = Math.max(to.x - from.x, 1);
-        g.bezierCurveTo(from.x + dx * 0.55, from.y, to.x, to.y + (from.y - to.y) * 0.55, to.x, to.y);
+        if (span > column * 0.9 && rowFree(edge.parent.lane.row, edge.parent.column + 1, edge.child.column - 1)) {
+          // 병합 선: 들어오는 가지의 줄을 따라 오른쪽으로 달리다가, 병합 커밋 앞에서 넓은 호로 천천히 일어나 위·아래로 꽂힌다.
+          const sweep = sweepOf(to.y - from.y, span);
+          g.lineTo(to.x - sweep, from.y);
+          g.bezierCurveTo(to.x - sweep * 0.3, from.y, to.x, from.y + (to.y - from.y) * 0.3, to.x, to.y);
+        } else {
+          // 줄에 다른 가지가 있으면(또는 가까우면) 예전처럼 한 번에 둥글게.
+          const dx = Math.max(span, 1);
+          g.bezierCurveTo(from.x + dx * 0.55, from.y, to.x, to.y + (from.y - to.y) * 0.55, to.x, to.y);
+        }
       } else if (!sameLane && !sameY) {
-        // 가지를 만든 선: 부모에서 새 가지 관의 왼쪽 머리까지 곧게, 거기서 관 안을 따라 첫 커밋으로.
-        g.lineTo(Math.max(from.x, to.x - tubeRadius()), to.y);
-        g.lineTo(to.x, to.y);
+        if (span > column * 0.9 && rowFree(edge.child.lane.row, edge.parent.column + 1, edge.child.column - 1)) {
+          // 가지를 만든 선: 부모 커밋에서 위·아래로 나와 넓은 호로 천천히 누워 새 가지의 줄에 닿고, 그 줄을 따라 첫 커밋까지.
+          const sweep = sweepOf(to.y - from.y, span);
+          g.bezierCurveTo(from.x, from.y + (to.y - from.y) * 0.7, from.x + sweep * 0.3, to.y, from.x + sweep, to.y);
+          g.lineTo(to.x, to.y);
+        } else {
+          // 줄에 다른 가지가 있으면 예전처럼: 부모에서 새 가지 관의 왼쪽 머리까지 곧게, 거기서 관 안을 따라 첫 커밋으로.
+          g.lineTo(Math.max(from.x, to.x - tubeRadius()), to.y);
+          g.lineTo(to.x, to.y);
+        }
       } else {
         g.lineTo(to.x, to.y);
       }
       g.stroke();
-      if (sameLane) drawArrowHead(g, from, css(rgb, alpha));
+      if (sameLane) drawArrowHead(g, from, color);
     }
     // 기간 밖으로 이어지는 히스토리: 왼쪽으로 짧은 흐린 선.
     g.strokeStyle = css(colors.truncated, colors.truncated[3]);
@@ -379,30 +424,54 @@ export function createBranchGraph(opts = {}) {
   function drawNodes(g) {
     const zoom = viewport.zoom;
     const radius = NODE_RADIUS * zoom;
+    const ringScale = Math.min(1, zoom);
+    const compact = zoom < TEXT_ZOOM_THRESHOLD;
     const searching = search.length > 0;
     for (const node of graph.nodes) {
       const p = nodePos(node);
       if (!isVisibleX(p.x, COLUMN_WIDTH)) continue;
+      // 검색에 맞지 않는 커밋을 흐리게(투명하게) 하지 않는다 — 뒤의 선·관이 비쳐 지저분했다. 맞는 커밋에만 검색 색 테를 두른다.
       const isMatch = matches(node);
-      const alpha = isMatch ? 1 : 0.3;
-      if (node.commit.hash === selectedHash) fillCircle(g, p, radius + 7, css(colors.selection, colors.selection[3]));
-      else if (searching && isMatch) fillCircle(g, p, radius + 7, css(colors.search, colors.search[3]));
-
       const isLaneTip = node.column === node.lane.lastColumn;
       const ring = node.isHead ? colors.head : node.lane.rgb;
       const hover = hoverAmount(node);
-      if (hover > 0) drawHoverGlow(g, p, radius, ring, alpha, hover, node === hovered);
-      const ringRadius = radius + (isLaneTip ? 4 : 2.5) + 2 * hover;
-      drawShadow(g, p, ringRadius, alpha);
-      fillCircle(g, p, ringRadius, css(ring, alpha));
+      // 테두리 굵기는 축소를 따라 얇아진다(예전엔 늘 2.5px 라 작게 보면 테두리가 사진보다 두꺼웠다).
+      const ringRadius = radius + (isLaneTip ? Math.max(2, 4 * ringScale) : Math.max(1.25, 2.5 * ringScale)) + 2 * hover;
+      const selected = node.commit.hash === selectedHash;
+      // 검색에 맞는 커밋: 원 뒤에 검색 색의 은은한 빛(고른 커밋에도 깐다). 진한 색 원판을 깔면 테두리가 두꺼워진 것처럼 보여
+      // 가지의 커밋 모양이 달라진 줄 알게 된다 — 가지 이름이 검색에 맞으면 그 가지의 커밋이 전부 그렇게 보였다.
+      if (searching && isMatch) {
+        const glow = Math.max(zoom, 0.5);
+        fillCircle(g, p, ringRadius + 9 * glow, css(colors.search, 0.12));
+        fillCircle(g, p, ringRadius + 5 * glow, css(colors.search, 0.2));
+      }
+      // 고른 커밋: 회색 원을 깔지 않고(테두리 밖으로 회색 띠처럼 보였다) 가지 색의 은은한 빛 + 한 칸 띄운 얇은 고리.
+      if (selected) {
+        fillCircle(g, p, ringRadius + 9 * zoom, css(ring, 0.16));
+        g.strokeStyle = css(ring, 0.95);
+        g.lineWidth = Math.max(1.5, 2 * zoom);
+        g.beginPath();
+        g.arc(p.x, p.y, ringRadius + 4.5 * zoom, 0, Math.PI * 2);
+        g.stroke();
+      }
+
+      if (hover > 0) drawHoverGlow(g, p, radius, ring, 1, hover, node === hovered);
+      // 많이 축소하면 그림자를 뺀다 — 커밋이 작아 번진 그림자가 얼룩처럼 보인다.
+      // 병합된 가지의 커밋은 살짝 흐리게. 투명하게 칠하면 원 뒤를 지나는 선이 비치므로, 관 바탕색 쪽으로 섞은 색을 불투명하게 칠한다
+      // (투명하게 칠한 것과 같은 색이 나오되 선은 가린다).
+      const opacity = nodeOpacity(node);
+      const under = lerp(colors.bg, node.lane.rgb, tubeFillAlpha(node.lane));
+      const tone = (rgb) => (opacity < 1 ? lerp(under, rgb, opacity) : rgb);
+      if (!compact) drawShadow(g, p, ringRadius, opacity);
+      fillCircle(g, p, ringRadius, css(tone(ring)));
 
       // 안쪽은 가지 색을 어둡게 — 흰 머리글자가 잘 읽힌다.
       const fill = lerp(lerp(node.lane.rgb, [0, 0, 0], 0.45), [255, 255, 255], 0.15 * hover);
-      fillCircle(g, p, radius, css(fill, alpha));
+      fillCircle(g, p, radius, css(tone(fill)));
 
       // 태그가 붙은 커밋은 Unity VCS 의 레이블처럼 바깥에 초록 고리를 두른다(태그 이름은 위에 글자로).
       if (node.refLabels.some((label) => label.startsWith('tag: '))) {
-        g.strokeStyle = css(TAG_RING, alpha);
+        g.strokeStyle = css(tone(TAG_RING));
         g.lineWidth = Math.max(1.5, 2.5 * zoom);
         g.beginPath();
         g.arc(p.x, p.y, ringRadius + 4 * zoom, 0, Math.PI * 2);
@@ -458,8 +527,8 @@ export function createBranchGraph(opts = {}) {
       const hiddenText = viewport.zoom < TEXT_ZOOM_THRESHOLD;
       root.classList.toggle('bx-graph--hidden-text', hiddenText);
       placeLaneLabels(hiddenText);
-      // 읽을 수 없게 작으면 커밋 글자(머리글자·메시지·이름표)는 놓지 않는다.
-      if (!hiddenText) placeNodeLabels();
+      // 읽을 수 없게 작으면 커밋 글자(머리글자·메시지·이름표)는 놓지 않는다. 작성자 사진은 작아도 알아볼 수 있어 그대로 둔다.
+      placeNodeLabels(hiddenText);
       placeDateLabels();
     }
     labels.end();
@@ -482,7 +551,8 @@ export function createBranchGraph(opts = {}) {
   function placeLaneLabels(compact) {
     const radius = tubeRadius();
     const padding = compact ? COMPACT_LANE_LABEL_PADDING : LANE_LABEL_PADDING;
-    const fontSize = clamp(13 * viewport.zoom, 6, 22);
+    // 가지 이름은 축소해도 읽을 수 있는 크기(10px)를 지킨다 — 멀리서 볼 때 가장 필요한 글자다.
+    const fontSize = clamp(13 * viewport.zoom, 10, 22);
     for (const lane of graph.lanes) {
       if (lane.lastColumn < 0) continue;
       const start = canvasX(lane.firstColumn) - radius;
@@ -540,30 +610,33 @@ export function createBranchGraph(opts = {}) {
     return occupied.some((each) => each.x < padded.x + padded.w && padded.x < each.x + each.w && each.y < padded.y + padded.h && padded.y < each.y + each.h);
   }
 
-  function placeNodeLabels() {
+  /** avatarsOnly: 글자를 숨길 만큼 축소했을 때 — 작성자 사진만 놓는다(사진이 없는 작성자의 머리글자·메시지·이름표는 뺀다). */
+  function placeNodeLabels(avatarsOnly = false) {
     const zoom = viewport.zoom;
     const radius = NODE_RADIUS * zoom;
     const initialsSize = clamp(11 * zoom, 6, 20);
     const subjectSize = clamp(10 * zoom, 6, 18);
     const subjectWidth = COLUMN_WIDTH * zoom - 10;
+    // 메시지는 가지 관 아래 테두리 밖에 둔다 — 원 바로 밑에 두면 확대했을 때 바탕 상자가 관 테두리를 덮어 선이 끊겨 보였다.
+    const subjectOffset = tubeRadius() + Math.max(1, 1.5 * zoom) / 2 + 4;
     const showAvatars = opts.avatarsOn?.() ?? true;
     for (const node of graph.nodes) {
       const p = nodePos(node);
       if (!isVisibleX(p.x, COLUMN_WIDTH)) continue;
-      const opacity = matches(node) ? '1' : '0.3';
       const avatar = showAvatars ? opts.avatars?.get?.(node.commit.authorEmail, node.commit.hash) : null;
-      if (avatar) {
-        const image = labels.placeImage('bx-avatar', avatar.src, p, radius);
-        image.style.opacity = opacity;
-      } else {
+      // 사진·머리글자는 불투명한 원 위에 놓이니 투명도로 흐리게 해도 뒤의 선이 비치지 않는다.
+      const opacity = nodeOpacity(node);
+      if (avatar) labels.placeImage('bx-avatar', avatar.src, p, radius).style.opacity = opacity < 1 ? String(opacity) : '';
+      if (avatarsOnly) continue;
+      if (!avatar) {
         const label = labels.place('bx-initials', initials(node.commit.authorName), { x: p.x - radius, y: p.y - radius, w: radius * 2, h: radius * 2, fontSize: initialsSize });
         label.style.lineHeight = `${radius * 2}px`;
-        label.style.opacity = opacity;
+        if (opacity < 1) label.style.opacity = String(opacity);
       }
       // 폭은 글자에 맞추고(바탕 상자가 글자 둘레만 선을 가리게) 칸 폭을 넘으면 말줄임.
-      const subject = labels.place('bx-subject', node.commit.subject, { x: p.x, y: p.y + radius + 6, fontSize: subjectSize, anchorX: 0.5 });
+      // 메시지는 바탕 상자째 투명해지면 아래 선이 비치므로 글자 색만 흐리게 한다(.bx-subject--dim).
+      const subject = labels.place('bx-subject', node.commit.subject, { x: p.x, y: p.y + subjectOffset, fontSize: subjectSize, anchorX: 0.5, modifiers: opacity < 1 ? ['bx-subject--dim'] : [] });
       subject.style.maxWidth = `${subjectWidth}px`;
-      subject.style.opacity = opacity;
       placePills(node, p, radius);
     }
   }
@@ -632,10 +705,23 @@ export function createBranchGraph(opts = {}) {
       return;
     }
     const c = hovered.commit;
-    tooltip.textContent = nfc(`${c.subject}\n${c.shortHash} · ${c.authorName} · ${formatDate(c.time, true)}\n줄: ${hovered.lane.name}`);
-    tooltip.style.left = `${pointer.x + 14}px`;
-    tooltip.style.top = `${pointer.y + 14}px`;
+    // 참고한 문서 팝업처럼: 머리줄(가지 아이콘 + 가지 이름), 커밋 메시지, 구분선, 해시·작성자·시각.
+    const branchIcon = icon('branch', 14, 'bx-tip-icon');
+    branchIcon.style.color = css(hovered.lane.rgb);
+    const head = span('bx-tip-head', branchIcon, span('bx-tip-lane', nfc(hovered.lane.name)));
+    const subject = span('bx-tip-subject', nfc(c.subject));
+    const meta = span('bx-tip-meta', span('bx-tip-hash', c.shortHash), ` · ${nfc(c.authorName)} · ${formatDate(c.time, true)}`);
+    tooltip.replaceChildren(head, subject, div('bx-tip-rule'), meta);
     tooltip.hidden = false;
+    // 폭은 글에 맞춘다(.bx-tooltip 의 width: max-content). 오른쪽·아래가 그래프 밖으로 나가면 포인터 반대쪽으로 넘기고, 그래도 넘치면 안쪽으로 붙인다.
+    const w = tooltip.offsetWidth;
+    const h = tooltip.offsetHeight;
+    let left = pointer.x + 14;
+    let top = pointer.y + 14;
+    if (left + w > size.w - 4) left = pointer.x - 14 - w;
+    if (top + h > size.h - 4) top = pointer.y - 14 - h;
+    tooltip.style.left = `${Math.max(4, Math.min(left, size.w - w - 4))}px`;
+    tooltip.style.top = `${Math.max(4, Math.min(top, size.h - h - 4))}px`;
   }
 
   // ── 입력 ──
@@ -779,6 +865,7 @@ export function createBranchGraph(opts = {}) {
     const style = getComputedStyle(document.documentElement);
     const read = (name, fallback) => parseColor(style.getPropertyValue(name).trim()) ?? fallback;
     return {
+      bg: read('--git-graph-bg', [25, 26, 28, 1]).slice(0, 3),
       selection: read('--git-graph-selection', [255, 255, 255, 1]),
       search: read('--git-graph-search', [255, 230, 51, 1]),
       head: read('--git-graph-head', [51, 191, 89, 1]),
@@ -817,6 +904,12 @@ export function createBranchGraph(opts = {}) {
       unsubscribeAvatars?.();
     },
   };
+}
+
+function span(className, ...children) {
+  const node = div(className);
+  node.append(...children);
+  return node;
 }
 
 function div(className) {

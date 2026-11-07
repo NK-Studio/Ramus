@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Ramus 앱 아이콘 원본(1024×1024).
+     Notion 아이콘처럼: 흰 타일(아래로 아주 옅게 어두워지는 그러데이션) 위에 검정 가지 표식 —
+     본줄기에서 곁가지가 하나 갈라진다(Ramus = 라틴어 '가지'). 모양은 ui/boot.js 의 시작 화면과 같다.
+     타일은 여백·그림자 없이 캔버스를 꽉 채운다: macOS 26 부터는 시스템이 아이콘을 제 둥근 틀로 잘라 쓰므로
+     투명한 여백을 두면 그 자리가 회색 틀로 남는다. 모서리는 시스템 틀보다 조금 덜 둥글게 해(시스템이 잘라 내고 남는 투명 구석이 없게),
+     옛 macOS 에서는 그 모양 그대로 보인다.
+     .icns·.ico 는 scripts/make-icons.sh 로 여기서 만든다. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f1f1f3"/>
+    </linearGradient>
+  </defs>
+  <!-- 1024 타일(200 단위 경로를 5.12배). -->
+  <path d="M225.3 0H798.7C983 0 1024 41 1024 225.3V798.7C1024 983 983 1024 798.7 1024H225.3C41 1024 0 983 0 798.7V225.3C0 41 41 0 225.3 0Z" fill="url(#tile)"/>
+  <!-- 가지 표식: 48 단위 원본을 17배, 타일 가운데에. -->
+  <g transform="translate(104 104) scale(17)" fill="none" stroke="#111111" stroke-width="3.2" stroke-linecap="round">
+    <path d="M17 14.5V33.5"/>
+    <path d="M17 30c0-8 14-6 14-13.5"/>
+    <circle cx="17" cy="10" r="4.5"/>
+    <circle cx="17" cy="38" r="4.5"/>
+    <circle cx="31" cy="12" r="4.5"/>
+  </g>
+</svg>

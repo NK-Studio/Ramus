@@ -1,9 +1,9 @@
 // 오른쪽 패널. WIP 를 고르면 스테이징(Unstaged·Staged 목록)과 커밋 상자, 커밋을 고르면 그 커밋의 정보와 바뀐 파일.
 // 원본 Elements/StagingLists·CommitBox·OperationActions·GraphCommitDetail 과 Views/GraphWorkspaceView 의 작업 패널 머리 줄을 옮겼다.
 
-import { el, formatDate, initials, isComposing } from './util.js';
+import { el, formatDate, initials, isComposing, autoHorizontalScroll } from './util.js';
 import { icon } from './icons.js';
-import { fileList, viewSwitch, selectedEntries, CHANGE_STATE } from './files.js';
+import { fileList, viewSwitch, selectedEntries, stateIcon, CHANGE_STATE } from './files.js';
 import { authorRgb } from './graph.js';
 
 /** diff 를 연 파일을 알아보는 키. */
@@ -167,7 +167,7 @@ export function renderStaging(container, status, draft, api) {
     view, state: st, collapsed, onToggleFolder: toggleFolder, onSetCollapsed: setCollapsed,
     keyOf: (e) => diffKey(mode, e.path),
     activeKey: api.activeDiffKey(),
-    onOpen: (e) => api.openDiff(e, mode),
+    onOpen: (e, how) => api.openDiff(e, mode, how),
     expandToggle: !fork && !conflictMode,
   });
 
@@ -396,6 +396,7 @@ function commitBox(status, draft, api) {
   const summary = el('input', { class: 'field', id: 'commit-summary', placeholder: '커밋 제목', maxlength: 200 });
   summary.value = draft.summary;
   const description = el('textarea', { class: 'field', id: 'commit-description', placeholder: '설명', rows: 3 });
+  autoHorizontalScroll(description);
   description.value = draft.description;
   const amend = el('input', { type: 'checkbox', id: 'commit-amend' });
   amend.checked = !!draft.amend && !op;
@@ -501,17 +502,46 @@ const COAUTHOR = /^co-authored-by:\s*(.+?)\s*<([^>]+)>\s*$/gim;
 
 /** 아바타: 그림이 있으면 그림, 없으면 작성자 색 바탕에 머리글자. hash 는 작성자 사진을 찾을 때만 — 공동 작성자에게 넘기면 작성자 얼굴이 들어간다. */
 function avatar(api, name, email, hash, cls) {
+  // 그래프가 이미 읽어 디코딩한 사진은 캔버스에 바로 옮겨 그린다. 커밋을 고를 때마다 새 <img> 를 만들면 캐시에 있어도
+  // 디코딩하는 동안 빈 칸(또는 머리글자)이 한 프레임 보였다가 사진이 나와 깜박인다.
+  const image = api.avatarImage?.(email);
+  if (image) return el('span', { class: cls, style: { background: 'none' } }, avatarCanvas(image));
   const node = el('span', { class: cls, style: { background: rgb(authorRgb(name)) } }, el('span', { class: 'avatar-initials', text: initials(name) }));
-  api.avatarUrl?.(email, hash ?? null).then((url) => {
-    if (url) {
+  const show = (url) => {
+    if (!url) return;
+    // 디코딩까지 끝난 뒤에 바꾼다 — 그동안은 머리글자를 둔다(빈 그림이 잠깐 보이지 않게).
+    const img = el('img', { src: url, alt: '' });
+    const swap = () => {
+      if (!img.naturalWidth) return;
       node.style.background = 'none';
-      node.replaceChildren(el('img', { src: url, alt: '' }));
-    }
-  });
+      node.replaceChildren(img);
+    };
+    img.decode().then(swap, swap);
+  };
+  const known = api.avatarPeek?.(email);
+  if (known !== undefined) show(known); // null 은 사진이 없는 작성자 — 다시 묻지 않는다.
+  else api.avatarUrl?.(email, hash ?? null).then(show);
   return node;
 }
 
-/** "✎ 2 수정  + 1 추가  − 1 삭제  → 1 이름 변경  • 1 기타" — 종류마다 상태 색(원본 GraphCommitDetail.BindSummary). */
+/** 다 읽은 그림을 같은 크기의 캔버스로(그리는 즉시 보인다). */
+function avatarCanvas(image) {
+  const canvas = el('canvas', { width: image.naturalWidth, height: image.naturalHeight });
+  canvas.getContext('2d').drawImage(image, 0, 0);
+  return canvas;
+}
+
+/** AI 공동 작성자는 모델·버전 없이 이름만("Claude Opus 5.5" → "Claude"). 사람 이름은 그대로. */
+const AI_NAMES = [[/^claude\b/i, 'Claude'], [/^gemini\b/i, 'Gemini'], [/^chatgpt\b/i, 'ChatGPT'], [/^codex\b/i, 'Codex'], [/^(github )?copilot\b/i, 'Copilot'], [/^cursor\b/i, 'Cursor']];
+function coauthorName(name, email) {
+  if (/@anthropic\.com$/i.test(email)) return 'Claude';
+  return AI_NAMES.find(([re]) => re.test(name))?.[1] ?? name;
+}
+
+/**
+ * "✎ 2 수정  + 1 추가  − 1 삭제  → 1 이름 변경  • 1 기타" — 그림은 파일 줄과 같은 상태 그림(연필·초록 +·빨간 −),
+ * 글자는 흰색(원본 GraphCommitDetail.BindSummary).
+ */
 function fileSummary(files) {
   const states = files.map((f) => CHANGE_STATE[f.status] ?? 'modified');
   const count = (s) => states.filter((x) => x === s).length;
@@ -523,7 +553,9 @@ function fileSummary(files) {
     ['renamed', '→', count('renamed'), '이름 변경'],
     ['other', '•', other, '기타'],
   ].filter((p) => p[2]);
-  return el('div', { class: 'cd-summary' }, parts.map(([kind, sign, n, label]) => el('span', { class: `cd-count cd-count-${kind}`, text: `${sign} ${n} ${label}` })));
+  return el('div', { class: 'cd-summary' }, parts.map(([kind, sign, n, label]) => el('span', { class: `cd-count cd-count-${kind}` },
+    kind === 'other' ? el('span', { class: 'cd-count-sign', text: sign }) : stateIcon(kind),
+    el('span', { text: `${n} ${label}` }))));
 }
 
 /** "commit: 해시" 머리 줄. 해시를 누르면 전체 해시를 복사한다. */
@@ -539,6 +571,45 @@ function commitHeader(hash) {
 }
 
 /** 메시지 카드·작성자 줄. 파일 목록 위의 고정 부분이다(파일 목록만 스크롤한다). */
+/** 메시지 칸 아래 손잡이: 위아래로 끌어 칸 높이를 바꾸고(패널의 60% 까지), 두 번 누르면 기본 높이. */
+function messageGrip(card, api) {
+  const set = (h, save) => {
+    const body = card.parentElement;
+    const max = Math.max(MESSAGE_HEIGHT.min, (body?.clientHeight ?? 600) * 0.6);
+    messageHeight = Math.round(Math.min(max, Math.max(MESSAGE_HEIGHT.min, h)));
+    card.style.height = `${messageHeight}px`;
+    if (save) api.prefs?.set?.(MESSAGE_HEIGHT.key, messageHeight);
+  };
+  return el('div', {
+    class: 'cd-grip', role: 'separator', 'aria-orientation': 'horizontal', 'data-tip': '끌어서 높이 바꾸기 · 두 번 누르면 기본 높이',
+    ondblclick: () => set(MESSAGE_HEIGHT.initial, true),
+    onpointerdown: (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const grip = event.currentTarget;
+      const startY = event.clientY;
+      const startH = card.offsetHeight;
+      grip.setPointerCapture(event.pointerId);
+      grip.classList.add('dragging');
+      const move = (e) => set(startH + e.clientY - startY, false);
+      const up = () => {
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', up);
+        grip.removeEventListener('pointercancel', up);
+        grip.classList.remove('dragging');
+        set(card.offsetHeight, true);
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+      grip.addEventListener('pointercancel', up);
+    },
+  });
+}
+
+/** 메시지 칸의 높이(px). 글 길이와 상관없이 늘 이 높이고, 길면 칸 안에서 스크롤한다. 손잡이로 바꾸면 기억한다. */
+const MESSAGE_HEIGHT = { initial: 120, min: 56, key: 'commit.messageHeight' };
+let messageHeight = null; // 마지막으로 읽은·바꾼 높이(읽는 중 화면도 같은 높이로)
+
 function commitTop(commit, api, message) {
   const [subject, body] = (() => {
     const text = (message ?? '').replace(/\r\n/g, '\n').trim();
@@ -546,8 +617,12 @@ function commitTop(commit, api, message) {
     return newline < 0 ? [text, ''] : [text.slice(0, newline).trim(), text.slice(newline + 1).replace(/^\n+|\n+$/g, '')];
   })();
   const parents = commit.parents ?? [];
+  messageHeight = api.prefs?.get?.(MESSAGE_HEIGHT.key) ?? messageHeight ?? MESSAGE_HEIGHT.initial;
+  const card = el('div', { class: 'cd-card', style: { height: `${messageHeight}px` } },
+    el('div', { class: 'cd-subject', text: subject }), body ? el('div', { class: 'cd-message', text: body }) : null);
   return [
-    el('div', { class: 'cd-card' }, el('div', { class: 'cd-subject', text: subject }), body ? el('div', { class: 'cd-message', text: body }) : null),
+    card,
+    messageGrip(card, api),
     el('div', { class: 'cd-meta' },
       avatar(api, commit.authorName, commit.authorEmail, commit.hash, 'cd-avatar'),
       el('div', { class: 'cd-author-block' },
@@ -565,7 +640,7 @@ export function renderCommit(container, detail, api) {
   for (const m of detail.message.matchAll(COAUTHOR)) {
     if (seen.has(m[2].trim().toLowerCase())) continue;
     seen.add(m[2].trim().toLowerCase());
-    coauthors.push({ name: m[1].trim(), email: m[2].trim() });
+    coauthors.push({ name: coauthorName(m[1].trim(), m[2].trim()), email: m[2].trim() });
   }
   const view = api.prefs.get('commit.view') ?? 'path';
   const collapsed = new Set(api.prefs.get('commit.collapsed') ?? []);
@@ -586,7 +661,8 @@ export function renderCommit(container, detail, api) {
     expandToggle: true,
     keyOf: (e) => diffKey(`commit-${detail.hash}`, e.path),
     activeKey: api.activeDiffKey(),
-    onOpen: (f) => api.openCommitDiff(detail.hash, f),
+    onOpen: (f, how) => api.openCommitDiff(detail.hash, f, how),
+    onHover: api.prefetchCommitDiff && ((f) => api.prefetchCommitDiff(detail.hash, f)),
     onMenu: (event, files) => api.commitFileMenu(event, detail, files),
     empty: '바뀐 파일이 없습니다.',
   });
@@ -598,34 +674,35 @@ export function renderCommit(container, detail, api) {
       commitHeader(detail.hash),
       el('div', { class: 'cd-body' },
         detail.title ? el('div', { class: 'cd-title muted small', text: detail.title }) : null,
-        ...commitTop(detail, api, detail.message),
+        // Co-Authored-By 줄은 아래 "공동 작성자" 에 따로 보이므로 본문에서는 뺀다(모델·버전 같은 꼬리표가 본문에 남지 않게).
+        ...commitTop(detail, api, detail.message.replace(COAUTHOR, '').replace(/\n{3,}/g, '\n\n')),
         coauthors.length ? el('div', { class: 'cd-coauthors' }, el('span', { class: 'cd-coauthors-label', text: '공동 작성자:' }),
           coauthors.map((c) => el('span', { class: 'cd-coauthor', 'data-tip': `${c.name} <${c.email}>` }, avatar(api, c.name, c.email, null, 'cd-coauthor-avatar'), el('span', { class: 'cd-coauthor-name', text: c.name })))) : null,
-        el('div', { class: 'cd-files-head' }, fileSummary(detail.files),
-          viewSwitch(view, (v) => { api.prefs.set('commit.view', v); rerender(); })),
+        // 파일 칸 머리는 늘 두 줄: [바뀜 요약] / [보기 전환]. 요약이 길어도 전환이 밑으로 밀리거나 칸 높이가 바뀌지 않는다.
+        el('div', { class: 'cd-files-head' },
+          fileSummary(detail.files),
+          el('div', { class: 'cd-files-tools' }, viewSwitch(view, (v) => { api.prefs.set('commit.view', v); rerender(); }))),
         el('div', { class: 'cd-files' }, list))));
   if (sameCommit) keepListState(container, draw);
   else draw();
 }
 
 /**
- * 커밋 정보를 읽는 동안. commit(그래프의 커밋 요약)을 주면 해시·제목·작성자는 바로 보이고 파일 칸만 회색 막대다(원본 GraphCommitDetail.Show).
+ * 커밋 정보를 읽는 동안. commit(그래프의 커밋 요약)을 주면 해시·제목·작성자는 바로 보이고 파일 칸은 비어 있다.
  */
-export function renderCommitSkeleton(container, commit) {
-  const files = el('div', { class: 'cd-files cd-skeleton' },
-    ...Array.from({ length: 8 }, (_, i) => el('div', { class: 'sk-bar', style: { width: `${[70, 55, 80, 45][i % 4]}%` } })));
+export function renderCommitSkeleton(container, commit, api = {}) {
+  // 읽는 동안 파일 칸은 비워 둔다(회색 막대 없이) — 다 읽으면 목록이 그대로 나타난다.
+  const files = el('div', { class: 'cd-files' });
   if (!commit) {
-    container.replaceChildren(el('div', { class: 'commit-detail' },
-      el('div', { class: 'cd-header' }),
-      el('div', { class: 'cd-body' },
-        ...[40, 85, 60, 30].map((w) => el('div', { class: 'sk-bar', style: { width: `${w}%`, height: '12px' } })),
-        files)));
+    container.replaceChildren(el('div', { class: 'commit-detail' }, el('div', { class: 'cd-header' }), el('div', { class: 'cd-body' }, files)));
     return;
   }
   container.replaceChildren(el('div', { class: 'commit-detail' },
     commitHeader(commit.hash),
     el('div', { class: 'cd-body' },
-      ...commitTop(commit, { avatarUrl: () => Promise.resolve(null) }, commit.subject),
-      el('div', { class: 'cd-files-head' }, el('div', { class: 'cd-summary' })),
+      // 사진은 이미 받은 것만 쓴다(읽는 동안 새로 묻지 않는다) — 머리글자로 그렸다가 다 읽은 뒤 사진으로 바뀌면 깜박인다.
+      ...commitTop(commit, { avatarImage: api.avatarImage, avatarPeek: api.avatarPeek, avatarUrl: () => Promise.resolve(null) }, commit.subject),
+      // 읽는 동안에도 같은 두 줄 자리를 둔다 — 다 읽은 뒤 파일 칸이 밀려 내려가지 않게.
+      el('div', { class: 'cd-files-head' }, el('div', { class: 'cd-summary' }), el('div', { class: 'cd-files-tools' })),
       files)));
 }

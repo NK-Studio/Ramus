@@ -12,6 +12,7 @@ use ramus_core::github;
 use ramus_core::ops::MergeMode;
 use ramus_core::rewrite::RewriteKind;
 use ramus_core::undo::{self, Journal, UndoEntry, UndoKind};
+use ramus_core::runner::trace;
 use ramus_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, newrepo, remote, ssl};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -43,6 +44,10 @@ pub struct AppState {
     journals: Mutex<std::collections::HashMap<String, Journal>>,
     /// 앱으로 로그인한 GitHub 계정 (login, token). None 이면 아직 레포지토리에서 읽지 않았다, Some(None) 이면 없다.
     github_login: Mutex<Option<Option<(String, String)>>>,
+    /// GitHub CLI 계정 목록과 읽은 때. `gh auth status` 는 토큰을 온라인으로 확인해 느려서 잠깐 기억해 둔다.
+    gh_accounts: Mutex<Option<(Instant, Vec<String>)>>,
+    /// GitHub CLI 토큰(login → 읽은 때, 토큰). `gh auth token` 은 프로세스 하나라 레포지토리를 열 때마다 부르면 느리다.
+    gh_tokens: Mutex<std::collections::HashMap<String, (Instant, String)>>,
     emit: Emit,
 }
 
@@ -69,6 +74,8 @@ impl AppState {
             github_remote: Mutex::new(None),
             journals: Mutex::new(Default::default()),
             github_login: Mutex::new(None),
+            gh_accounts: Mutex::new(None),
+            gh_tokens: Mutex::new(Default::default()),
             emit,
         }
     }
@@ -118,9 +125,22 @@ impl AppState {
     fn github_git_token(&self) -> Option<String> {
         match self.github_choice()? {
             (source, _) if source == "app" => self.app_login().map(|(_, t)| t),
-            (source, login) if source == "gh" => github::gh_token(&login),
+            (source, login) if source == "gh" => self.gh_token(&login),
             _ => None,
         }
+    }
+
+    /// GitHub CLI 계정의 토큰. 10분 동안은 지난번 것을 쓴다(`gh auth token` 프로세스를 레포지토리 전환마다 띄우지 않게).
+    fn gh_token(&self, login: &str) -> Option<String> {
+        let mut cached = self.gh_tokens.lock().unwrap();
+        if let Some((at, token)) = cached.get(login)
+            && at.elapsed() < Duration::from_secs(10 * 60)
+        {
+            return Some(token.clone());
+        }
+        let token = github::gh_token(login)?;
+        cached.insert(login.to_string(), (Instant::now(), token.clone()));
+        Some(token)
     }
 
     /// API 에 쓸 토큰: 고른 계정 → 앱 로그인 → gh → 자격 증명 도우미.
@@ -128,13 +148,131 @@ impl AppState {
         let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| std::env::temp_dir());
         match self.github_choice() {
             Some((source, _)) if source == "app" => return self.app_login(),
-            Some((source, login)) if source == "gh" => return github::gh_token(&login).map(|t| (login, t)),
+            Some((source, login)) if source == "gh" => return self.gh_token(&login).map(|t| (login, t)),
             Some((_, login)) => return github::credential_account(&self.runner, &dir, Some(&login)),
             None => {}
         }
         self.app_login()
-            .or_else(|| github::gh_accounts().into_iter().find_map(|l| github::gh_token(&l).map(|t| (l, t))))
+            .or_else(|| self.gh_logins().into_iter().find_map(|l| self.gh_token(&l).map(|t| (l, t))))
             .or_else(|| github::credential_account(&self.runner, &dir, None))
+    }
+
+    /// GitHub CLI 에 로그인한 계정들. 1분 동안은 지난번 것을 쓴다.
+    fn gh_logins(&self) -> Vec<String> {
+        let mut cached = self.gh_accounts.lock().unwrap();
+        if let Some((at, list)) = cached.as_ref()
+            && at.elapsed() < Duration::from_secs(60)
+        {
+            return list.clone();
+        }
+        let list = github::gh_accounts();
+        *cached = Some((Instant::now(), list.clone()));
+        list
+    }
+
+    /// Clone 창이 고를 수 있는 GitHub 계정 (source, login): 앱 로그인 먼저, 그다음 GitHub CLI 계정들(앱 계정과 같은 이름은 뺀다).
+    fn clone_accounts(&self) -> Vec<(String, String)> {
+        let mut list: Vec<(String, String)> = self.app_login().map(|(login, _)| ("app".to_string(), login)).into_iter().collect();
+        for login in self.gh_logins() {
+            if !list.iter().any(|(_, l)| l.eq_ignore_ascii_case(&login)) {
+                list.push(("gh".to_string(), login));
+            }
+        }
+        list
+    }
+
+    /// 계정 하나의 (source, login, token). 앱 로그인이거나 GitHub CLI 계정일 때만.
+    fn clone_token(&self, source: &str, login: &str) -> Option<(String, String, String)> {
+        match source {
+            "app" => self.app_login().map(|(l, t)| ("app".to_string(), l, t)),
+            "gh" => github::gh_token(login).map(|t| ("gh".to_string(), login.to_string(), t)),
+            _ => None,
+        }
+    }
+
+    /// 목록을 읽을 계정 (source, login): 고른 것(account), 없으면 앱 로그인, 그것도 없으면 첫 GitHub CLI 계정.
+    /// 앱 로그인이 있으면 GitHub CLI 를 부르지 않는다(느리다).
+    fn clone_default_account(&self, args: &Value) -> Option<(String, String)> {
+        account_arg(args)
+            .or_else(|| self.app_login().map(|(login, _)| ("app".to_string(), login)))
+            .or_else(|| self.gh_logins().into_iter().next().map(|login| ("gh".to_string(), login)))
+    }
+
+    /// Clone 창의 GitHub 목록 한 쪽: 계정(account {source, login}, 없으면 기본 계정)이 볼 수 있는 레포지토리 100개와
+    /// 다음 쪽 커서(next, 없으면 끝). 그중 이 PC 에 이미 받아 둔 것은 위치(local)를 붙인다.
+    fn github_clone_list(&self, args: &Value) -> Result<Value> {
+        let Some((source, login)) = self.clone_default_account(args) else { return Ok(json!({ "signedIn": false })) };
+        let (source, login, token) =
+            self.clone_token(&source, &login).ok_or_else(|| GitError::new(format!("{login} 계정의 GitHub 토큰을 읽지 못했습니다. 다시 로그인해 주세요.")))?;
+        let after = args.get("after").and_then(Value::as_str).filter(|a| !a.is_empty());
+        let (mut repos, next) = github::viewer_repos_page(&token, after)?;
+        self.mark_local_clones(&mut repos);
+        Ok(json!({ "signedIn": true, "account": { "source": source, "login": login }, "repos": repos, "next": next }))
+    }
+
+    /// 지난번에 다 읽어 둔 목록(디스크). 창을 열자마자 보이고, 화면이 뒤에서 새로 읽어 바꾼다. 없으면 null.
+    fn github_clone_cache(&self, args: &Value) -> Result<Value> {
+        let Some((source, login)) = self.clone_default_account(args) else { return Ok(json!({ "signedIn": false })) };
+        let saved = clone_cache_path(&source, &login)
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+        let Some(mut saved) = saved else { return Ok(json!({ "signedIn": true, "account": { "source": source, "login": login }, "repos": null })) };
+        let mut repos: Vec<Value> = saved.get_mut("repos").and_then(|r| r.as_array_mut()).map(std::mem::take).unwrap_or_default();
+        // 받아 둔 것은 그사이 바뀌었을 수 있다 — 지금 것으로 다시 붙인다.
+        for repo in &mut repos {
+            if let Some(map) = repo.as_object_mut() {
+                map.remove("local");
+            }
+        }
+        self.mark_local_clones(&mut repos);
+        Ok(json!({
+            "signedIn": true, "account": { "source": source, "login": login }, "repos": repos,
+            // 목록 질의가 바뀐 뒤의 옛 캐시는 읽은 때를 모르는 것으로 돌려 화면이 바로 새로 읽게 한다.
+            "truncated": saved.get("truncated"),
+            "savedAt": saved.get("savedAt").filter(|_| saved.get("v").and_then(Value::as_u64) == Some(CLONE_CACHE_VERSION)),
+        }))
+    }
+
+    /// 목록에서 이 PC 에 이미 받아 둔 것에 위치(local)를 붙인다.
+    fn mark_local_clones(&self, repos: &mut [Value]) {
+        let local = self.local_github_clones();
+        for repo in repos {
+            let key = repo.get("fullName").and_then(Value::as_str).unwrap_or_default().to_lowercase();
+            if let Some(path) = local.get(&key) {
+                repo["local"] = json!(path);
+            }
+        }
+    }
+
+    /// 최근 연 레포지토리·열린 탭 가운데 GitHub 원격이 있는 것: "owner/repo"(소문자) → 폴더. 같은 레포지토리면 최근 것이 먼저.
+    fn local_github_clones(&self) -> std::collections::HashMap<String, String> {
+        let paths: Vec<String> = {
+            let settings = self.settings.lock().unwrap();
+            settings.recent.iter().map(|r| r.path.clone()).chain(settings.open_tabs.iter().cloned()).collect()
+        };
+        let mut found = std::collections::HashMap::new();
+        for path in paths {
+            let dir = Path::new(&path);
+            // 보통은 .git/config 를 바로 읽는다(git 을 띄우지 않아 빠르다). .git 이 파일(worktree·서브모듈)이면 git 에 묻는다.
+            let config = dir.join(".git").join("config");
+            let urls: Vec<String> = if config.is_file() {
+                std::fs::read_to_string(&config).map(|text| remote_urls(&text)).unwrap_or_default()
+            } else if dir.join(".git").exists() {
+                let out = self.runner.run(dir, &["config", "--get-regexp", r"^remote\..*\.url$"]);
+                if !out.success() {
+                    continue;
+                }
+                out.stdout.lines().filter_map(|line| line.split_whitespace().nth(1)).map(str::to_string).collect()
+            } else {
+                continue;
+            };
+            for url in urls {
+                if let Some((owner, repo)) = avatar::parse_github_remote(&url) {
+                    found.entry(format!("{owner}/{repo}").to_lowercase()).or_insert_with(|| path.clone());
+                }
+            }
+        }
+        found
     }
 
     /// git 사용자 이름(라이선스의 저작권자). 모르면 빈 글.
@@ -228,22 +366,43 @@ impl AppState {
     }
 
     fn open_repo(self: &std::sync::Arc<Self>, path: &Path, effects: &mut Vec<SideEffect>) -> Result<Value> {
+        let started = Instant::now();
         let repo = Repository::open(self.runner.clone(), path)?;
         let root = repo.root().display().to_string();
+        let t = Instant::now();
         {
             let mut settings = self.settings.lock().unwrap();
             settings.touch_recent(&root, &repo.name(), now());
             settings.open_tab(&root);
             self.save_settings(&settings);
         }
+        trace("openRepo settings", t);
         let info = repo_info(&repo);
-        *self.github_remote.lock().unwrap() = repo.default_remote_url().as_deref().and_then(avatar::parse_github_remote);
+        // 원격이 GitHub 인지는 첫 snapshot 이 참조를 읽으면서 정한다(여기서 status 를 따로 돌리지 않는다).
+        *self.github_remote.lock().unwrap() = None;
         effects.push(SideEffect::Title(format!("{} — Ramus", repo.name())));
+        let t = Instant::now();
         self.start_watching(&repo);
+        trace("openRepo watch", t);
         *self.repo.lock().unwrap() = Some(repo);
         *self.last_auto_fetch.lock().unwrap() = None;
+        let t = Instant::now();
         self.apply_globals();
+        trace("openRepo globals", t);
+        trace("openRepo total", started);
         Ok(info)
+    }
+
+    /// 열린 레포지토리의 기본 원격이 GitHub 면 (소유자, 레포지토리) 를 기억한다 — 작성자 사진·PR 목록이 쓴다.
+    /// snapshot 이 읽은 참조·원격 목록으로 정하므로 git 을 더 부르지 않는다. 그새 다른 레포지토리로 바뀌었으면 건드리지 않는다.
+    fn note_github_remote(&self, repo: &Repository, snap: &ramus_core::repo::Snapshot) {
+        let upstream = snap.refs.local.iter().find(|b| b.current).and_then(|b| b.upstream.clone());
+        let name = remote::pick_default_remote(upstream.as_deref(), &snap.refs.remotes);
+        let url = name.and_then(|n| snap.remotes.iter().find(|r| r.name == n).map(|r| r.fetch_url.clone()));
+        let current = self.repo.lock().unwrap();
+        if current.as_ref().is_some_and(|r| r.root() == repo.root()) {
+            *self.github_remote.lock().unwrap() = url.as_deref().and_then(avatar::parse_github_remote);
+        }
     }
 
     /// 바깥 변경을 감시한다. 알림이 오면 화면이 다시 읽는다(`changed`).
@@ -252,7 +411,15 @@ impl AppState {
         let root = repo.root().display().to_string();
         let watched = watcher::watch(repo.root().to_path_buf(), repo.git_dir().to_path_buf(), move || {
             if let Some(state) = weak.upgrade() {
-                (state.emit)("changed", json!({ "repo": root }));
+                // 레포지토리를 바꾼 뒤 늦게 온 이전 감시의 알림은 버린다(감시를 끝내도 모아 둔 알림이 한 번 더 올 수 있다).
+                let current = state.repo.lock().unwrap().as_ref().map(|r| r.root().display().to_string());
+                if current.as_deref() == Some(root.as_str()) {
+                    // 폴더째 사라졌으면(지움·이름 바꿈) 다시 읽으라 하지 않고 사라졌다고 알린다 — 화면이 탭을 거둔다.
+                    if state.notice_gone() {
+                        return;
+                    }
+                    (state.emit)("changed", json!({ "repo": root }));
+                }
             }
         });
         match watched {
@@ -264,10 +431,39 @@ impl AppState {
         }
     }
 
+    /// 열린 레포지토리의 폴더가 사라졌으면 그 경로. 드라이브를 뺐거나 Finder 에서 지웠거나 이름을 바꾼 경우.
+    fn gone_root(&self) -> Option<PathBuf> {
+        let repo = self.repo.lock().unwrap();
+        repo.as_ref().map(|r| r.root().to_path_buf()).filter(|root| !root.is_dir())
+    }
+
+    /// 열린 레포지토리의 폴더가 사라졌으면 화면에 `gone` 을 알리고 true. 감시와 자동 페치는 그 뒤로 조용히 한다.
+    pub fn notice_gone(&self) -> bool {
+        let Some(root) = self.gone_root() else { return false };
+        (self.emit)("gone", json!({ "repo": root.display().to_string() }));
+        true
+    }
+
+    /// 요청이 실패했는데 그새 레포지토리 폴더가 사라졌다면, 그 실패의 진짜 원인은 폴더다 — `gone` 오류로 바꾼다.
+    /// (git 은 작업 폴더가 없으면 "No such file or directory" 로 실행조차 못 한다.)
+    pub fn explain_gone(&self, result: Result<Value>) -> Result<Value> {
+        match result {
+            Err(e) if !e.stale && !e.gone => match self.gone_root() {
+                Some(root) => Err(GitError::gone(&root)),
+                None => Err(e),
+            },
+            other => other,
+        }
+    }
+
     /// 자동 페치 할 때가 됐으면 한다. 앱이 30초마다 부른다. 다른 작업 중이면 건너뛴다.
     pub fn auto_fetch_tick(&self) {
         let minutes = self.settings.lock().unwrap().auto_fetch_minutes;
         let Ok(repo) = self.repo() else { return };
+        // 폴더가 사라진 레포지토리는 페치할 수 없다 — 페치 실패를 띄우는 대신 사라졌다고 알린다.
+        if self.notice_gone() {
+            return;
+        }
         if minutes == 0 {
             return;
         }
@@ -291,6 +487,14 @@ impl AppState {
 
     /// 요청 하나를 처리한다. 결과는 화면에 JSON 으로 돌아간다.
     pub fn handle(self: &std::sync::Arc<Self>, cmd: &str, args: Value, effects: &mut Vec<SideEffect>) -> Result<Value> {
+        // 화면이 보고 있는 레포지토리(__repo)와 열린 레포지토리가 다르면 — 탭을 바꾸는 사이에 보낸 요청 — 실행하지 않는다.
+        // 이전 레포지토리에 stage·diff 가 가거나, 늦게 온 결과가 새 탭 아래 그려지는 일을 막는다.
+        if let Some(expected) = args.get("__repo").and_then(Value::as_str) {
+            let matches = self.repo.lock().unwrap().as_ref().is_some_and(|r| ramus_core::settings::same_path(&r.root().display().to_string(), expected));
+            if !matches {
+                return Err(GitError::stale());
+            }
+        }
         match cmd {
             "init" => {
                 let last = self.settings.lock().unwrap().last_repo.clone();
@@ -298,9 +502,26 @@ impl AppState {
                 let repo = last.and_then(|p| self.open_repo(Path::new(&p), effects).ok());
                 Ok(json!({ "settings": self.settings_json(), "repo": repo, "platform": std::env::consts::OS, "version": env!("CARGO_PKG_VERSION") }))
             }
+            // 정보창(ui/about.js): 앱 버전·빌드 표식(build.rs)·설치된 git·웹뷰 엔진·운영체제.
+            "about" => {
+                let git = self.runner.run(&std::env::temp_dir(), &["--version"]);
+                let git_version = if git.success() { git.stdout.trim().to_string() } else { String::new() };
+                Ok(json!({
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "build_hash": env!("RAMUS_GIT_HASH"),
+                    "build_date": env!("RAMUS_BUILD_DATE"),
+                    "git": git_version,
+                    "webview": wry::webview_version().unwrap_or_default(),
+                    "platform": std::env::consts::OS,
+                    "arch": std::env::consts::ARCH,
+                }))
+            }
             "openRepo" => {
                 let a: PathArg = parse(args)?;
-                self.open_repo(Path::new(&a.path), effects)
+                let mut info = self.open_repo(Path::new(&a.path), effects)?;
+                // 탭 목록이 바뀌었다 — 화면이 따로 묻지 않게 함께 돌려준다.
+                info["settings"] = self.settings_json();
+                Ok(info)
             }
             // ── 레포지토리 만들기 창(원본에 없음 · 확장) ──
             "newRepoTemplates" => {
@@ -411,13 +632,63 @@ impl AppState {
             "clone" => {
                 let a = Args(&args);
                 let dest = PathBuf::from(a.s("dest")?);
-                let repo = remote::clone(&self.runner, a.s("url")?, &dest)?;
-                if let Some(parent) = dest.parent() {
+                // account: Clone 창의 GitHub 목록에서 고른 계정 {source, login} — 비공개도 받게 그 계정의 토큰을 이번 clone 에만 붙이고,
+                // 받은 레포지토리는 그 계정으로 푸시·풀 한다(githubCloneNew 와 같다).
+                let account = match args.get("account").filter(|v| !v.is_null()) {
+                    Some(v) => {
+                        let source = v.get("source").and_then(Value::as_str).unwrap_or_default();
+                        let login = v.get("login").and_then(Value::as_str).unwrap_or_default();
+                        Some(self.clone_token(source, login).ok_or_else(|| GitError::new(format!("{login} 계정의 GitHub 토큰을 읽지 못했습니다. 다시 로그인해 주세요.")))?)
+                    }
+                    None => None,
+                };
+                let repo = match &account {
+                    Some((_, _, token)) => {
+                        let mut globals = self.runner.globals();
+                        globals.env.extend(github::token_environment(token));
+                        remote::clone(&GitRunner::new(globals), a.s("url")?, &dest)?
+                    }
+                    None => remote::clone(&self.runner, a.s("url")?, &dest)?,
+                };
+                {
                     let mut settings = self.settings.lock().unwrap();
-                    settings.clone_dir = parent.display().to_string();
+                    if let Some((source, login, _)) = &account {
+                        settings.ui.insert(format!("github.account:{}", repo.root().display()), json!({ "source": source, "login": login }));
+                    }
+                    if let Some(parent) = dest.parent() {
+                        settings.clone_dir = parent.display().to_string();
+                    }
                     self.save_settings(&settings);
                 }
-                self.open_repo(repo.root(), effects)
+                // upstream: fork 를 받았으면 원본을 upstream 원격으로 붙인다. 못 붙여도 받은 것은 그대로 연다.
+                let warning = a.s("upstream").ok().filter(|u| !u.trim().is_empty()).and_then(|url| {
+                    let out = self.runner.run(repo.root(), &["remote", "add", "upstream", url.trim()]);
+                    (!out.success()).then(|| format!("원본을 upstream 원격으로 붙이지 못했습니다: {}", out.message()))
+                });
+                let mut info = self.open_repo(repo.root(), effects)?;
+                if let Some(warning) = warning {
+                    info["warning"] = json!(warning);
+                }
+                Ok(info)
+            }
+            "githubCloneList" => self.github_clone_list(&args),
+            "githubCloneAccounts" => {
+                let accounts: Vec<Value> = self.clone_accounts().iter().map(|(s, l)| json!({ "source": s, "login": l })).collect();
+                Ok(json!({ "accounts": accounts }))
+            }
+            "githubCloneCache" => self.github_clone_cache(&args),
+            "githubCloneCacheSave" => {
+                let (source, login) = account_arg(&args).ok_or_else(|| GitError::new("계정이 없습니다."))?;
+                let repos = args.get("repos").cloned().unwrap_or(json!([]));
+                if let Some(path) = clone_cache_path(&source, &login) {
+                    if let Some(dir) = path.parent() {
+                        let _ = std::fs::create_dir_all(dir);
+                    }
+                    // savedAt(유닉스 ms): 화면이 얼마나 지난 목록인지 보고, 금방 읽은 것이면 다시 읽지 않는다.
+                    let saved_at = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+                    let _ = std::fs::write(path, json!({ "v": CLONE_CACHE_VERSION, "repos": repos, "truncated": args.get("truncated"), "savedAt": saved_at }).to_string());
+                }
+                Ok(Value::Null)
             }
             "cloneName" => Ok(json!(remote::default_clone_name(Args(&args).s("url")?))),
             "testConnection" => {
@@ -484,6 +755,36 @@ impl AppState {
                 effects.push(SideEffect::Title("Ramus".into()));
                 Ok(Value::Null)
             }
+            // 최근 목록의 레포지토리 폴더를 휴지통으로 옮긴다(시작 화면 ⋮ 메뉴를 Option/Shift 로 연 "휴지통으로 이동").
+            // 최근 목록에 있는 git 레포지토리 폴더만 받는다 — 화면이 아무 경로나 넘겨 지우는 일이 없게. 옮긴 뒤 목록과 탭에서도 뺀다.
+            "trashRepo" => {
+                let a: PathArg = parse(args)?;
+                let path = PathBuf::from(&a.path);
+                let listed = self.settings.lock().unwrap().recent.iter().any(|r| ramus_core::settings::same_path(&r.path, &a.path));
+                if !listed {
+                    return Err(GitError::new(format!("최근 목록에 없는 폴더는 지우지 않습니다: {}", a.path)));
+                }
+                if !path.is_dir() {
+                    return Err(GitError::gone(&path));
+                }
+                if !path.join(".git").exists() {
+                    return Err(GitError::new(format!("git 레포지토리 폴더가 아니라 지우지 않았습니다: {}", a.path)));
+                }
+                // 열려 있으면 먼저 닫는다(감시가 사라진 폴더를 붙들지 않게).
+                let open_here = self.repo.lock().unwrap().as_ref().is_some_and(|r| ramus_core::settings::same_path(&r.root().display().to_string(), &a.path));
+                if open_here {
+                    *self.repo.lock().unwrap() = None;
+                    *self.watcher.lock().unwrap() = None;
+                    effects.push(SideEffect::Title("Ramus".into()));
+                }
+                move_to_trash(&path)?;
+                let mut settings = self.settings.lock().unwrap();
+                settings.remove_recent(&a.path);
+                settings.close_tab(&a.path);
+                self.save_settings(&settings);
+                drop(settings);
+                Ok(self.settings_json())
+            }
             "removeRecent" => {
                 let a: PathArg = parse(args)?;
                 let mut settings = self.settings.lock().unwrap();
@@ -523,13 +824,19 @@ impl AppState {
             }
             "status" => to_json(self.repo()?.status()?),
             "snapshot" => {
+                let started = Instant::now();
                 let max = args.get("maxCount").and_then(Value::as_u64).map(|n| n as usize).unwrap_or(HISTORY_PAGE).clamp(1, 1_000_000);
                 let repo = self.repo()?;
-                let mut value = to_json(repo.snapshot(max)?)?;
+                let snap = repo.snapshot(max)?;
+                trace("snapshot git+graph", started);
+                self.note_github_remote(&repo, &snap);
+                let json_started = Instant::now();
+                let mut value = to_json(snap)?;
                 value["undo"] = self.undo_titles(&repo);
-                value["template"] = json!(repo.commit_template());
                 value["mergeMessage"] = json!(repo.merge_message());
                 value["mergeConflicts"] = json!(repo.merge_conflicts());
+                trace("snapshot to_json+extras", json_started);
+                trace("snapshot total", started);
                 Ok(value)
             }
             "commitDetail" => {
@@ -1048,9 +1355,19 @@ impl AppState {
             .filter(|p| Path::new(p).is_dir())
             .map(|p| json!({ "path": p, "name": Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.clone()) }))
             .collect();
+        // 최근 목록: 폴더가 지금 없는 것(옮김·이름 바꿈·지움·드라이브 분리)은 missing 으로 표시해 시작 화면이 뱃지를 단다.
+        let recent: Vec<Value> = s
+            .recent
+            .iter()
+            .map(|r| {
+                let mut v = json!(r);
+                v["missing"] = json!(!Path::new(&r.path).is_dir());
+                v
+            })
+            .collect();
         json!({
             "theme": s.theme,
-            "recent": s.recent,
+            "recent": recent,
             "pullMode": s.pull_mode,
             "diffLayout": s.diff_layout,
             "autoFetchMinutes": s.auto_fetch_minutes,
@@ -1066,12 +1383,16 @@ impl AppState {
 }
 
 fn repo_info(repo: &Repository) -> Value {
+    // 원격 목록은 snapshot 의 참조에 들어 있어 여기서 읽지 않는다. 두 git 호출은 나란히.
+    let (identity, superproject) = std::thread::scope(|scope| {
+        let superproject = scope.spawn(|| repo.superproject());
+        (repo.identity(), superproject.join().unwrap_or(None))
+    });
     json!({
         "path": repo.root().display().to_string(),
         "name": repo.name(),
-        "identity": repo.identity(),
-        "remotes": repo.remotes().unwrap_or_default(),
-        "superproject": repo.superproject(),
+        "identity": identity,
+        "superproject": superproject,
     })
 }
 
@@ -1158,6 +1479,19 @@ fn open_in_editor(template: &str, file: &Path, line: u64) -> Result<()> {
 }
 
 /// 폴더를 파일 관리자(Finder·탐색기)로 연다.
+/// 폴더를 휴지통으로 옮긴다(영구 삭제가 아니다 — 휴지통에서 되살릴 수 있다).
+fn move_to_trash(path: &Path) -> Result<()> {
+    #[allow(unused_mut)]
+    let mut ctx = trash::TrashContext::default();
+    // macOS 기본(Finder 에 AppleScript 로 시키기)은 자동화 권한을 묻는다 — 권한 없이 되는 NSFileManager 로.
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    ctx.delete(path).map_err(|e| GitError::new(format!("휴지통으로 옮기지 못했습니다: {e}")))
+}
+
 fn open_folder(path: &Path) -> Result<()> {
     if !path.is_dir() {
         return Err(GitError::new(format!("폴더가 없습니다: {}", path.display())));
@@ -1302,9 +1636,48 @@ struct CommitArg {
     amend: bool,
 }
 
+/// 요청의 account {source, login}.
+fn account_arg(args: &Value) -> Option<(String, String)> {
+    let v = args.get("account").filter(|v| !v.is_null())?;
+    Some((v.get("source")?.as_str()?.to_string(), v.get("login")?.as_str()?.to_string()))
+}
+
+/// Clone 창 목록 캐시의 판. 목록 질의(받는 레포지토리 범위·필드)를 바꾸면 올린다.
+const CLONE_CACHE_VERSION: u64 = 2;
+
+/// Clone 창 목록을 계정마다 넣어 두는 파일(캐시 폴더/Ramus/GitHubRepos/<source>-<login>.json).
+fn clone_cache_path(source: &str, login: &str) -> Option<PathBuf> {
+    let safe = |s: &str| s.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect::<String>().to_lowercase();
+    let name = format!("{}-{}.json", safe(source), safe(login));
+    dirs::cache_dir().map(|d| d.join("Ramus").join("GitHubRepos").join(name))
+}
+
+/// git 설정 파일 글에서 [remote "…"] 칸의 url 들.
+fn remote_urls(config: &str) -> Vec<String> {
+    let mut in_remote = false;
+    let mut urls = Vec::new();
+    for line in config.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_remote = line.starts_with("[remote ");
+        } else if in_remote
+            && let Some((key, value)) = line.split_once('=')
+            && key.trim().eq_ignore_ascii_case("url")
+        {
+            urls.push(value.trim().trim_matches('"').to_string());
+        }
+    }
+    urls
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_remote_urls_from_git_config() {
+        let config = "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = git@github.com:NK-Studio/ramus.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n\tremote = origin\n[remote \"upstream\"]\n\turl = https://github.com/o/r.git\n";
+        assert_eq!(remote_urls(config), ["git@github.com:NK-Studio/ramus.git", "https://github.com/o/r.git"]);
+    }
 
     #[test]
     fn base64_matches_standard() {

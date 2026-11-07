@@ -1,10 +1,10 @@
 // 사이드바 위 탭과 탭마다의 가운데 화면. 원본 Window/GitWindow(CreateViews)·Views/ForkChangesView·PendingChangesView·CommitHistoryView·
 // BranchExplorerView·Elements/BranchGraph/BranchGraphElement·Views/WorkspaceView·ChangesetsView 를 옮겼다.
 //
-// 탭: [그래프(GitKraken)/로컬 변경(Fork)/대기 중인 변경사항(Unity VCS)] · 브랜치 탐색기 · 워크스페이스 · 체인지 세트.
+// 탭: [그래프(GitKraken)/로컬 변경(Fork)/대기 중인 변경사항(Unity VCS)] · 브랜치 탐색기 · 워크스페이스.
 // 칸 경계는 모두 끌 수 있고(원본 TwoPaneSplitView) 크기를 기억한다.
 
-import { el, formatDate, initials, isComposing } from './util.js';
+import { el, formatDate, initials, isComposing, autoHorizontalScroll } from './util.js';
 import { icon } from './icons.js';
 import { createGraph, authorRgb } from './graph.js';
 import { fileList, selectedEntries, viewSwitch, CHANGE_STATE, STATE_LABEL, stateIcon, fileIcon } from './files.js';
@@ -38,7 +38,6 @@ function commitRow(c, { active = false, onclick, ondblclick, oncontextmenu } = {
     el('span', { class: 'cl-author', text: c.authorName }),
     el('span', { class: 'cl-date', text: formatDate(c.time, true) }));
 }
-const commitHeader = () => el('div', { class: 'cl-row cl-head' }, el('span', { class: 'cl-hash', text: '해시' }), el('span', { class: 'cl-subject', text: '메시지' }), el('span', { class: 'cl-author', text: '작성자' }), el('span', { class: 'cl-date', text: '날짜' }));
 
 /**
  * ctx: { call, prefs, state, act, showError, actions(스테이징 API), diffApi, avatars, revealCommit(hash), compare(a, b, opts),
@@ -48,7 +47,8 @@ export function createViews(ctx) {
   const host = el('section', { class: 'view-host', hidden: true });
   ctx.graphPane.after(host);
   const tabs = el('div', { class: 'side-tabs' });
-  let tab = ctx.prefs.get('tab') ?? 'main';
+  // 없어진 탭(예전 '체인지 세트')을 기억하고 있으면 첫 탭으로 돌린다.
+  let tab = ['main', 'explorer', 'workspace'].includes(ctx.prefs.get('tab')) ? ctx.prefs.get('tab') : 'main';
   let current = null; // { key, refresh(), refsChanged(), dispose(), reveal(hash) }
   let lastRefs = null;
   /** 지금 HEAD·브랜치·태그를 한 줄로(바뀌었는지 비교용). */
@@ -63,7 +63,7 @@ export function createViews(ctx) {
   const explorerStyle = () => (layout() === 'gitkraken' ? 'unity' : ctx.prefs.get('explorer') ?? 'fork');
   const busy = () => !!ctx.state.busy;
 
-  /** 사이드바 위 탭 목록(원본 SidebarTab: 22px 줄 · 제목 · 오른쪽 개수 배지). */
+  /** 사이드바 위 탭 목록(원본 SidebarTab: 28px 줄 · 제목 · 오른쪽 개수 배지). */
   function renderTabs() {
     const st = ctx.state.status;
     const changes = st ? new Set([...st.staged, ...st.unstaged].map((e) => e.path)).size : 0;
@@ -71,7 +71,6 @@ export function createViews(ctx) {
       ['main', MAIN_TAB[layout()], changes],
       ['explorer', '브랜치 탐색기', 0],
       ['workspace', '워크스페이스', 0],
-      ['changesets', '체인지 세트', 0],
     ];
     tabs.replaceChildren(...items.map(([key, label, count]) => el('div', {
       class: `side-tab${tab === key ? ' on' : ''}`, role: 'tab',
@@ -98,7 +97,7 @@ export function createViews(ctx) {
       const id = `${key}:${layout()}:${explorerStyle()}`;
       const build = key === 'main' ? (layout() === 'fork' ? forkChanges : pendingChanges)
         : key === 'explorer' ? (explorerStyle() === 'fork' ? forkExplorer : unityExplorer)
-          : key === 'workspace' ? workspaceView : changesetsView;
+          : workspaceView;
       current = { key: id, ...build(host) };
     }
     renderTabs();
@@ -151,6 +150,7 @@ export function createViews(ctx) {
     const template = () => (typeof ctx.state.template === 'string' ? ctx.state.template.replace(/\r\n/g, '\n').trimEnd() : '');
 
     const message = el('textarea', { class: 'field pending-message', rows: 3, placeholder: '커밋 메시지', spellcheck: 'false' });
+    autoHorizontalScroll(message);
     const draft = ctx.state.draft.summary + (ctx.state.draft.description ? `\n\n${ctx.state.draft.description}` : '');
     message.value = draft || template();
     message.addEventListener('input', () => {
@@ -474,6 +474,10 @@ export function createViews(ctx) {
 
   // ── 탐색 화면 머리(원본 branch-explorer__toolbar): 기간 · 요약 | 찾기 · [다음] · 탐색기 모양 ──
 
+  // 찾는 글은 앱이 떠 있는 동안만 기억한다(탭·탐색기 모양을 바꿔도 남는다). 설정에 저장하면 다음에 켰을 때
+  // 검색 중인 줄 모르고 그래프의 검색 강조를 보게 된다.
+  let explorerSearch = '';
+
   function explorerBar(onQuery, { onSearch, onNext, extra = [] } = {}) {
     const period = el('select', { class: 'field small-select' }, PERIODS.map((p) => el('option', { value: p.value, text: p.label })));
     period.value = String(ctx.prefs.get('explorer.period') ?? 30);
@@ -481,10 +485,10 @@ export function createViews(ctx) {
     const query = () => ({ days: Number(period.value) });
     period.addEventListener('change', () => { ctx.prefs.set('explorer.period', Number(period.value)); onQuery(query()); });
     const search = el('input', { class: 'field explorer-search', placeholder: '찾기 — 제목·작성자·SHA·브랜치', spellcheck: 'false' });
-    search.value = ctx.prefs.get('explorer.search') ?? '';
+    search.value = explorerSearch;
     const next = el('button', { class: 'btn small', text: '다음', 'data-tip': '검색에 맞는 다음 커밋으로 이동 (Enter)', disabled: !search.value.trim(), onclick: () => onNext?.(1) });
     search.addEventListener('input', () => {
-      ctx.prefs.set('explorer.search', search.value);
+      explorerSearch = search.value;
       next.disabled = !search.value.trim();
       onSearch?.(search.value.trim().toLowerCase());
     });
@@ -672,9 +676,14 @@ export function createViews(ctx) {
     const tabButtons = PAGES.map(([key, label]) => el('button', { class: 'chx-tab', text: label, onclick: () => selectPage(key) }));
     const placeholder = el('div', { class: 'chx-placeholder', text: '커밋을 고르면 메시지와 바뀐 파일이 여기에 나옵니다.' });
 
-    // 커밋 칸: 한 스크롤 안에 작성자·커미터, 참조·SHA·부모, 메시지, 바뀐 파일.
+    // 커밋 칸: 한 스크롤 안에 작성자, 참조·SHA(작성자와 다른 커미터는 그 옆 작은 표시)·부모, 메시지, 바뀐 파일.
     const author = el('div', { class: 'chx-person' });
-    const committer = el('div', { class: 'chx-person', hidden: true });
+    const committer = el('span', { class: 'chx-committer', hidden: true });
+    // 원격이 GitHub 이면 SHA 옆 GitHub 아이콘 — 누르면 GitHub 에서 그 커밋을 연다.
+    const githubLink = el('button', { class: 'chx-github', hidden: true, 'data-tip': 'GitHub 에서 이 커밋 보기', onclick: () => {
+      const url = shown && githubCommitUrl(shown);
+      if (url) ctx.call('openUrl', { url }).catch(ctx.showError);
+    } }, icon('github', 15));
     const refsValue = el('div', { class: 'chx-field-value' });
     const refsField = el('div', { class: 'chx-field' }, el('span', { class: 'chx-field-label', text: '참조' }), refsValue);
     const sha = el('span', { class: 'chx-sha', 'data-tip': '누르면 전체 해시를 복사합니다.', onclick: () => shown && navigator.clipboard?.writeText(shown) });
@@ -684,19 +693,35 @@ export function createViews(ctx) {
     const body = el('div', { class: 'chx-body' });
     const commitFiles = el('div', { class: 'chx-file-list' });
     const commitPage = el('div', { class: 'chx-page chx-info' },
-      el('div', { class: 'chx-people' }, author, committer),
+      el('div', { class: 'chx-people' }, author),
       refsField,
-      el('div', { class: 'chx-field' }, el('span', { class: 'chx-field-label', text: 'SHA' }), el('div', { class: 'chx-field-value' }, sha)),
+      el('div', { class: 'chx-field' }, el('span', { class: 'chx-field-label', text: 'SHA' }), el('div', { class: 'chx-field-value' }, sha, githubLink, committer)),
       parentsField,
       el('div', { class: 'chx-message' }, subject, body),
       commitFiles);
 
     // 변경 칸: 머리 한 줄, 왼쪽 바뀐 파일(320) | 오른쪽 diff.
     const changesHeader = el('div', { class: 'chx-header-line' });
-    const changesSummary = el('div', { class: 'chx-summary' });
+    // 머리 줄 왼쪽은 파일 찾기 칸(경로로 거른다, Esc 로 지운다). 다른 커밋으로 옮겨도 찾는 글은 남는다.
+    let changesQuery = '';
+    const changesSearch = el('input', { class: 'filter-input', placeholder: '파일 찾기', spellcheck: 'false', 'data-tip': '바뀐 파일을 경로로 거릅니다. Esc 로 지웁니다.' });
+    const applySearch = () => {
+      if (changesSearch.value === changesQuery) return;
+      changesQuery = changesSearch.value;
+      drawChanges();
+    };
+    changesSearch.addEventListener('input', (event) => { if (!isComposing(event)) applySearch(); });
+    changesSearch.addEventListener('compositionend', applySearch);
+    changesSearch.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || isComposing(event) || !changesSearch.value) return;
+      event.stopPropagation();
+      changesSearch.value = '';
+      applySearch();
+    });
+    const changesFilter = el('label', { class: 'staging-filter chx-filter' }, icon('search', 14), changesSearch);
     const changesMode = el('span', { class: 'chx-tools' });
     const changesFiles = el('div', { class: 'chx-files' });
-    const changesSide = el('div', { class: 'chx-side' }, el('div', { class: 'chx-list-header' }, changesSummary, el('span', { class: 'spacer' }), changesMode), changesFiles);
+    const changesSide = el('div', { class: 'chx-side' }, el('div', { class: 'chx-list-header' }, changesFilter, changesMode), changesFiles);
     const diffBox = el('div', { class: 'chx-viewer diff-view embedded' });
     const diff = createDiffView(diffBox);
     const changesPage = el('div', { class: 'chx-page' }, changesHeader,
@@ -765,6 +790,7 @@ export function createViews(ctx) {
         bindPerson(author, '작성자', commit.authorName, commit.authorEmail, commit.time, commit.hash);
         committer.hidden = true;
         sha.textContent = commit.hash;
+        githubLink.hidden = !githubCommitUrl(commit.hash);
         bindParents(commit.parents);
         setMessage(commit.subject);
         bindHeaderLine(changesHeader, commit);
@@ -779,6 +805,7 @@ export function createViews(ctx) {
         commit = { hash: data.hash, shortHash: data.hash.slice(0, 7), subject: data.message.split('\n')[0], authorName: data.authorName, authorEmail: data.authorEmail, time: data.time, parents: data.parents };
         bindPerson(author, '작성자', data.authorName, data.authorEmail, data.time, data.hash);
         sha.textContent = data.hash;
+        githubLink.hidden = !githubCommitUrl(data.hash);
         bindParents(data.parents);
         bindHeaderLine(changesHeader, commit);
         bindHeaderLine(treeHeader, commit);
@@ -788,7 +815,7 @@ export function createViews(ctx) {
       const same = !data.committerName
         || (data.committerEmail === data.authorEmail && data.committerName === data.authorName && Math.abs((data.committerTime ?? data.time) - data.time) < 1);
       committer.hidden = same;
-      if (!same) bindPerson(committer, '커미터', data.committerName, data.committerEmail, data.committerTime, null);
+      if (!same) bindCommitter(data.committerName, data.committerEmail, data.committerTime ?? data.time);
       files = data.files.map((f) => ({ ...f, state: CHANGE_STATE[f.status] ?? 'modified' }));
       bindFiles();
       if (page === 'tree') loadTree();
@@ -818,6 +845,22 @@ export function createViews(ctx) {
             el('div', { class: 'chx-person-date', text: formatDate(time, true) }))));
     }
 
+    /** 작성자와 다른 커미터(GitHub 웹 병합·리베이스 등): SHA 옆 작은 아바타 하나. 이름·이메일·시각은 툴팁. */
+    function bindCommitter(name, email, time) {
+      committer.dataset.tip = `커미터 — ${name}${email ? ` <${email}>` : ''} · ${formatDate(time, true)}`;
+      committer.replaceChildren(avatarBox(name, email, null, true));
+    }
+
+    /** GitHub 원격(origin 을 먼저)의 커밋 주소. GitHub 원격이 없으면 null. */
+    function githubCommitUrl(hash) {
+      const remotes = [...(ctx.state.remotes ?? [])].sort((a, b) => (b.name === 'origin') - (a.name === 'origin'));
+      for (const r of remotes) {
+        const m = /github\.com[:/]+([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i.exec(r.fetchUrl ?? '');
+        if (m) return `https://github.com/${m[1]}/${m[2]}/commit/${hash}`;
+      }
+      return null;
+    }
+
     function bindRefs(refs) {
       refsField.hidden = !refs.length;
       refsValue.replaceChildren(...refs.map((r) => el('span', { class: `chx-ref ${r.kind}`, text: r.name })));
@@ -845,7 +888,6 @@ export function createViews(ctx) {
       }, stateIcon(f.state), fileIcon(f.path), el('span', { class: 'chx-file-path', text: f.originalPath ? `${f.originalPath} → ${f.path}` : f.path }), el('span', { class: 'chx-file-arrow', text: '→' }))));
       if (files.length > MAX_FILE_ROWS) commitFiles.append(el('div', { class: 'chx-file-more', text: `… 파일 ${files.length - MAX_FILE_ROWS}개 더 — Changes 탭에서 보기`, onclick: () => selectPage('changes') }));
       commitFiles.hidden = !files.length;
-      bindSummary();
       drawChanges();
     }
 
@@ -856,14 +898,6 @@ export function createViews(ctx) {
 
     // ── 변경 칸 ──
 
-    /** "✎ 2 수정  + 1 추가  − 1 삭제  → 1 이름 변경" — 종류마다 상태 색(원본 BindSummary). */
-    function bindSummary() {
-      const count = (state) => files.filter((f) => f.state === state).length;
-      changesSummary.replaceChildren(...[['modified', '✎', '수정'], ['added', '+', '추가'], ['deleted', '−', '삭제'], ['renamed', '→', '이름 변경']]
-        .filter(([state]) => count(state))
-        .map(([state, sign, label]) => el('span', { class: `chx-count ${state}`, text: `${sign} ${count(state)} ${label}` })));
-    }
-
     const openDiff = (f) => diff.open({
       target: { kind: 'commit', hash: shown, path: f.path, originalPath: f.originalPath ?? null },
       mode: 'commit', title: f.path, api: { ...ctx.diffApi, close: () => diff.close() },
@@ -871,19 +905,27 @@ export function createViews(ctx) {
 
     function drawChanges() {
       changesMode.replaceChildren(viewSwitch(changesView, (v) => { changesView = v; ctx.prefs.set('explorer.changesView', v); drawChanges(); }));
+      const needle = changesQuery.trim().toLowerCase();
+      const shownFiles = needle ? files.filter((f) => f.path.toLowerCase().includes(needle) || f.originalPath?.toLowerCase().includes(needle)) : files;
       changesFiles.replaceChildren(fileList({
-        entries: files, view: changesView, state: changesState, collapsed: changesCollapsed,
+        entries: shownFiles, view: changesView, state: changesState, collapsed: changesCollapsed,
         onToggleFolder: (p) => { if (changesCollapsed.has(p)) changesCollapsed.delete(p); else changesCollapsed.add(p); drawChanges(); },
         onSetCollapsed: (paths) => { changesCollapsed.clear(); for (const p of paths) changesCollapsed.add(p); drawChanges(); },
         onOpen: openDiff,
         onMenu: (event, picked) => fileMenu(event, picked),
-        empty: detailData ? '바뀐 파일이 없습니다.' : '불러오는 중…',
+        empty: !detailData ? '불러오는 중…' : needle && files.length ? '찾는 파일이 없습니다.' : '바뀐 파일이 없습니다.',
       }));
     }
 
     /** 커밋 칸에서 고른 파일: 변경 칸으로 넘어가 그 파일 diff 를 보고, 왼쪽 목록에서도 그 파일을 펼쳐 고른다(원본 OpenInChanges). */
     function openInChanges(f) {
       selectPage('changes');
+      // 찾는 글에 걸리지 않는 파일이면 찾기를 지워 목록에 보이게 한다.
+      const needle = changesQuery.trim().toLowerCase();
+      if (needle && !f.path.toLowerCase().includes(needle) && !f.originalPath?.toLowerCase().includes(needle)) {
+        changesSearch.value = '';
+        changesQuery = '';
+      }
       changesState.selected.clear();
       changesState.selected.add(f.path);
       changesState.anchor = f.path;
@@ -1085,7 +1127,10 @@ export function createViews(ctx) {
       el('button', { class: 'bx-overlay-btn', 'data-tip': 'HEAD 로 이동', onclick: () => graph.focusNode(graph.findHead()) }, icon('home', 18)),
       el('button', { class: 'bx-overlay-btn', 'data-tip': '확대', onclick: () => graph.zoomBy(1.25) }, icon('zoomIn', 18)),
       el('button', { class: 'bx-overlay-btn', 'data-tip': '축소', onclick: () => graph.zoomBy(1 / 1.25) }, icon('zoomOut', 18)));
-    const wrap = el('div', { class: 'bx-wrap' }, graph.element, overlay);
+    // 인스펙터의 파일을 누르면 diff 가 그래프 칸을 덮는다(메인 그래프 탭과 같다). docked 없이 넣어 absolute 로 덮게 둔다 —
+    // 그래프는 밑에 그대로 있어 닫으면 보던 위치·확대가 남는다. 탭을 바꾸면 select() 의 restoreDiffHosts() 가 돌려놓는다.
+    const wrap = el('div', { class: 'bx-wrap' }, graph.element, overlay, ctx.diffViewEl, ctx.mergeViewEl);
+    const closeDiff = () => ctx.diffApi?.close?.();
     const head = explorerBar((q) => load(q), {
       onSearch: (q) => { searchCursor = -1; graph.setSearch(q); },
       onNext: (step) => focusNextMatch(step),
@@ -1111,6 +1156,7 @@ export function createViews(ctx) {
       graph.setGraph(model, h.head ? '이 기간에 커밋이 없습니다. 기간을 늘려 보세요.' : '아직 커밋이 없습니다.');
       if (shownHash && !model.nodeByHash.has(shownHash)) {
         shownHash = null;
+        closeDiff();
         placeholder();
         graph.setSelected(null);
       }
@@ -1122,6 +1168,8 @@ export function createViews(ctx) {
     function select(node) {
       graph.setSelected(node.commit.hash);
       if (shownHash === node.commit.hash) return;
+      // 다른 커밋으로 옮기면 앞 커밋의 diff 는 닫는다(커밋과 diff 가 어긋나지 않게).
+      if (shownHash) closeDiff();
       shownHash = node.commit.hash;
       const my = ++detailToken;
       ctx.call('commitDetail', { hash: node.commit.hash }).then((d) => {
@@ -1177,7 +1225,8 @@ export function createViews(ctx) {
     }
 
     load(head.query());
-    return { refresh: () => load(head.query()), dispose: () => graph.dispose(), reveal };
+    // 열린 diff 는 닫고 떠난다 — 열린 채 그래프 칸으로 돌아가면 메인 그래프 위에 남는다.
+    return { refresh: () => load(head.query()), dispose: () => { closeDiff(); graph.dispose(); }, reveal };
   }
 
   // ── 워크스페이스(EX-04, 원본 WorkspaceView): 폴더 트리 표(항목 · 상태 · 크기 · 수정한 날짜) | 정보·히스토리(340) ──
@@ -1370,76 +1419,6 @@ export function createViews(ctx) {
     return { refresh: load };
   }
 
-  // ── 체인지 세트(EX-05, 원본 ChangesetsView): 커밋 목록 200개씩 · 아래 상세(260) ──
-
-  function changesetsView(root) {
-    const PAGE = 200;
-    let all = ctx.prefs.get('changesets.all') ?? false;
-    let commits = [];
-    let more = true;
-    let loading = false;
-    let selected = null;
-    const list = el('div', { class: 'cs-list' });
-    const detail = el('div', { class: 'cs-detail detail' });
-    const allBox = el('label', { class: 'check' }, el('input', { type: 'checkbox' }), '모든 브랜치');
-    allBox.firstChild.checked = all;
-    allBox.firstChild.addEventListener('change', () => { all = allBox.firstChild.checked; ctx.prefs.set('changesets.all', all); reset(); });
-    const count = el('span', { class: 'muted small' });
-    const moreButton = el('button', { class: 'btn small', text: `${PAGE}개 더`, onclick: () => page() });
-    root.append(el('div', { class: 'explorer-bar' }, allBox, count, el('span', { class: 'spacer' }), moreButton),
-      el('div', { class: 'cs-layout' }, el('div', { class: 'cs-main' }, commitHeader(), list), splitter({ pane: detail, axis: 'y', prefs: ctx.prefs, key: 'changesets.detailHeight', size: 260, min: 80, rest: 100, after: true }), detail));
-    async function page() {
-      if (loading) return;
-      loading = true;
-      drawSummary();
-      try {
-        const h = await ctx.call('explorerHistory', { all, maxCount: PAGE, skip: commits.length, topDown: true });
-        commits = commits.concat(h.commits);
-        more = h.commits.length >= PAGE;
-      } catch (error) {
-        ctx.showError(error);
-      }
-      loading = false;
-      draw();
-    }
-    function reset() {
-      commits = [];
-      more = true;
-      page();
-    }
-    function drawSummary() {
-      count.textContent = loading ? '불러오는 중…' : `커밋 ${commits.length.toLocaleString('ko-KR')}개${more ? '+' : ''}`;
-      // 더 읽을 것이 없으면 숨긴다(꺼진 버튼은 눌러도 되는 것처럼 보였다).
-      moreButton.hidden = !more;
-      moreButton.disabled = loading;
-    }
-    function show(c) {
-      selected = c.hash;
-      for (const row of list.querySelectorAll('.cl-row')) row.classList.toggle('active', row.dataset.hash === c.hash);
-      ctx.call('commitDetail', { hash: c.hash }).then((d) => renderCommit(detail, d, ctx.actions)).catch(ctx.showError);
-    }
-    function draw() {
-      drawSummary();
-      list.replaceChildren(...(commits.length ? commits.map((c) => commitRow(c, {
-        active: c.hash === selected,
-        onclick: () => show(c),
-        oncontextmenu: (event) => { event.preventDefault(); ctx.refsUi.commitMenu(event, c); },
-      })) : [el('div', { class: 'ws-empty', text: loading ? '불러오는 중…' : '아직 커밋이 없습니다.' })]));
-    }
-    detail.append(el('div', { class: 'ws-empty', text: '커밋을 고르면 메시지와 바뀐 파일이 여기에 나옵니다.' }));
-    page();
-    return {
-      refresh: reset,
-      reveal: (hash) => {
-        const c = commits.find((x) => x.hash === hash);
-        if (!c) return false;
-        show(c);
-        list.querySelector(`.cl-row[data-hash="${hash}"]`)?.scrollIntoView({ block: 'center' });
-        return true;
-      },
-    };
-  }
-
   // 사이드바 맨 위에 탭을 붙인다.
   ctx.sidebar.prepend(tabs);
   renderTabs();
@@ -1461,7 +1440,7 @@ export function createViews(ctx) {
     relayout() {
       select(tab, true);
     },
-    /** 지금 탭(브랜치 탐색기·체인지 세트)에서 그 커밋으로 가서 고른다. 읽은 범위 밖이면 더 읽는다. */
+    /** 지금 탭(브랜치 탐색기)에서 그 커밋으로 가서 고른다. 읽은 범위 밖이면 더 읽는다. */
     reveal(hash) {
       return current?.reveal?.(hash) ?? false;
     },

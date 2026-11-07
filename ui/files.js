@@ -85,7 +85,7 @@ export function selectedEntries(st, entries) {
  *  entries: [{path, originalPath, state, note}], view: 'path'|'tree',
  *  state: {selected: Set<path>, folders: Set<folderPath>, anchor, cursor} (그리기 사이에 남는 선택. anchor·cursor 는 줄 키 'f:경로'|'d:폴더'),
  *  activeKey, keyOf(entry), collapsed: Set<folderPath>, onToggleFolder(path), onSetCollapsed(paths[]),
- *  onSelect(entries), onOpen(entry), onActivate(entries), onMenu(event, entries, clicked), onFolderMenu(event, folder, entries, {expandAll, collapseAll}),
+ *  onSelect(entries), onOpen(entry, { toggle }?), onActivate(entries), onMenu(event, entries, clicked), onFolderMenu(event, folder, entries, {expandAll, collapseAll}),
  *  onDelete(entries), rowAction: {label, kind, run(entry), labelOf(entry)} | null, expandToggle: 트리 위 [모두 펼치기/접기], empty: '…'
  */
 export function fileList(opts) {
@@ -173,10 +173,13 @@ export function fileList(opts) {
         // Shift 로 누를 때 글자가 끌려 선택되지 않게.
         if (event.shiftKey) event.preventDefault();
       },
+      // 마우스를 올리면(누르기 전에) 알린다 — 커밋 파일은 diff 를 미리 읽어 두어 누를 때 바로 보이게.
+      onpointerenter: opts.onHover && ((event) => { if (event.pointerType !== 'touch') opts.onHover(entry); }),
       onclick: (event) => {
         if (event.target.closest('button')) return;
         select(entry, event);
-        if (!event.shiftKey && !(event.metaKey || event.ctrlKey)) opts.onOpen?.(entry);
+        // 마우스 클릭은 { toggle: true } 를 넘긴다 — 이미 열린 파일을 다시 누르면 diff 를 닫는다(키보드 이동은 닫지 않는다).
+        if (!event.shiftKey && !(event.metaKey || event.ctrlKey)) opts.onOpen?.(entry, { toggle: true });
       },
       ondblclick: (event) => {
         if (!event.target.closest('button')) opts.onActivate?.([entry]);

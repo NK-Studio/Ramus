@@ -106,7 +106,7 @@ fn reply_json(id: u64, result: ramus_core::repo::Result<Value>) -> String {
 fn dispatch(state: Arc<AppState>, proxy: EventLoopProxy<UserEvent>, request: IpcRequest) {
     thread::spawn(move || {
         let mut effects = Vec::new();
-        let result = state.handle(&request.cmd, request.args, &mut effects);
+        let result = state.explain_gone(state.handle(&request.cmd, request.args, &mut effects));
         for effect in effects {
             match effect {
                 SideEffect::Title(title) => {
@@ -139,33 +139,30 @@ fn main() -> wry::Result<()> {
         let _ = emit_proxy.lock().unwrap().send_event(UserEvent::Emit(body));
     })));
 
-    // 자동 페치: 30초마다 때가 됐는지 본다(간격은 설정, 기본 10분).
+    // 5초마다 레포지토리 폴더가 아직 있는지 본다(드라이브를 빼면 파일 감시가 알리지 못한다).
+    // 자동 페치는 30초마다 때가 됐는지 본다(간격은 설정, 기본 10분).
     let fetch_state = Arc::downgrade(&state);
     thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(30));
-            match fetch_state.upgrade() {
-                Some(state) => state.auto_fetch_tick(),
-                None => break,
+        for tick in 1u32.. {
+            thread::sleep(Duration::from_secs(5));
+            let Some(state) = fetch_state.upgrade() else { break };
+            if state.notice_gone() {
+                continue;
+            }
+            if tick % 6 == 0 {
+                state.auto_fetch_tick();
             }
         }
     });
 
     let theme = state.settings.lock().unwrap().theme.clone();
-    // 첫 화면 스켈레톤이 쓸 힌트: 화면이 그려지기 전에 window.__boot 로 넘긴다(테마·배치·칸 폭·다시 열 레포지토리).
-    let boot = {
-        let settings = state.settings.lock().unwrap();
-        let repo = settings.last_repo.as_ref().filter(|p| Path::new(p).is_dir());
-        json!({
-            "theme": settings.theme,
-            "platform": std::env::consts::OS,
-            "layout": settings.ui.get("layout"),
-            "sidebar": settings.ui.get("split.sidebar"),
-            "detail": settings.ui.get("split.detail"),
-            "repo": repo.and_then(|p| Path::new(p).file_name()).map(|n| n.to_string_lossy().into_owned()),
-            "tabs": settings.open_tabs.len(),
-        })
-    };
+    // 시작 화면(boot.js)이 쓸 힌트: 화면이 그려지기 전에 window.__boot 로 넘긴다(첫 그림부터 맞는 테마 바탕색으로).
+    let boot = json!({
+        "theme": theme,
+        "platform": std::env::consts::OS,
+        // 개발 빌드: 화면이 점검용 손잡이(window.__ramus)를 드러낸다.
+        "dev": cfg!(debug_assertions),
+    });
     let dark = theme != "light";
     let builder = WindowBuilder::new()
         .with_title("Ramus")
@@ -297,7 +294,13 @@ fn main() -> wry::Result<()> {
                 }
             }
             Event::UserEvent(UserEvent::Reply(body)) => {
-                let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.reply({body})"));
+                // 객체 리터럴이 아니라 JSON 글을 넘겨 JSON.parse 로 읽는다 — 큰 응답(수천 줄 diff)은 웹뷰가 리터럴로 파싱하는 것보다 몇 배 빠르다.
+                let started = std::time::Instant::now();
+                let text = serde_json::to_string(&body).unwrap_or_else(|_| "\"\"".into());
+                let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.reply(JSON.parse({text}))"));
+                if ramus_core::runner::trace_enabled() && body.len() > 64 * 1024 {
+                    ramus_core::runner::trace(&format!("reply {}KB marshal+eval", body.len() / 1024), started);
+                }
             }
             Event::UserEvent(UserEvent::Title(title)) => window.set_title(&title),
             Event::UserEvent(UserEvent::Zoom(scale)) => {

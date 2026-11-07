@@ -29,6 +29,10 @@ const BAR_STEPS = [['compact', 820], ['narrow', 690], ['tiny', 560], ['micro', 4
 const CONTEXT_STEPS = [0, 1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 100];
 /** 이보다 줄이 많은 diff 는 칠하지 않는다(처음 열 때 모든 줄을 한 번 훑는다, 원본 MaxSyntaxLines). */
 const MAX_SYNTAX_LINES = 50000;
+/** 이보다 긴 줄은 이만큼만 그린다(VS Code 의 stopRenderingLineAfter 와 같은 뜻). */
+const MAX_LINE_CHARS = 10000;
+/** 긴 줄의 바뀐 곳이 뒤에 있으면 그 앞 이만큼부터 보인다. */
+const LONG_LINE_LEAD = 1000;
 
 /** current 에서 direction(−1·+1) 쪽 다음 단계. 끝이면 그대로. 단계 밖의 값이면 바로 위·아래 단계로(원본 NextContextStep). */
 export function nextContextStep(current, direction) {
@@ -50,6 +54,24 @@ function barButton(onClick, tip, iconName, text, { on = false, disabled = false,
     iconName ? pngIcon(iconName) : null, text ? el('span', { class: `dbar-label${iconName ? ' with-icon' : ''}`, text }) : null);
 }
 
+/** 막대 안의 묶음이 제 칸을 넘치는지. 오른쪽 칸은 끝 맞춤이라 왼쪽으로 넘쳐 scrollWidth 에 잡히지 않으니, 자식들이 차지한 폭을 잰다. */
+function barOverflows(bar) {
+  if (bar.scrollWidth > bar.clientWidth + 0.5) return true;
+  const sides = [...bar.children];
+  for (let i = 0; i < sides.length; i++) {
+    const kids = [...sides[i].children].filter((k) => k.offsetParent !== null);
+    if (!kids.length) continue;
+    const box = sides[i].getBoundingClientRect();
+    const left = kids[0].getBoundingClientRect().left;
+    const right = kids[kids.length - 1].getBoundingClientRect().right;
+    if (left < box.left - 0.5 || right > box.right + 0.5) return true;
+    // 이웃 칸과 겹치는지(가운데 칸의 여백까지 먹으면 묶음 테두리가 맞붙는다).
+    const next = sides[i + 1]?.getBoundingClientRect();
+    if (next && box.right > next.left + 0.5) return true;
+  }
+  return false;
+}
+
 /** 한 테두리 안의 칸 묶음([파일 보기|Diff 보기]·[↑|↓] 등). */
 const segment = (cls, buttons) => el('div', { class: `dbar-seg ${cls}` }, buttons);
 
@@ -64,14 +86,28 @@ function formatBytes(bytes) {
  * 줄 글. 글자 단위(코드 포인트)로 [start, start+len) 을 강조하고, 문법 색 조각(spans, UTF-16 위치)을 sx-갈래 로 칠한다.
  * 공백 보이기면 공백·탭을 흐린 · → 로. 강조·색·공백이 겹쳐도 셋 다 남는다(원본 RenderSelected).
  */
+/** 글자(code point) 위치 → 문자열(UTF-16) 위치. Rust 가 주는 바뀐 구간은 글자 단위다. */
+function utf16Offset(text, codePoints, from = 0, fromCp = 0) {
+  let i = from;
+  for (let n = fromCp; n < codePoints && i < text.length; n++) i += text.codePointAt(i) > 0xffff ? 2 : 1;
+  return i;
+}
+
+/** 바뀐 구간(글자 start·len) → 문자열 위치 [from, to). 없으면 [0, 0]. */
+function changeRange(text, start, len) {
+  if (!len) return [0, 0];
+  const from = utf16Offset(text, start);
+  return [from, utf16Offset(text, start + len, from, start)];
+}
+
 function lineText(text, start, len, showWs, spans) {
-  let from = 0;
-  let to = 0;
-  if (len) {
-    const chars = Array.from(text);
-    from = chars.slice(0, start).join('').length;
-    to = from + chars.slice(start, start + len).join('').length;
-  }
+  const [from, to] = changeRange(text, start, len);
+  return lineTextRange(text, from, to, showWs, spans);
+}
+
+/** 줄 글 조각들. [from, to) 는 바뀐 구간(문자열 위치, 같으면 없음), spans 는 문법 색. */
+function lineTextRange(text, from, to, showWs, spans) {
+  const len = to - from;
   const cuts = new Set([0, text.length]);
   if (len) cuts.add(from).add(to);
   for (const sp of spans ?? []) cuts.add(sp.start).add(Math.min(text.length, sp.start + sp.length));
@@ -107,6 +143,9 @@ export function createDiffView(container) {
   let lineToRow = new Map(); // 문서 줄 → 행
   let hoverGroup = null; // Fork 식: 마우스를 올린 변경 덩어리 [첫 행, 끝 행]
   let dragging = null;
+  /** 직전에 읽은 파일이 글이었는가(다음 파일을 읽는 동안 툴바 모양을 정하는 데 쓴다). */
+  let lastWasText = true;
+
   let slowTimer = 0;
   let lastJumpRow = -1;
   let actionLines = [];
@@ -122,6 +161,18 @@ export function createDiffView(container) {
   /** 지금 보기가 파일 전체를 읽는지(문맥 줄 수가 쓰이지 않는지, 원본 ShowsEntireFile). */
   const showsEntireFile = () => shownFileView() || (entireFileApplies() && state.entire);
   const contextFor = () => (showsEntireFile() ? FULL_CONTEXT : contextLines());
+  /**
+   * 열려 있지 않을 때, 다음에 열면 읽을 옵션(문맥 줄 수·공백 무시). 미리 읽기(마우스를 올린 파일)가 같은 옵션으로 읽어 두어야
+   * 누를 때 캐시에 맞는다. open() 이 설정에서 상태를 만드는 규칙과 같아야 한다.
+   */
+  function expectedLoad(p, layout) {
+    const fork = document.body.dataset.layout === 'fork';
+    const view = p.get('diff.view') ?? (layout === 'split' ? 'split' : 'hunk');
+    const fileView = !fork && !!p.get('diff.fileView');
+    const applies = !fileView && (fork ? 'inline' : view) !== 'hunk';
+    const entire = fileView || (applies && (p.get('diff.entireFile') ?? true));
+    return { context: entire ? FULL_CONTEXT : (p.get('diff.context') ?? 3), ignoreWhitespace: !!p.get('diff.ignoreWhitespace') };
+  }
   /** 줄·hunk 단위 Stage·Unstage 가 되는지. 공백을 무시한 diff 는 줄 내용이 인덱스와 달라 패치가 붙지 않으므로 뺀다. */
   const canStageLines = () => (state.mode === 'unstaged' || state.mode === 'staged') && !state.ignoreWs && !!state.doc && !state.doc.binary;
   /** 거터·줄 번호로 줄을 고르는지: 위 조건에 더해 Diff 보기에서만(파일 보기는 지운 줄을 숨겨 고를 줄이 반쪽이다). */
@@ -178,6 +229,7 @@ export function createDiffView(container) {
         if (handled && state === current) {
           clearTimeout(slowTimer);
           current.image = true;
+          lastWasText = false;
           return;
         }
       }
@@ -241,12 +293,41 @@ export function createDiffView(container) {
     return { language, states };
   }
 
-  /** 이 줄의 문법 색 조각(칠하지 않는 파일이면 없음). */
-  function syntaxSpans(i) {
+  /** 이 줄의 문법 색 조각(칠하지 않는 파일이면 없음). end 를 주면 그 앞까지만 칠한다(긴 줄). */
+  function syntaxSpans(i, end) {
     const syntax = state.syntax;
     const line = state.doc.lines[i];
     if (!syntax || !line.text || syntax.states[i] == null) return null;
-    return tokenize(line.text, syntax.language, syntax.states[i]).spans;
+    return tokenize(end == null ? line.text : line.text.slice(0, end), syntax.language, syntax.states[i]).spans;
+  }
+
+  /**
+   * 줄 글. 아주 긴 줄(번들·데이터를 한 줄에 담은 파일)은 MAX_LINE_CHARS 만 그린다 — 수백만 자를 한 줄로 그리면
+   * 웹뷰가 글자 배치에 몇 초씩 멈춘다. 바뀐 곳이 뒤에 있으면 그 앞쪽부터 보이고, 잘린 쪽에는 "…" 표시를 단다.
+   */
+  function lineContent(i) {
+    const line = state.doc.lines[i];
+    const text = line.text ?? '';
+    if (text.length <= MAX_LINE_CHARS) return lineText(text, line.changeStart, line.changeLen, state.showWs, syntaxSpans(i));
+    const [cFrom, cTo] = changeRange(text, line.changeStart, line.changeLen);
+    const isLow = (k) => { const c = text.charCodeAt(k); return c >= 0xdc00 && c <= 0xdfff; };
+    let a = cTo > cFrom && cFrom > MAX_LINE_CHARS - LONG_LINE_LEAD ? cFrom - LONG_LINE_LEAD : 0;
+    if (a > 0 && isLow(a)) a++;
+    let b = Math.min(text.length, a + MAX_LINE_CHARS);
+    if (b < text.length && isLow(b)) b--;
+    const spans = (syntaxSpans(i, b) ?? []).flatMap((sp) => {
+      const s0 = Math.max(sp.start, a);
+      const s1 = Math.min(sp.start + sp.length, b);
+      return s1 > s0 ? [{ ...sp, start: s0 - a, length: s1 - s0 }] : [];
+    });
+    const clamp = (x) => Math.min(b - a, Math.max(0, x - a));
+    const total = text.length.toLocaleString('en-US');
+    const tip = `긴 줄이라 ${total}자 중 ${(a + 1).toLocaleString('en-US')}–${b.toLocaleString('en-US')}번째만 보입니다.`;
+    return [
+      a > 0 ? el('span', { class: 'tx-cut', 'data-tip': tip, text: `…(앞 ${a.toLocaleString('en-US')}자) ` }) : null,
+      ...lineTextRange(text.slice(a, b), clamp(cFrom), clamp(cTo), state.showWs, spans),
+      b < text.length ? el('span', { class: 'tx-cut', 'data-tip': tip, text: ` …(뒤 ${(text.length - b).toLocaleString('en-US')}자)` }) : null,
+    ];
   }
 
   // ── 행 만들기 ──
@@ -363,7 +444,7 @@ export function createDiffView(container) {
     if (side !== 'right') cells.push(el('span', { class: 'ln ln-old', 'data-i': change ? i : null, text: line.old || '' }));
     if (side !== 'left') cells.push(el('span', { class: 'ln ln-new', 'data-i': change ? i : null, text: line.new || '' }));
     return [...cells, el('span', { class: 'mk', text: mark }),
-      el('span', { class: 'tx', 'data-i': change ? i : null, 'data-cr': line.cr ? '1' : null }, lineText(line.text, line.changeStart, line.changeLen, state.showWs, syntaxSpans(i)))];
+      el('span', { class: 'tx', 'data-i': change ? i : null, 'data-cr': line.cr ? '1' : null }, lineContent(i))];
   }
 
   function rowElement(row, r) {
@@ -736,7 +817,8 @@ export function createDiffView(container) {
 
   function bar() {
     const { target } = state;
-    const isText = !state.image && !state.doc?.binary;
+    // 아직 읽기 전이면 바이너리인지 모른다 — 직전에 본 파일 종류를 따라 그려, 글 전용 버튼이 한 프레임 떴다 사라지지 않게 한다.
+    const isText = !state.image && (state.doc ? !state.doc.binary : lastWasText);
     const exists = state.entryState !== 'deleted';
     // 작업 사본의 글 diff 면 이 자리에서 고치고, 커밋·Staged 등이면 작업 사본 파일을 외부 편집기에서 연다.
     const inPlace = state.mode === 'unstaged' && !!state.api.edit;
@@ -821,6 +903,13 @@ export function createDiffView(container) {
     if (!node) return;
     const width = node.clientWidth || container.clientWidth;
     for (const [name, limit] of BAR_STEPS) node.classList.toggle(name, width < limit);
+    // 폭 기준만으로는 모자랄 수 있다(오른쪽 버튼이 늘면 반쪽 폭을 넘쳐 가운데 [파일 보기|Diff 보기]와 겹친다).
+    // 아직 넘치면 다음 단계를 차례로 더한다.
+    for (const [name] of BAR_STEPS) {
+      if (node.classList.contains(name)) continue;
+      if (!barOverflows(node)) break;
+      node.classList.add(name);
+    }
   }
   new ResizeObserver(() => {
     fitBar();
@@ -879,6 +968,7 @@ export function createDiffView(container) {
   function render() {
     if (!state || state.image) return;
     const { doc } = state;
+    if (doc) lastWasText = !doc.binary;
     const loading = el('div', { class: 'diff-loading', hidden: true, text: '불러오는 중…' });
     let content;
     body = null;
@@ -1042,5 +1132,7 @@ export function createDiffView(container) {
     close,
     get isOpen() { return state != null; },
     get target() { return state?.target; },
+    /** 지금 열면 읽을 옵션. 열려 있으면 그 상태, 아니면 설정에서(미리 읽기용). */
+    loadOptions: (p, layout) => (state ? { context: contextFor(), ignoreWhitespace: state.ignoreWs } : expectedLoad(p, layout)),
   };
 }

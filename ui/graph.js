@@ -167,6 +167,7 @@ const AI_LOGOS = { claude: 'icons/AiClaude.png', openai: 'icons/AiOpenAI.png', g
  */
 export function createAvatars(load) {
   const cache = new Map(); // email → {img, ready} | 'pending' | null
+  const urls = new Map(); // email → 주소 | null — 상세 화면용. 한 번 물은 것은 다시 묻지 않는다(그릴 때마다 머리글자→사진으로 깜박이지 않게).
   const queue = [];
   let running = 0;
   const listeners = new Set();
@@ -208,10 +209,26 @@ export function createAvatars(load) {
       }
       return entry && entry !== 'pending' && entry.ready ? entry.img : null;
     },
-    /** 상세 화면 등 <img> 에 쓸 주소(없으면 null). */
+    /** 다 읽어 디코딩까지 끝난 그림(없으면 null). 상세 화면이 캔버스에 바로 옮겨 그려 깜박이지 않게 쓴다. 묻기를 시작하지는 않는다. */
+    image(email) {
+      const entry = email ? cache.get(email) : null;
+      return entry && entry !== 'pending' && entry.ready ? entry.img : null;
+    },
+    /** 이미 아는 주소를 바로: 주소 | null(사진 없음) | undefined(아직 모름). 상세 화면이 처음부터 사진으로 그리려고 쓴다. */
+    peek(email) {
+      if (!email) return null;
+      const entry = cache.get(email);
+      if (entry && entry !== 'pending' && entry.ready) return entry.img.src;
+      return urls.get(email);
+    },
+    /** 상세 화면 등 <img> 에 쓸 주소(없으면 null). 한 번 받은 것은 기억한다. */
     async url(email, hash) {
+      const known = this.peek(email);
+      if (known !== undefined) return known;
       const answer = await load(email, hash).catch(() => null);
-      return answer?.url ?? (answer?.ai ? AI_LOGOS[answer.ai] : null);
+      const src = answer?.url ?? (answer?.ai ? AI_LOGOS[answer.ai] : null);
+      urls.set(email, src);
+      return src;
     },
     onLoad(fn) {
       listeners.add(fn);

@@ -2,8 +2,9 @@
 // 편집기용 가벼운 줄 단위 색칠이다. 정확한 파서가 아니라 한 줄씩 훑고, 여러 줄에 걸치는 것(블록 주석 · HTML 의 여러 줄 태그 · <script> · <style>)은
 // 줄 끝 상태를 다음 줄에 넘긴다. 조각 갈래(kind)는 원본 GitSyntaxKind 의 소문자 이름이고, 색은 app.css 의 --git-code-* 토큰(.sx-<kind>)에서 온다.
 
-// 말 갈래(원본 GitSyntaxLanguage): 'csharp' · 'clike' · 'css' · 'json' · 'yaml' · 'xml' · 'html'. 색칠하지 않는 말은 null.
+// 말 갈래(원본 GitSyntaxLanguage): 'csharp' · 'clike' · 'css' · 'json' · 'yaml' · 'xml' · 'html', 그리고 이 포트에서 더한 'python'. 색칠하지 않는 말은 null.
 // 조각 갈래(원본 GitSyntaxKind): keyword · string · number · comment · key · tag · attribute · punctuation · type · function(plain 은 조각으로 내지 않는다).
+// python 은 PyCharm 색을 따로 쓰려고 py-* 갈래를 낸다(tokenizePython 참고).
 
 /** 줄 시작 상태: 보통. */
 export const STATE_NORMAL = 0;
@@ -31,6 +32,19 @@ const CSHARP_KEYWORDS = new Set([
   'instanceof', 'delete', 'of',
 ]);
 
+// 흐름을 바꾸는 키워드(keyword.control)는 control 조각으로 따로 낸다. 색은 app.css 의 --git-code-control 이 정한다(지금은 다른 키워드와 같은 파랑).
+const CONTROL_KEYWORDS = new Set([
+  'if', 'else', 'for', 'foreach', 'while', 'do', 'switch', 'case', 'default', 'break', 'continue', 'return', 'goto', 'throw',
+  'try', 'catch', 'finally', 'yield', 'await', 'using', 'import', 'export', 'from', 'include', 'define',
+]);
+
+// 괄호 짝 조각(VSCode 의 bracket pair colorization): ( [ { 의 깊이마다 세 갈래를 돌려 쓴다. 깊이는 줄 끝 상태에 실어 다음 줄로 넘긴다.
+// 색은 app.css 의 --git-code-bracket-* 이 정한다(지금은 본문 글 색).
+const BRACKET_COLORS = 3;
+const DEPTH_SHIFT = 4;
+const BASE_MASK = (1 << DEPTH_SHIFT) - 1;
+const MAX_DEPTH = 255;
+
 // C# 에만 있는 문맥 키워드 가운데 변수 이름으로는 거의 안 쓰는 것(file · with · or 처럼 이름과 겹치기 쉬운 것은 넣지 않는다).
 const CSHARP_ONLY_KEYWORDS = new Set(['required', 'scoped', 'unmanaged', 'notnull', 'nint', 'nuint', 'dynamic']);
 
@@ -50,6 +64,7 @@ for (const [language, extensions] of [
     + ' .preset .spriteatlas .spriteatlasv2'],
   ['xml', '.xml .uxml .csproj .props .targets .xaml .svg'],
   ['html', '.html .htm .xhtml'],
+  ['python', '.py .pyi .pyw'],
 ]) {
   for (const extension of extensions.split(' ')) LANGUAGE_BY_EXTENSION.set(extension, language);
 }
@@ -122,10 +137,11 @@ function render(line, spans) {
 
 function tokenizeInto(line, language, state, spans) {
   switch (language) {
+    // C 계열은 VSCode 처럼 흐름 키워드와 괄호 짝 색을 따로 칠한다.
     case 'clike':
-      return tokenizeCLike(line, state, spans);
+      return tokenizeCLike(line, state, spans, false, true);
     case 'csharp':
-      return tokenizeCLike(line, state, spans, true);
+      return tokenizeCLike(line, state, spans, true, true);
     case 'css':
       return tokenizeCss(line, state, spans);
     case 'json':
@@ -138,6 +154,8 @@ function tokenizeInto(line, language, state, spans) {
       return tokenizeXml(line, state, spans);
     case 'html':
       return tokenizeHtml(line, state, spans);
+    case 'python':
+      return tokenizePython(line, state, spans);
     default:
       return STATE_NORMAL;
   }
@@ -145,10 +163,18 @@ function tokenizeInto(line, language, state, spans) {
 
 // ── C 계열 · C# ──
 
-/** csharp 이면 Unity · C# 타입 · 어트리뷰트 · 메시지 메서드도 칠한다(classifyCSharpName). */
-function tokenizeCLike(line, state, spans, csharp = false) {
+/**
+ * csharp 이면 Unity · C# 타입 · 어트리뷰트 · 메시지 메서드도 칠한다(classifyCSharpName).
+ * vscode 면 VSCode 처럼 흐름 키워드(control)와 괄호 짝(bracket-0..2, 깊이마다 돌려 쓰는 세 색)을 따로 내고, 괄호 깊이를 줄 끝 상태에 싣는다
+ * (HTML 안의 <script> 처럼 vscode 가 아니면 예전 갈래·상태 그대로).
+ */
+function tokenizeCLike(line, inState, spans, csharp = false, vscode = false) {
   let i = 0;
   const length = line.length;
+  const state = vscode ? inState & BASE_MASK : inState;
+  let depth = vscode ? inState >> DEPTH_SHIFT : 0;
+  const kind = (k) => k;
+  const done = (base) => (vscode ? base | (Math.min(depth, MAX_DEPTH) << DEPTH_SHIFT) : base);
   // C# 어트리뷰트 줄([SerializeField] · [Header("a"), Range(0, 1)]): [ ] 와 ( ) 깊이로 어트리뷰트 이름 자리를 고른다.
   let attributeLine = false;
   let bracketDepth = 0;
@@ -156,10 +182,10 @@ function tokenizeCLike(line, state, spans, csharp = false) {
   if (state === STATE_BLOCK_COMMENT) {
     const close = line.indexOf('*/');
     if (close < 0) {
-      add(spans, 0, length, 'comment');
-      return STATE_BLOCK_COMMENT;
+      add(spans, 0, length, kind('comment'));
+      return done(STATE_BLOCK_COMMENT);
     }
-    add(spans, 0, close + 2, 'comment');
+    add(spans, 0, close + 2, kind('comment'));
     i = close + 2;
   }
   // 줄 첫 글자가 #(전처리기 · 셰이더 #pragma)이면 그 낱말을 키워드 색으로.
@@ -167,23 +193,23 @@ function tokenizeCLike(line, state, spans, csharp = false) {
   if (i <= firstNonSpace && firstNonSpace < length && line[firstNonSpace] === '#') {
     let end = firstNonSpace + 1;
     while (end < length && isLetter(line[end])) end++;
-    add(spans, firstNonSpace, end - firstNonSpace, 'keyword');
+    add(spans, firstNonSpace, end - firstNonSpace, vscode ? 'control' : 'keyword');
     i = end;
   }
   if (csharp && i <= firstNonSpace && firstNonSpace < length && line[firstNonSpace] === '[') attributeLine = true;
   while (i < length) {
     const c = line[i];
     if (c === '/' && i + 1 < length && line[i + 1] === '/') {
-      add(spans, i, length - i, 'comment');
-      return STATE_NORMAL;
+      add(spans, i, length - i, kind('comment'));
+      return done(STATE_NORMAL);
     }
     if (c === '/' && i + 1 < length && line[i + 1] === '*') {
       const close = line.indexOf('*/', i + 2);
       if (close < 0) {
-        add(spans, i, length - i, 'comment');
-        return STATE_BLOCK_COMMENT;
+        add(spans, i, length - i, kind('comment'));
+        return done(STATE_BLOCK_COMMENT);
       }
-      add(spans, i, close + 2 - i, 'comment');
+      add(spans, i, close + 2 - i, kind('comment'));
       i = close + 2;
       continue;
     }
@@ -192,13 +218,13 @@ function tokenizeCLike(line, state, spans, csharp = false) {
       const verbatim = i > 0 && line[i - 1] === '@';
       const end = stringEnd(line, i, c, !verbatim);
       const start = verbatim ? i - 1 : i;
-      add(spans, start, end - start, 'string');
+      add(spans, start, end - start, kind('string'));
       i = end;
       continue;
     }
     if (isDigit(c) && (i === 0 || !isWordChar(line[i - 1]))) {
       const end = numberEnd(line, i);
-      add(spans, i, end - i, 'number');
+      add(spans, i, end - i, kind('number'));
       i = end;
       continue;
     }
@@ -207,14 +233,21 @@ function tokenizeCLike(line, state, spans, csharp = false) {
       while (end < length && isWordChar(line[end])) end++;
       const word = line.slice(i, end);
       if (CSHARP_KEYWORDS.has(word) || (csharp && CSHARP_ONLY_KEYWORDS.has(word))) {
-        add(spans, i, end - i, 'keyword');
+        add(spans, i, end - i, vscode && CONTROL_KEYWORDS.has(word) ? 'control' : kind('keyword'));
       } else if (csharp) {
         const attributeSlot = attributeLine && bracketDepth > 0 && parenDepth === 0;
-        const kind = classifyCSharpName(line, i, end, word, attributeSlot);
-        if (kind !== 'plain') add(spans, i, end - i, kind);
+        const nameKind = classifyCSharpName(line, i, end, word, attributeSlot);
+        if (nameKind !== 'plain') add(spans, i, end - i, kind(nameKind));
       }
       i = end;
       continue;
+    }
+    if (vscode && (c === '(' || c === '[' || c === '{')) {
+      add(spans, i, 1, `bracket-${depth % BRACKET_COLORS}`);
+      depth++;
+    } else if (vscode && (c === ')' || c === ']' || c === '}')) {
+      depth = Math.max(0, depth - 1);
+      add(spans, i, 1, `bracket-${depth % BRACKET_COLORS}`);
     }
     if (csharp) {
       if (c === '[') bracketDepth++;
@@ -224,7 +257,7 @@ function tokenizeCLike(line, state, spans, csharp = false) {
     }
     i++;
   }
-  return STATE_NORMAL;
+  return done(STATE_NORMAL);
 }
 
 /**
@@ -277,6 +310,204 @@ function wordEndingAt(line, last) {
   let first = last;
   while (first > 0 && isWordChar(line[first - 1])) first--;
   return isWordStart(line[first]) ? line.slice(first, last + 1) : null;
+}
+
+// ── Python ──
+// PyCharm 기본 색을 따르려고 다른 말과 따로 py-* 갈래를 낸다(색은 app.css 의 --git-code-py-*).
+// - py-keyword: 키워드와 True · False · None, py-self: self · cls, py-function: def 뒤 이름, py-decorator: 줄 첫 @이름.
+// - py-string · py-escape(\n 같은 이스케이프, raw 문자열은 빼고) · py-docstring(문장 첫자리의 """...""") · py-number · py-comment.
+// - py-kwarg: 호출 괄호 안의 이름=값 의 이름(def 머리의 기본값은 빼고).
+// 줄 끝 상태: 아래 4비트는 이어지는 삼중 따옴표 문자열(PY_TRIPLE + 문서 문자열이면 2 + ' 면 1), 그 위로 raw 비트 · def 머리 비트 · 괄호 깊이.
+
+const PY_KEYWORDS = new Set([
+  'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except',
+  'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try',
+  'while', 'with', 'yield',
+]);
+const PY_SELF = new Set(['self', 'cls']);
+const PY_STRING_PREFIXES = new Set(['r', 'u', 'b', 'f', 'br', 'rb', 'fr', 'rf']);
+// \ 뒤 한 글자로 끝나는 이스케이프(그 밖의 \d 같은 것은 그냥 문자열 글자다).
+const PY_SIMPLE_ESCAPES = new Set(['\\', '\'', '"', 'a', 'b', 'f', 'n', 'r', 't', 'v']);
+const PY_TRIPLE = 9;
+const PY_RAW_BIT = 1 << 4;
+const PY_DEF_BIT = 1 << 5;
+const PY_DEPTH_SHIFT = 6;
+
+function tokenizePython(line, inState, spans) {
+  const length = line.length;
+  let depth = inState >> PY_DEPTH_SHIFT;
+  let inDef = (inState & PY_DEF_BIT) !== 0;
+  const done = (base = STATE_NORMAL, raw = false) =>
+    base | (raw ? PY_RAW_BIT : 0) | (inDef ? PY_DEF_BIT : 0) | (Math.min(depth, MAX_DEPTH) << PY_DEPTH_SHIFT);
+  let i = 0;
+  const open = inState & BASE_MASK;
+  if (open >= PY_TRIPLE) {
+    // 앞 줄에서 이어지는 삼중 따옴표 문자열.
+    const docstring = open - PY_TRIPLE >= 2;
+    const quote = (open - PY_TRIPLE) & 1 ? '\'' : '"';
+    const raw = (inState & PY_RAW_BIT) !== 0;
+    const end = pythonStringBody(line, 0, 0, quote, true, raw, docstring ? 'py-docstring' : 'py-string', spans);
+    if (end < 0) return done(open, raw);
+    i = end;
+  }
+  if (depth === 0) inDef = false;
+  const first = skipWhitespace(line, i);
+  let afterDef = false;
+  while (i < length) {
+    const c = line[i];
+    if (c === '#') {
+      add(spans, i, length - i, 'py-comment');
+      break;
+    }
+    if (c === '@' && i === first) {
+      let end = i + 1;
+      while (end < length && (isWordChar(line[end]) || line[end] === '.')) end++;
+      add(spans, i, end - i, 'py-decorator');
+      i = end;
+      continue;
+    }
+    if (c === '"' || c === '\'') {
+      const result = pythonString(line, i, i, first, depth, spans);
+      if (result.open) return done(result.open, result.raw);
+      i = result.end;
+      continue;
+    }
+    if (isDigit(c) || (c === '.' && i + 1 < length && isDigit(line[i + 1]))) {
+      if (i > 0 && isWordChar(line[i - 1])) {
+        i++;
+        continue;
+      }
+      const end = pythonNumberEnd(line, i);
+      add(spans, i, end - i, 'py-number');
+      i = end;
+      continue;
+    }
+    if (isWordStart(c)) {
+      let end = i + 1;
+      while (end < length && isWordChar(line[end])) end++;
+      const word = line.slice(i, end);
+      // r'...' · f"..." · rb'...' 같은 접두사 붙은 문자열.
+      if (end < length && (line[end] === '"' || line[end] === '\'') && PY_STRING_PREFIXES.has(word.toLowerCase())) {
+        const result = pythonString(line, i, end, first, depth, spans);
+        if (result.open) return done(result.open, result.raw);
+        i = result.end;
+        continue;
+      }
+      const before = previousNonWhitespaceIndex(line, i);
+      const memberAccess = before >= 0 && line[before] === '.';
+      if (afterDef) {
+        add(spans, i, end - i, 'py-function');
+        afterDef = false;
+      } else if (PY_KEYWORDS.has(word) && !memberAccess) {
+        add(spans, i, end - i, 'py-keyword');
+        if (word === 'def') {
+          afterDef = true;
+          inDef = true;
+        }
+      } else if (PY_SELF.has(word) && !memberAccess) {
+        add(spans, i, end - i, 'py-self');
+      } else if (depth > 0 && !inDef && !memberAccess && isKeywordArgument(line, before, end)) {
+        add(spans, i, end - i, 'py-kwarg');
+      }
+      i = end;
+      continue;
+    }
+    if (c === '(' || c === '[' || c === '{') {
+      depth++;
+    } else if (c === ')' || c === ']' || c === '}') {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) inDef = false;
+    }
+    i++;
+  }
+  return done();
+}
+
+/** 이름 뒤가 = (== 가 아닌)이고 앞이 ( · , · 줄 첫자리면 호출의 이름=값 이다. */
+function isKeywordArgument(line, before, end) {
+  if (before >= 0 && line[before] !== '(' && line[before] !== ',') return false;
+  const after = skipWhitespace(line, end);
+  return after < line.length && line[after] === '=' && line[after + 1] !== '=';
+}
+
+/**
+ * start(접두사 첫 글자) · quoteAt(여는 따옴표)의 문자열을 칠한다. 문장 첫자리(괄호 밖)의 삼중 따옴표는 문서 문자열이다.
+ * 줄 안에서 닫히면 { end }, 삼중 따옴표가 줄을 넘기면 { open: 이어질 상태, raw }.
+ */
+function pythonString(line, start, quoteAt, first, depth, spans) {
+  const quote = line[quoteAt];
+  const triple = line.startsWith(quote.repeat(3), quoteAt);
+  const raw = /[rR]/.test(line.slice(start, quoteAt));
+  const docstring = triple && start === first && depth === 0;
+  const kind = docstring ? 'py-docstring' : 'py-string';
+  const end = pythonStringBody(line, start, quoteAt + (triple ? 3 : 1), quote, triple, raw, kind, spans);
+  if (end >= 0) return { end };
+  if (!triple) return { end: line.length };
+  return { open: PY_TRIPLE + (docstring ? 2 : 0) + (quote === '\'' ? 1 : 0), raw };
+}
+
+/** 문자열 몸통을 훑는다. 닫는 따옴표 바로 뒤 자리를, 줄 안에서 닫히지 않으면 -1 을 돌려준다. */
+function pythonStringBody(line, segmentStart, from, quote, triple, raw, kind, spans) {
+  let segment = segmentStart;
+  let i = from;
+  while (i < line.length) {
+    const c = line[i];
+    if (c === '\\') {
+      const escape = raw || kind !== 'py-string' ? 0 : pythonEscapeLength(line, i);
+      if (escape > 0) {
+        add(spans, segment, i - segment, kind);
+        add(spans, i, escape, 'py-escape');
+        i += escape;
+        segment = i;
+      } else {
+        i += 2;
+      }
+      continue;
+    }
+    if (triple ? line.startsWith(quote.repeat(3), i) : c === quote) {
+      const end = i + (triple ? 3 : 1);
+      add(spans, segment, end - segment, kind);
+      return end;
+    }
+    i++;
+  }
+  add(spans, segment, line.length - segment, kind);
+  return -1;
+}
+
+/** i 의 \ 로 시작하는 이스케이프 길이. 이스케이프가 아니면 0. */
+function pythonEscapeLength(line, i) {
+  const next = line[i + 1];
+  if (next === undefined) return 1; // 줄 끝의 \ 는 줄 이음.
+  if (PY_SIMPLE_ESCAPES.has(next)) return 2;
+  const hex = (count) => {
+    let k = i + 2;
+    while (k < line.length && k < i + 2 + count && isHexDigit(line[k])) k++;
+    return k === i + 2 + count ? count + 2 : 0;
+  };
+  if (next === 'x') return hex(2);
+  if (next === 'u') return hex(4);
+  if (next === 'U') return hex(8);
+  if (next === 'N' && line[i + 2] === '{') {
+    const close = line.indexOf('}', i + 3);
+    return close < 0 ? 0 : close + 1 - i;
+  }
+  if (next >= '0' && next <= '7') {
+    let k = i + 1;
+    while (k < line.length && k < i + 4 && line[k] >= '0' && line[k] <= '7') k++;
+    return k - i;
+  }
+  return 0;
+}
+
+function pythonNumberEnd(line, start) {
+  const radix = line[start] === '0' ? (line[start + 1] ?? '').toLowerCase() : '';
+  if (radix === 'x' || radix === 'b' || radix === 'o') {
+    let i = start + 2;
+    while (i < line.length && (isHexDigit(line[i]) || line[i] === '_')) i++;
+    return i;
+  }
+  return numberEnd(line, start);
 }
 
 // ── CSS · USS · TSS ──

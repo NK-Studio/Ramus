@@ -83,18 +83,50 @@ impl Repository {
     /// 푸시·풀에 쓸 원격(지금 브랜치의 upstream 원격, 없으면 origin, 없으면 첫 원격)의 주소.
     pub fn default_remote_url(&self) -> Option<String> {
         let remotes = self.remotes().ok()?;
-        let upstream = self.status().ok()?.branch.upstream;
-        let name = upstream
-            .and_then(|u| remotes.iter().find(|r| u.starts_with(&format!("{r}/"))).cloned())
-            .or_else(|| remotes.iter().find(|r| *r == "origin").cloned())
-            .or_else(|| remotes.first().cloned())?;
+        let upstream = self.current_upstream();
+        let name = pick_default_remote(upstream.as_deref(), &remotes)?;
         self.remote_url(&name)
     }
+
+    /// 지금 브랜치의 upstream 짧은 이름("origin/main"). 분리된 HEAD·upstream 없음·커밋 없는 브랜치면 None.
+    /// `git status` 의 브랜치 줄과 같은 값이지만 작업 트리를 훑지 않는다(큰 레포지토리에서 수백 ms 차이).
+    pub fn current_upstream(&self) -> Option<String> {
+        let out = self.git_run(&["for-each-ref", "--format=%(HEAD)%1f%(upstream:short)", "refs/heads"]).ok()?;
+        out.lines().find_map(|line| {
+            let (head, upstream) = line.split_once('\x1f')?;
+            (head == "*" && !upstream.is_empty()).then(|| upstream.to_string())
+        })
+    }
+}
+
+/// 푸시·풀에 쓸 원격 이름: upstream("origin/main") 이 가리키는 원격 → origin → 첫 원격. 원격 이름에 '/' 가 들어갈 수 있으니 가장 긴 것을 고른다.
+pub fn pick_default_remote(upstream: Option<&str>, remotes: &[String]) -> Option<String> {
+    upstream
+        .and_then(|u| remotes.iter().filter(|r| u.starts_with(&format!("{r}/"))).max_by_key(|r| r.len()).cloned())
+        .or_else(|| remotes.iter().find(|r| *r == "origin").cloned())
+        .or_else(|| remotes.first().cloned())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_remote_choice() {
+        let r = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+        // upstream 의 원격이 있으면 그것.
+        assert_eq!(pick_default_remote(Some("upstream/main"), &r(&["origin", "upstream"])).as_deref(), Some("upstream"));
+        // '/' 가 든 원격 이름은 가장 긴 것.
+        assert_eq!(pick_default_remote(Some("team/nas/main"), &r(&["team", "team/nas"])).as_deref(), Some("team/nas"));
+        // upstream 없음(새 브랜치·분리된 HEAD·커밋 없음) → origin.
+        assert_eq!(pick_default_remote(None, &r(&["backup", "origin"])).as_deref(), Some("origin"));
+        // 로컬 브랜치를 추적("feature") → 원격과 안 맞으니 origin.
+        assert_eq!(pick_default_remote(Some("feature"), &r(&["origin"])).as_deref(), Some("origin"));
+        // origin 도 없으면 첫 원격.
+        assert_eq!(pick_default_remote(None, &r(&["nas"])).as_deref(), Some("nas"));
+        // 원격 없음.
+        assert_eq!(pick_default_remote(Some("origin/main"), &[]), None);
+    }
 
     #[test]
     fn clone_names() {

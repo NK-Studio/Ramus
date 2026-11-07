@@ -172,6 +172,53 @@ pub fn graphql(query: &str, variables: Value, token: &str) -> Result<Value> {
     Ok(value)
 }
 
+/// Clone 창의 레포지토리 목록 한 쪽(100개): 내 것·협업자로 들어간 것·속한 조직의 것, 최근 push 순.
+/// 화면이 쓸 모양 {fullName, owner, name, description, private, fork, archived, url, parent,
+/// pushedAt, sizeKb, defaultBranch, stars} 과 다음 쪽 커서(없으면 끝).
+/// 레포지토리가 많은 계정도 첫 쪽부터 바로 보이게 화면이 한 쪽씩 부른다. 시각·크기 등은 줄에는 안 보이고 마우스를 올린 카드에 보인다.
+pub fn viewer_repos_page(token: &str, after: Option<&str>) -> Result<(Vec<Value>, Option<String>)> {
+    // affiliations 와 ownerAffiliations 를 둘 다 줘야 조직 레포지토리가 나온다 — ownerAffiliations 만 주면
+    // affiliations 가 기본값(OWNER·COLLABORATOR)으로 걸려 조직 것이 빠진다(조직 115개가 있는 계정에서 8개만 나왔다).
+    const QUERY: &str = "query($after: String) { viewer { repositories(first: 100, after: $after, \
+        affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER], ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER], \
+        orderBy: {field: PUSHED_AT, direction: DESC}) { \
+        pageInfo { hasNextPage endCursor } nodes { nameWithOwner name owner { login } description isPrivate isFork isArchived \
+        url parent { nameWithOwner url } pushedAt diskUsage defaultBranchRef { name } stargazerCount } } } }";
+    let data = graphql(QUERY, json!({ "after": after }), token)?;
+    let page = data.pointer("/data/viewer/repositories").ok_or_else(|| GitError::new("GitHub 레포지토리 목록을 읽지 못했습니다."))?;
+    let repos = page
+        .get("nodes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|node| {
+            let url = node.get("url").and_then(Value::as_str).unwrap_or_default();
+            json!({
+                "fullName": node.get("nameWithOwner"),
+                "owner": node.pointer("/owner/login"),
+                "name": node.get("name"),
+                "description": node.get("description"),
+                "private": node.get("isPrivate"),
+                "fork": node.get("isFork"),
+                "archived": node.get("isArchived"),
+                "url": if url.is_empty() { Value::Null } else { json!(format!("{url}.git")) },
+                "pushedAt": node.get("pushedAt"),
+                "sizeKb": node.get("diskUsage"),
+                "defaultBranch": node.pointer("/defaultBranchRef/name"),
+                "stars": node.get("stargazerCount"),
+                // fork 의 원본: 받은 뒤 upstream 원격으로 붙일 수 있게.
+                "parent": node.get("parent").filter(|p| !p.is_null()).map(|p| json!({
+                    "fullName": p.get("nameWithOwner"),
+                    "url": p.get("url").and_then(Value::as_str).map(|u| format!("{u}.git")),
+                })),
+            })
+        })
+        .collect();
+    let more = page.pointer("/pageInfo/hasNextPage").and_then(Value::as_bool).unwrap_or(false);
+    let next = page.pointer("/pageInfo/endCursor").and_then(Value::as_str).filter(|_| more).map(str::to_string);
+    Ok((repos, next))
+}
+
 fn form(url: &str, fields: &[(&str, &str)]) -> Result<Value> {
     let response = ureq::post(url).set("User-Agent", USER_AGENT).set("Accept", "application/json").timeout(Duration::from_secs(20)).send_form(fields);
     match response {
