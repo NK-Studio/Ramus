@@ -13,7 +13,7 @@ use ramus_core::ops::MergeMode;
 use ramus_core::rewrite::RewriteKind;
 use ramus_core::undo::{self, Journal, UndoEntry, UndoKind};
 use ramus_core::runner::trace;
-use ramus_core::{GitError, GitGlobals, GitRunner, Repository, Settings, login, newrepo, remote, ssl};
+use ramus_core::{GitError, GitGlobals, GitRunner, Repository, Settings, gitbin, login, newrepo, remote, ssl};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -93,7 +93,7 @@ impl AppState {
         let mut globals = globals_for(&self.settings.lock().unwrap());
         if let Some((host, password)) = self.ssh_login.lock().unwrap().clone() {
             match login::write_askpass(&std::env::temp_dir().join(format!("Ramus-{}", whoami()))) {
-                Ok(askpass) => globals.env = login::ssh_environment(&askpass, &host, &password),
+                Ok(askpass) => globals.env.extend(login::ssh_environment(&askpass, &host, &password)),
                 Err(e) => eprintln!("SSH 비밀번호 도우미를 만들지 못했습니다: {e}"),
             }
         }
@@ -738,6 +738,12 @@ impl AppState {
                 let out = self.runner.run(&dir, &["--version"]);
                 if out.success() { Ok(json!(out.stdout.trim())) } else { Err(GitError::new(out.message())) }
             }
+            "gitInfo" => Ok(git_info(&self.settings.lock().unwrap())),
+            "checkGit" => {
+                let a = Args(&args);
+                let path = a.s("path")?;
+                gitbin::version(Path::new(path.trim()), &Default::default()).map(|v| json!(v)).map_err(GitError::new)
+            }
             "setWatch" => {
                 let on = Args(&args).b("on");
                 match (on, self.repo()) {
@@ -816,6 +822,18 @@ impl AppState {
                 }
                 if let Some(git_path) = a.git_path {
                     settings.git_path = git_path.trim().to_string();
+                }
+                if let Some(mode) = a.git_mode {
+                    settings.git_mode = match mode.as_str() {
+                        "system" | "custom" => mode,
+                        _ => "bundled".into(),
+                    };
+                }
+                // 직접 지정은 실제로 git 이 도는지 보고 나서 저장한다(잘못 고른 파일로 앱이 못 쓰게 되지 않게).
+                if settings.git_mode == "custom"
+                    && let Err(e) = gitbin::version(Path::new(&settings.git_path), &Default::default())
+                {
+                    return Err(GitError::new(format!("지정한 git 을 쓸 수 없습니다: {e}")));
                 }
                 self.save_settings(&settings);
                 drop(settings);
@@ -1372,6 +1390,7 @@ impl AppState {
             "diffLayout": s.diff_layout,
             "autoFetchMinutes": s.auto_fetch_minutes,
             "ssl": s.ssl,
+            "gitMode": gitbin::GitMode::from_settings(&s.git_mode, &s.git_path),
             "gitPath": s.git_path,
             "cloneDir": if s.clone_dir.is_empty() { dirs::home_dir().map(|h| h.display().to_string()).unwrap_or_default() } else { s.clone_dir.clone() },
             "openTabs": tabs,
@@ -1398,11 +1417,25 @@ fn repo_info(repo: &Repository) -> Value {
 
 /// 설정으로 모든 git 호출에 붙일 것을 만든다.
 pub fn globals_for(settings: &Settings) -> GitGlobals {
-    GitGlobals {
-        git_path: (!settings.git_path.trim().is_empty()).then(|| PathBuf::from(settings.git_path.trim())),
-        config_args: ssl::build_arguments(&settings.ssl, cfg!(windows)),
-        env: Default::default(),
-    }
+    let git = gitbin::resolve(gitbin::GitMode::from_settings(&settings.git_mode, &settings.git_path), &settings.git_path);
+    GitGlobals { git_path: Some(git.path), config_args: ssl::build_arguments(&settings.ssl, cfg!(windows)), env: git.env }
+}
+
+/// 설정의 git 칸: 고른 모드, 실제로 쓰는 git(돌아갔으면 그 사유), 내장·시스템 git 의 자리와 버전.
+fn git_info(settings: &Settings) -> Value {
+    let mode = gitbin::GitMode::from_settings(&settings.git_mode, &settings.git_path);
+    let active = gitbin::resolve(mode, &settings.git_path);
+    let describe = |path: &Path, env: &std::collections::HashMap<String, String>| match gitbin::version(path, env) {
+        Ok(v) => json!({ "path": path.display().to_string(), "version": v }),
+        Err(e) => json!({ "path": path.display().to_string(), "error": e }),
+    };
+    let bundled = gitbin::bundled_dir().map(|dir| describe(&gitbin::bundled_binary(&dir), &gitbin::bundled_env(&dir)));
+    let system = gitbin::find_system().map(|p| describe(&p, &Default::default()));
+    let custom = (!settings.git_path.trim().is_empty()).then(|| describe(Path::new(settings.git_path.trim()), &Default::default()));
+    let mut current = describe(&active.path, &active.env);
+    current["source"] = json!(active.source);
+    current["fallback"] = json!(active.fallback);
+    json!({ "mode": mode, "active": current, "bundled": bundled, "system": system, "custom": custom })
 }
 
 /// 파일 관리자(Finder·탐색기)에서 그 파일을 골라 보인다.
@@ -1608,6 +1641,7 @@ struct SettingsArg {
     auto_fetch_minutes: Option<u32>,
     ssl: Option<ramus_core::ssl::SslSettings>,
     git_path: Option<String>,
+    git_mode: Option<String>,
 }
 
 #[derive(Deserialize)]

@@ -55,7 +55,7 @@ const GLOBAL_COMMANDS = new Set([
   'app', 'gh', 'init', 'openRepo', 'closeRepo', 'closeTab', 'getSettings', 'setSettings', 'setUi', 'removeRecent',
   'newRepoTemplates', 'newRepoPath', 'createLocalRepo', 'githubCreateInfo', 'githubCreateRepo', 'githubCloneNew',
   'clone', 'cloneName', 'githubCloneList', 'githubCloneAccounts', 'githubCloneCache', 'githubCloneCacheSave',
-  'avatar', 'exportKeychain', 'remoteLogin', 'forgetSshLogin', 'gitVersion',
+  'avatar', 'exportKeychain', 'remoteLogin', 'forgetSshLogin', 'gitVersion', 'gitInfo', 'checkGit',
   'githubDeviceStart', 'githubDevicePoll', 'githubStatus', 'githubLogout', 'githubAccounts', 'openUrl', 'openDefault', 'openFolder', 'trashRepo',
   'pick', 'pickRepo', 'setZoom', 'menuState', 'toggleFullscreen', 'windowDrag', 'windowZoom', '__devResult',
 ]);

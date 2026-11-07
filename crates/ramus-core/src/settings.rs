@@ -28,7 +28,9 @@ pub struct Settings {
     pub recent: Vec<RecentRepo>,
     /// 마지막에 열었던 레포지토리. 앱을 다시 켜면 연다.
     pub last_repo: Option<String>,
-    /// 비우면 PATH 의 git.
+    /// 쓸 git: "bundled"(내장, 기본) · "system"(PATH) · "custom"(`git_path`). 비어 있으면 옛 설정이라 `git_path` 가 있으면 custom.
+    pub git_mode: String,
+    /// 직접 지정한 git 실행 파일(`git_mode` 가 custom 일 때).
     pub git_path: String,
     pub ssl: SslSettings,
     pub pull_mode: PullMode,
@@ -50,6 +52,7 @@ impl Default for Settings {
             theme: "dark".into(),
             recent: Vec::new(),
             last_repo: None,
+            git_mode: String::new(),
             git_path: String::new(),
             ssl: SslSettings::default(),
             pull_mode: PullMode::FfOnly,

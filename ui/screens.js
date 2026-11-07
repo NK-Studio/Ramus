@@ -49,6 +49,73 @@ function checkbox(checked, label, hint) {
 }
 
 /**
+ * 설정의 git 칸. Rust gitInfo 로 내장·시스템 git 의 자리·버전을 읽어 라디오 세 줄로 보인다.
+ * value() 는 setSettings 에 넘길 {gitMode, gitPath}. 직접 지정이 실제로 도는지는 저장할 때 Rust 가 한 번 더 본다.
+ */
+function gitChoices(call, s) {
+  let mode = s.gitMode ?? 'bundled';
+  const radios = {};
+  const meta = {};
+  const notice = el('div', { class: 'small git-notice', hidden: true });
+  const path = input(s.gitPath, { placeholder: 'git 실행 파일 경로' });
+  const customMeta = el('span', { class: 'git-choice-meta muted small' });
+  const browse = el('button', { class: 'btn', text: '찾아보기…', onclick: async () => {
+    const picked = await call('pick', { kind: 'file', title: 'git 실행 파일' });
+    if (picked) { path.value = picked; pick('custom'); check(); }
+  } });
+  const showVersion = (node, info, missing) => {
+    node.classList.toggle('error-text', !!info?.error);
+    node.textContent = !info ? missing : info.error ? info.error : info.version;
+  };
+  let checking = 0;
+  const check = async () => {
+    const value = path.value.trim();
+    const ticket = ++checking;
+    if (!value) { showVersion(customMeta, null, '경로를 고르세요.'); return; }
+    customMeta.textContent = '확인 중…';
+    customMeta.classList.remove('error-text');
+    const info = await call('checkGit', { path: value }).then((version) => ({ version }), (e) => ({ error: e.message }));
+    if (ticket === checking) showVersion(customMeta, info);
+  };
+  path.addEventListener('change', check);
+  path.addEventListener('input', () => pick('custom'));
+  const pick = (next) => {
+    mode = next;
+    for (const [key, radio] of Object.entries(radios)) radio.checked = key === mode;
+  };
+  const choice = (key, label, extra) => {
+    const radio = el('input', { type: 'radio', name: 'git-mode', onchange: () => pick(key) });
+    radios[key] = radio;
+    meta[key] = el('span', { class: 'git-choice-meta muted small', text: '확인 중…' });
+    const where = el('span', { class: 'git-choice-path muted small' });
+    return { radio, where, node: el('div', { class: 'git-choice' },
+      el('label', { class: 'check git-choice-head' }, radio, el('span', { class: 'git-choice-label', text: label }), key === 'custom' ? customMeta : meta[key]),
+      key === 'custom' ? extra : where) };
+  };
+  const bundled = choice('bundled', '내장 git (권장)');
+  const system = choice('system', '시스템 git');
+  const custom = choice('custom', '직접 지정', el('div', { class: 'row git-choice-path' }, path, browse));
+  pick(mode);
+  check();
+  call('gitInfo').then((info) => {
+    for (const [key, choiceEl, missing] of [['bundled', bundled, '이 빌드에는 내장 git 이 없습니다'], ['system', system, '찾을 수 없음']]) {
+      showVersion(meta[key], info[key], missing);
+      choiceEl.where.textContent = info[key]?.path ?? '';
+      choiceEl.radio.disabled = !info[key] && mode !== key;
+      choiceEl.node.classList.toggle('missing', !info[key]);
+    }
+    const active = info.active;
+    notice.hidden = !active?.fallback;
+    notice.textContent = active?.fallback ? `${active.fallback} (지금 쓰는 git: ${active.path}${active.version ? ` · ${active.version}` : ''})` : '';
+  }).catch((e) => { meta.bundled.textContent = e.message; });
+  return {
+    node: el('div', { class: 'git-choices' }, el('span', { class: 'modal-label', text: '쓸 git' }), bundled.node, system.node, custom.node, notice,
+      el('div', { class: 'muted small', text: '내장 git 은 앱과 함께 배포되는 git(git-lfs·자격 증명 도우미 포함)입니다. 사용자 ~/.gitconfig 는 어느 git 을 골라도 그대로 읽습니다.' })),
+    value: () => ({ gitMode: mode, gitPath: path.value.trim() }),
+  };
+}
+
+/**
  * clone 창. 받으면 열린 레포지토리 정보, 이미 받아 둔 것을 고르면 {open: 폴더}, 취소하면 null.
  * GitHub 쪽(로그인한 계정의 레포지토리 목록)과 URL 쪽(주소를 직접 적기)을 위에서 바꾼다. 받을 폴더·이름 칸은 둘이 같이 쓴다.
  * signedIn: 앱 로그인을 했으면 GitHub 쪽으로 연다. login: github.login(Device Flow).
@@ -277,8 +344,6 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     const p = (key, fallback) => prefs?.get(key) ?? fallback;
     const windows = s.platform === 'windows';
     const mac = s.platform === 'macos';
-    const gitVersion = el('span', { class: 'muted small', text: '확인 중…' });
-    call('gitVersion').then((v) => { gitVersion.textContent = v; }).catch((e) => { gitVersion.textContent = `git 을 찾지 못했습니다: ${e.message}`; gitVersion.classList.add('error-text'); });
 
     // ── 일반
     const theme = select([{ value: 'dark', label: 'JetBrains 다크' }, { value: 'light', label: 'JetBrains 라이트' }, { value: 'system', label: '시스템 따르기' }], s.theme);
@@ -376,9 +441,8 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
       },
     });
 
-    // ── git
-    const gitPath = input(s.gitPath, { placeholder: '비우면 PATH 의 git' });
-    const browseGit = el('button', { class: 'btn', text: '찾아보기…', onclick: async () => { const picked = await call('pick', { kind: 'file', title: 'git 실행 파일' }); if (picked) gitPath.value = picked; } });
+    // ── git: 내장(기본) · 시스템 · 직접 지정. 각 칸에 자리와 버전을 보이고, 직접 지정은 고르자마자 실제로 돌려 본다.
+    const git = gitChoices(call, s);
 
     // ── 로그인
     const sshInfo = el('div', { class: 'row' });
@@ -407,7 +471,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
       const minutes = autoFetchOn.box.checked ? Math.max(1, Math.min(120, parseInt(autoFetch.value, 10) || 10)) : 0;
       try {
         const saved = await call('setSettings', {
-          theme: theme.value, pullMode: pullMode.value, diffLayout: diffView.value === 'split' ? 'split' : 'inline', autoFetchMinutes: minutes, gitPath: gitPath.value, ssl: sslState(),
+          theme: theme.value, pullMode: pullMode.value, diffLayout: diffView.value === 'split' ? 'split' : 'inline', autoFetchMinutes: minutes, ...git.value(), ssl: sslState(),
         });
         const values = {
           layout: layout.value, explorer: explorer.value, language: language.value, 'ui.scale': Number(scale.value), 'ui.fontSize': Number(fontSize.value),
@@ -437,7 +501,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
         verify.row, windows ? systemStore.row : null, windows ? skipRevoke.row : null,
         el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'CA 인증서 파일' }), el('div', { class: 'row' }, caFile, browseCa)),
         keychain ? el('div', { class: 'row' }, keychain) : null, el('div', { class: 'row' }, testUrl, testButton), testResult),
-      sectionEl('git', 'git', el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'git 실행 파일' }), el('div', { class: 'row' }, gitPath, browseGit)), gitVersion),
+      sectionEl('git', 'git', git.node),
       sectionEl('login', '로그인', el('div', { class: 'modal-label', text: 'GitHub' }), githubAccounts, el('div', { class: 'modal-label', text: 'GitHub 가 아닌 서버' }), sshInfo,
         el('div', { class: 'muted small', text: 'https 서버(사내 GitLab 등)의 계정은 이 PC 의 자격 증명 저장소에 들어갑니다. 지우려면 키체인 접근·자격 증명 관리자에서 지워 주세요.' })),
     ];

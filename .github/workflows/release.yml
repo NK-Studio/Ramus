@@ -52,7 +52,9 @@ jobs:
       - name: Build Ramus.app
         run: sh scripts/bundle-macos.sh release
       - name: Check architecture
-        run: lipo -archs target/release/Ramus.app/Contents/MacOS/ramus
+        run: |
+          lipo -archs target/release/Ramus.app/Contents/MacOS/ramus
+          target/release/Ramus.app/Contents/Resources/git/bin/git --version
       # 태그 빌드와 수동 실행에서만 Developer ID 로 서명하고 공증한다(PR·main 빌드는 시크릿 없이 임시 서명 그대로).
       - name: Import signing certificate
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -76,6 +78,16 @@ jobs:
         run: |
           IDENTITY=$(security find-identity -v -p codesigning "$MACOS_KEYCHAIN" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
           test -n "$IDENTITY" || { echo "::error::Developer ID Application 인증서를 찾지 못했습니다"; exit 1; }
+          # 내장 git 안의 실행 파일·라이브러리(Mach-O)를 먼저 하나씩 서명해야 공증을 통과한다.
+          find target/release/Ramus.app/Contents/Resources/git -type f | while read -r f; do
+            if file -b "$f" | grep -q "Mach-O"; then
+              if [ "$(basename "$f")" = "git-credential-manager" ]; then
+                codesign --force --options runtime --timestamp --entitlements assets/git/gcm-entitlements.plist --sign "$IDENTITY" "$f"
+              else
+                codesign --force --options runtime --timestamp --sign "$IDENTITY" "$f"
+              fi
+            fi
+          done
           codesign --force --options runtime --timestamp --sign "$IDENTITY" target/release/Ramus.app
           codesign --verify --strict --verbose=2 target/release/Ramus.app
       - name: Notarize Ramus.app
@@ -119,12 +131,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build ramus.exe
         run: cargo build --release -p ramus-app --target x86_64-pc-windows-msvc
+      - name: Fetch bundled git
+        shell: bash
+        run: sh scripts/fetch-git.sh windows-x64
       - name: Package
         shell: pwsh
         run: |
           $name = "Ramus-${{ github.ref_name }}-windows-x64"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item target/x86_64-pc-windows-msvc/release/ramus.exe "dist/$name/Ramus.exe"
+          Copy-Item -Recurse vendor/git/windows-x64 "dist/$name/git"
+          Remove-Item -Force "dist/$name/git/.ramus-git"
+          $git = "dist/$name/git/cmd/git.exe"
+          & $git --version
+          # Git for Windows 처럼 자격 증명은 GCM(Windows 자격 증명 관리자)에 둔다 — 앱 GitHub 로그인도 여기에 들어간다.
+          $helper = & $git config --system --get credential.helper
+          if (-not $helper) { & $git config --system credential.helper manager }
+          & $git config --system --show-origin --get credential.helper
           Copy-Item README.md "dist/$name/"
           Compress-Archive -Path "dist/$name/*" -DestinationPath "dist/$name.zip"
           Remove-Item -Recurse "dist/$name"
@@ -158,7 +181,8 @@ jobs:
             | macOS (Apple Silicon, macOS 12 이상) | `Ramus-${{ github.ref_name }}-macos-arm64.zip` |
             | Windows 10/11 (x64) | `Ramus-${{ github.ref_name }}-windows-x64.zip` |
 
-            PC 에 `git` 이 설치되어 있어야 합니다. Windows 는 WebView2 런타임(Windows 10/11 기본 포함)을 씁니다.
+            git 이 앱에 들어 있어(git-lfs 포함) 따로 설치하지 않아도 됩니다. 설정 > git 에서 시스템 git 이나 직접 고른 git 으로 바꿀 수 있습니다.
+            Windows 는 WebView2 런타임(Windows 10/11 기본 포함)을 씁니다. Windows 압축 파일은 `Ramus.exe` 와 `git` 폴더를 같은 자리에 함께 풀어 두세요.
 
             ### macOS 처음 실행
             Apple Developer ID 로 서명·공증된 앱입니다. 압축을 풀고 `Ramus.app` 을 응용 프로그램 폴더로 옮기면 바로 실행됩니다.

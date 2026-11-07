@@ -173,6 +173,7 @@ impl Repository {
         let git = globals.git_path.clone().unwrap_or_else(|| std::path::PathBuf::from("git"));
         let mut cmd = std::process::Command::new(git);
         cmd.current_dir(self.root()).args(&globals.config_args).args(["difftool", "--no-prompt"]);
+        cmd.envs(&globals.env);
         if let Some(tool) = tool.filter(|t| !t.trim().is_empty()) {
             cmd.args(["-t", tool.trim()]);
         }

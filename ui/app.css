@@ -1622,6 +1622,20 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .settings-tab.on { background: var(--git-selected); color: var(--git-text); font-weight: 600; }
 .settings-body { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; gap: 22px; padding-right: 6px; }
 .settings-body .row > .modal-field { flex: 1; }
+/* 설정의 git 칸: 라디오 한 줄(이름 · 오른쪽 버전) 아래 자리(경로). */
+.git-choices { display: flex; flex-direction: column; gap: 6px; }
+.git-choice { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--git-divider); border-radius: var(--radius); }
+.git-choice:has(input:checked) { border-color: var(--git-accent); background: var(--git-hover); }
+.git-choice.missing { opacity: 0.6; }
+.git-choice-head { display: flex; align-items: center; gap: 8px; margin: 0; }
+.git-choice-label { font-weight: 600; color: var(--git-text); }
+.git-choice-meta { margin-left: auto; font-family: var(--mono); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+.git-choice-meta.error-text { font-family: inherit; white-space: nowrap; }
+.git-choice-path { padding-left: 24px; font-family: var(--mono); word-break: break-all; }
+.git-choice .row.git-choice-path { font-family: inherit; margin-top: 4px; }
+.git-choice .row.git-choice-path .field { flex: 1; min-width: 0; }
+.git-notice { color: var(--git-warning); }
+.git-notice[hidden] { display: none; }
 .gh-accounts { display: flex; flex-direction: column; gap: 4px; }
 
 /* ── 탭 · 배치별 화면(원본 GitWindow 탭, ForkChangesView, PendingChangesView, 탐색 화면) ── */

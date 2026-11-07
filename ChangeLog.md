@@ -16,6 +16,13 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+### 추가
+
+- git 을 앱에 넣어 배포합니다(dugite-native 2.56.0: git + git-lfs + 자격 증명 도우미). PC 에 git 이 없어도 바로 씁니다.
+- 설정 > git 에서 내장 git(기본) · 시스템 git · 직접 지정 중에 고르고, 각각의 자리와 버전을 봅니다. 직접 지정은 고르자마자 실제로 돌려 보고, 안 되면 저장하지 않습니다.
+- 고른 git 을 찾지 못하면 쓸 수 있는 다른 git 으로 돌아가고 켤 때 알려 줍니다.
+- macOS 내장 git 은 Apple git 처럼 키체인 도우미(osxkeychain)를 써서, 앱 GitHub 로그인과 https 계정을 전과 같은 키체인 항목에서 읽습니다. Windows 는 GCM(Windows 자격 증명 관리자)을 씁니다.
+
 ## [1.0.0] - 2026-11-07
 
 첫 정식 버전.

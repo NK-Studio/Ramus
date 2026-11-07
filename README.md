@@ -1,7 +1,7 @@
 # Ramus (데스크톱)
 
 Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.gitvcs) 를 Unity 밖에서 혼자 도는 앱으로 옮긴 Git 클라이언트입니다.
-PC 에 설치된 `git` 을 실행하고, 화면은 웹뷰(wry)로 그립니다. 대상은 macOS(Apple Silicon)·Windows 입니다.
+앱에 넣어 둔 `git`(또는 설정에서 고른 git)을 실행하고, 화면은 웹뷰(wry)로 그립니다. 대상은 macOS(Apple Silicon)·Windows 입니다.
 
 ## 내려받기
 
@@ -10,7 +10,9 @@ PC 에 설치된 `git` 을 실행하고, 화면은 웹뷰(wry)로 그립니다. 
 - macOS(Apple Silicon): `Ramus-<버전>-macos-arm64.zip` — 서명하지 않은 빌드라 처음 한 번 `xattr -dr com.apple.quarantine /Applications/Ramus.app` 을 실행합니다.
 - Windows 10/11(x64): `Ramus-<버전>-windows-x64.zip` — 압축을 풀고 `Ramus.exe` 를 실행합니다(WebView2 런타임 사용).
 
-PC 에 `git` 이 설치되어 있어야 합니다.
+git 은 앱에 들어 있어(GitHub Desktop 의 [dugite-native](https://github.com/desktop/dugite-native): git + git-lfs + 자격 증명 도우미) 따로 설치하지 않아도 됩니다.
+설정 > git 에서 **내장 git(기본)** · **시스템 git**(PATH) · **직접 지정** 중에 고릅니다. 고른 git 을 찾지 못하면 쓸 수 있는 다른 git 으로 돌아가고 알려 줍니다.
+Windows 는 `Ramus.exe` 옆의 `git` 폴더가 내장 git 이니 둘을 함께 두세요.
 
 ## 구성
 
@@ -26,11 +28,12 @@ cargo test
 node tests/ui/syntax.test.mjs     # 문법 색(원본 GitTextEditorTests 의 Tokenize 시험)
 node tests/ui/changelog.test.mjs  # ChangeLog.md 맨 위 버전이 Cargo.toml 과 같은지
 cargo run -p ramus-app
-scripts/bundle-macos.sh release   # target/release/Ramus.app
+scripts/bundle-macos.sh release   # target/release/Ramus.app (내장 git 포함, 처음 한 번 vendor/git 에 받음)
+scripts/fetch-git.sh windows-x64  # 내장 git 만 받기(vendor/git/<플랫폼>). git 을 올릴 때는 이 파일의 TAG·SHA256 을 바꿈
 scripts/make-icons.sh             # assets/icon/ramus.svg → Ramus.icns·ramus.ico (아이콘을 고쳤을 때만, macOS 에서)
 ```
 
-개발 중에는 `RAMUS_UI_DIR=$PWD/ui` 를 주면 화면 파일을 디스크에서 바로 읽습니다. `RAMUS_SETTINGS` 로 설정 파일 위치를 바꿀 수 있습니다.
+개발 중에는 `RAMUS_UI_DIR=$PWD/ui` 를 주면 화면 파일을 디스크에서 바로 읽습니다. `cargo run` 에는 내장 git 이 없어 시스템 git 을 쓰고, `RAMUS_BUNDLED_GIT_DIR=$PWD/vendor/git/macos-arm64` 를 주면 내장 git 으로 돌립니다. `RAMUS_SETTINGS` 로 설정 파일 위치를 바꿀 수 있습니다.
 
 ## 주요 기능
 

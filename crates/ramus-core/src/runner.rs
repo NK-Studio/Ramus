@@ -281,14 +281,14 @@ fn apply_environment(cmd: &mut Command) {
 }
 
 #[cfg(windows)]
-fn hide_console(cmd: &mut Command) {
+pub(crate) fn hide_console(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-fn hide_console(_cmd: &mut Command) {}
+pub(crate) fn hide_console(_cmd: &mut Command) {}
 
 #[cfg(test)]
 mod tests {
