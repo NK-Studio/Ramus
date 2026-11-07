@@ -103,6 +103,7 @@ export function createToolbar(container, ctx) {
   };
 
   let busyText = '';
+  let busyJob = null;
   let progress = null;
   let running = null;
   let lastFetch = null;
@@ -117,12 +118,12 @@ export function createToolbar(container, ctx) {
     return null;
   }
 
-  // git 이 알리는 진행(받기 45% 등)은 작업이 도는 동안에만 보인다.
+  // git 이 알리는 진행(받기 45% 등)은 작업이 도는 동안에만 보인다. 이름 붙은 작업(Fetch·Pull·Push)이면 그 job 의 것만.
   onProgress((p) => {
-    if (!busyText) return;
+    if (!busyText || (p?.job ?? null) !== busyJob) return;
     progress = p;
     renderStatus();
-  });
+  }, '*');
 
   const shortLabel = (text) => text.replace(/\s*\(.*\)\s*$/, '').replace(/\s*(하는\s*)?중…?$/, '').trim() || text;
 
@@ -327,9 +328,11 @@ export function createToolbar(container, ctx) {
       disable(terminal, !state.repo);
       renderStatus();
     },
-    setBusy(text) {
+    /** 보고 있는 탭에서 도는 작업 글. job: 그 작업의 이름(진행 알림을 가린다), 이름 없는 작업이면 null. */
+    setBusy(text, job = null) {
       busyText = text ?? '';
-      progress = null;
+      if (busyJob !== job) progress = null;
+      busyJob = job;
       // 누른 동작 버튼(페치·풀·푸시)은 아이콘 자리에 도는 표시를 둔다.
       running?.classList.remove('running');
       running = runningButton(busyText);

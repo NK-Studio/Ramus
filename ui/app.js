@@ -15,12 +15,13 @@ import { createSidebar } from './sidebar.js';
 import { createToolbar } from './toolbar.js';
 import { createMergeView } from './merge.js';
 import { cloneDialog, loginDialog, settingsDialog, renderTabs, bindTitlebar } from './screens.js';
-import { startOpCard } from './opcard.js';
+import { startOpCard, setOpCardViewing } from './opcard.js';
 import { installTooltips } from './tooltip.js';
 import { createTools } from './tools.js';
 import { createViews } from './views.js';
 import { createGitHub } from './github.js';
 import { newRepoDialog } from './newrepo.js';
+import { createJobs } from './jobs.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -257,6 +258,24 @@ const github = createGitHub({
   connect: () => showConnect(),
 });
 
+// 원격 작업(Clone·Fetch·Pull·Push) 목록: 탭 막대 오른쪽 끝의 작업 버튼과 팝오버(jobs.js).
+const jobs = createJobs({
+  call,
+  withLogin: (work) => withLogin(work),
+  openRepo: (path) => openRepo(path),
+  currentRepo: () => state.repo?.path ?? null,
+  showError,
+  toast,
+  // 뒤에서 받은 Clone 이 끝났다: 설정(받을 폴더·계정)을 다시 읽고, 시작 화면이면 바로 연다.
+  onCloned: async (repo) => {
+    state.settings = await call('getSettings').catch(() => state.settings);
+    if (repo.warning) toast(repo.warning, 'warning');
+    if (state.repo) return false;
+    await openRepo(repo.path);
+    return true;
+  },
+});
+
 /** 이번 실행에서 "이번에는 연결하지 않고 계속" 을 눌렀는지. 앱을 다시 켜면 다시 묻는다(원본 SessionState). */
 let connectSkipped = false;
 
@@ -303,7 +322,7 @@ async function setTheme(theme) {
   await call('setSettings', { theme }).catch(showError);
 }
 
-const THEMES = { dark: 'JetBrains 다크', light: 'JetBrains 라이트', system: '시스템 따르기' };
+const THEMES = { dark: '다크', light: '라이트', system: '시스템 따르기' };
 const LAYOUTS = { gitkraken: 'GitKraken', fork: 'Fork', unity: 'Unity VCS' };
 const EXPLORERS = { fork: 'Fork', unity: 'Unity VCS' };
 
@@ -352,6 +371,7 @@ function drawTabs(active = state.repo?.path ?? null) {
     onClose: (path) => closeTab(path),
     onNew: () => newTab(),
     onBrowse: () => pickRepo(),
+    extra: jobs.button,
   });
   syncMenu();
 }
@@ -458,7 +478,7 @@ async function withLogin(work) {
 
 async function openSettings(section) {
   const before = state.settings.theme;
-  const saved = await settingsDialog({ call, settings: state.settings, onTheme: applyTheme, showError, toast, section, prefs, graph, onPrefs: applyPrefs });
+  const saved = await settingsDialog({ call, settings: state.settings, onTheme: applyTheme, showError, toast, section, prefs, graph, onPrefs: applyPrefs, githubLogin: github.login });
   if (saved) {
     state.settings = saved;
     toast('설정을 저장했습니다.', 'success');
@@ -472,21 +492,19 @@ async function openSettings(section) {
 
 async function startClone() {
   const status = await github.refreshSignedIn();
-  const repo = await cloneDialog({ call, cloneDir: state.settings.cloneDir, withLogin, showError, login: github.login, signedIn: !!status?.signedIn });
+  const picked = await cloneDialog({ call, cloneDir: state.settings.cloneDir, login: github.login, signedIn: !!status?.signedIn, busyDests: jobs.busyDests() });
   // GitHub 목록에서 이미 받아 둔 레포지토리를 골랐다 — 그 폴더를 연다.
-  if (repo?.open) {
-    await openRepo(repo.open);
+  if (picked?.open) {
+    await openRepo(picked.open);
     return;
   }
-  if (repo) {
-    toast(`${repo.name} 를 받았습니다.`, 'success');
-    if (repo.warning) toast(repo.warning, 'warning');
-    await enterRepo(repo);
-  }
+  // 받기는 뒤에서 한다: 진행은 탭 막대 오른쪽 끝의 작업 버튼에 보이고, 받는 동안 탭을 오가며 계속 쓸 수 있다.
+  if (picked?.clone) jobs.startClone(picked.clone);
 }
 
 function showStart(notice) {
   state.repo = null;
+  syncBusy();
   $('main').hidden = true;
   $('start').hidden = false;
   drawTabs();
@@ -744,6 +762,8 @@ function beginEnter(repo) {
   // 원본처럼 고른 줄 없이 오른쪽에 작업 패널을 보인다(다 읽으면 refreshOnce 가 그린다).
   wipShown = true;
   views?.relayout();
+  // 이 탭에서 도는 작업만 진행 표시를 보인다.
+  syncBusy();
   return epoch;
 }
 
@@ -959,14 +979,21 @@ async function showCommitDetail(hash, title) {
 /**
  * 작업 하나. 도구 막대 오른쪽에 진행 글자를 보이고, 끝나면 늘 다시 읽는다(터미널에서 한 일도 함께 보인다).
  * onError(error) 가 true 를 돌려주면 그 실패는 부른 쪽이 처리한다.
+ * remote: 'fetch'|'pull'|'push'|'checkout' 면 작업 목록에 보이는 작업이다 — 이름(job)을 붙여 work(job) 으로 부르고, 진행은 아래 카드 대신
+ * 탭 막대의 작업 목록(jobs.js)에 보인다(취소도 거기서).
  */
-async function act(label, work, { success, done, onError } = {}) {
-  toolbar.setBusy(label);
-  setRunning(1);
-  // 오래 걸리면(0.9초 넘게) 오른쪽 아래에 진행 카드가 뜬다 — 단계·진행률·지난 시간.
-  const finishCard = startOpCard($('toasts'), label);
+async function act(label, work, { success, done, onError, remote } = {}) {
+  // 작업은 시작한 탭(레포지토리)의 것이다. 다른 탭으로 옮겨 가면 진행 글·카드·버튼 잠김이 그 탭에는 보이지 않고, 돌아오면 다시 보인다.
+  const owner = state.repo?.path ?? '';
+  const job = remote ? jobs.newJobId(remote) : null;
+  beginBusy(owner, label, job);
+  // 오래 걸리면(0.9초 넘게) 오른쪽 아래에 진행 카드가 뜬다 — 단계·진행률·지난 시간. 원격 작업은 작업 목록이 대신한다.
+  const finishCard = remote ? () => false : startOpCard($('toasts'), label, { owner });
+  const repoName = state.repo?.name ?? owner.split(/[\\/]/).filter(Boolean).pop() ?? '';
   try {
-    const result = await withStash(label, () => withLogin(work));
+    const result = remote
+      ? await jobs.run({ job, kind: remote, label, repoPath: owner, repoName }, () => withStash(label, () => withLogin(() => work(job))))
+      : await withStash(label, () => withLogin(work));
     const message = success ? success(result) : null;
     // 진행 카드가 떠 있었으면 완료도 카드가 알린다(같은 알림을 두 번 띄우지 않는다).
     const carded = finishCard(true, message);
@@ -980,8 +1007,7 @@ async function act(label, work, { success, done, onError } = {}) {
     return undefined;
   } finally {
     finishCard(false);
-    toolbar.setBusy('');
-    setRunning(-1);
+    endBusy(owner, label, job);
     await refresh();
   }
 }
@@ -996,15 +1022,41 @@ function failedTitle(label) {
   return `${head} 실패`;
 }
 
-let running = 0;
+/** 레포지토리 경로 → 그 탭에서 도는 작업 {label, job}(시작한 차례). job: 원격 작업의 이름(없으면 null). */
+const busyRepos = new Map();
+
+function beginBusy(owner, label, job = null) {
+  busyRepos.set(owner, [...(busyRepos.get(owner) ?? []), { label, job }]);
+  syncBusy();
+}
+
+function endBusy(owner, label, job = null) {
+  const list = [...(busyRepos.get(owner) ?? [])];
+  const at = list.findLastIndex((b) => b.label === label && b.job === job);
+  if (at >= 0) list.splice(at, 1);
+  if (list.length) busyRepos.set(owner, list);
+  else busyRepos.delete(owner);
+  syncBusy();
+}
+
+/**
+ * 보고 있는 탭에 맞춰 작업 표시를 맞춘다: 도구 막대 진행 글, 진행 카드, 쓰기 동작 잠김(state.busy).
+ * 작업을 시작하고 끝낼 때와 탭을 바꿀 때 부른다.
+ */
+function syncBusy() {
+  const path = state.repo?.path ?? '';
+  const list = busyRepos.get(path) ?? [];
+  const top = list[list.length - 1];
+  toolbar.setBusy(top?.label ?? '', top?.job ?? null);
+  setOpCardViewing(path, $('toasts'));
+  setRunning(list.length > 0);
+}
 
 /**
  * 작업이 도는 동안(state.busy) 도구 막대·사이드바 메뉴의 쓰기 동작을 끈다(원본 GitToolbar idle·Runner.IsBusy).
  * 변경 목록은 다시 그리지 않고(누르자마자 옮겨 보인 목록을 지우지 않게) body 의 git-busy 로 버튼을 끈다.
  */
-function setRunning(delta) {
-  running = Math.max(0, running + delta);
-  const busy = running > 0;
+function setRunning(busy) {
   if (busy === !!state.busy) return;
   state.busy = busy;
   document.body.classList.toggle('git-busy', busy);
@@ -1654,7 +1706,8 @@ async function push() {
   }
   const firstPush = !branch.upstream;
   let rejected = null;
-  const result = await act('푸시하는 중…', () => call('push', { remote }), {
+  const result = await act('푸시하는 중…', (job) => call('push', { remote, job }), {
+    remote: 'push',
     success: () => (firstPush ? `'${branch.name}' 를 처음 올렸습니다.` : '푸시했습니다.'),
     onError: (error) => {
       if (error?.advice?.kind !== 'remoteAhead') return false;
@@ -1677,7 +1730,7 @@ let lastFetchError = null;
 async function fetchNow() {
   toolbar.setFetch({ fetching: true });
   try {
-    const ok = await act('페치하는 중…', () => call('fetch').then(() => true), { success: () => '페치했습니다.' });
+    const ok = await act('페치하는 중…', (job) => call('fetch', { job }).then(() => true), { success: () => '페치했습니다.', remote: 'fetch' });
     if (ok) {
       toolbar.setFetch({ error: null, auth: false });
       lastFetchError = null;
@@ -1692,7 +1745,8 @@ async function fetchNow() {
 /** 풀. 앞으로 감기만으로 안 되면(갈라짐) 병합·Rebase 중에서 다시 묻는다. 성공하면 true. */
 async function pull(mode) {
   let diverged = false;
-  const result = await act(`풀 하는 중… (${PULL_MODES[mode ?? state.settings.pullMode]})`, () => call('pull', mode ? { mode } : {}).then(() => true), {
+  const result = await act(`풀 하는 중… (${PULL_MODES[mode ?? state.settings.pullMode]})`, (job) => call('pull', mode ? { mode, job } : { job }).then(() => true), {
+    remote: 'pull',
     success: () => '풀 했습니다.',
     onError: (error) => {
       const text = error?.message ?? '';
@@ -1734,6 +1788,25 @@ on('gone', (data) => {
 // macOS 전체 화면에서는 신호등 버튼이 사라지므로 탭 막대 왼쪽 여백을 거둔다.
 on('window', (data) => document.body.classList.toggle('fullscreen', !!data?.fullscreen));
 on('fetching', () => toolbar.setFetch({ fetching: true }));
+// 원격 작업이 도는 중에 창을 닫거나 끄려고 했다(Rust 가 묻는다). 끄면 Clone·Fetch·Push 는 멈추고, Pull 은 끝난 뒤 끈다.
+let quitAsking = false;
+on('quitRequested', async () => {
+  if (quitAsking) return;
+  quitAsking = true;
+  const list = jobs.runningTitles();
+  const names = list.map((j) => j.title).join(', ');
+  // Pull·브랜치 전환은 파일을 고치는 중이라 끊지 않고 끝난 뒤 끈다.
+  const pulling = list.some((j) => j.kind === 'pull' || j.kind === 'checkout');
+  const cloning = list.some((j) => j.kind === 'clone');
+  const ok = await confirmDialog({
+    title: '진행 중인 작업이 있습니다',
+    message: `${names || '원격 작업'}\n\n${[cloning ? '끄면 받던 Clone 은 멈추고 받다 만 폴더를 지웁니다.' : '끄면 진행 중인 작업을 멈춥니다.', pulling ? 'Pull·브랜치 전환은 작업 트리를 지키려고 끝난 뒤에 끕니다.' : ''].filter(Boolean).join(' ')}`,
+    ok: '끄기', cancel: '계속하기', danger: true,
+  });
+  quitAsking = false;
+  await call('quit', { cancel: ok }).catch(() => {});
+  if (ok && pulling) jobs.waitForQuit('작업이 끝나면 앱을 끕니다.');
+});
 on('fetched', (result) => {
   const error = result.ok ? null : result.error;
   lastFetchError = error?.message ?? null;

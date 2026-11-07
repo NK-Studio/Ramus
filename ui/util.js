@@ -104,3 +104,14 @@ export function autoHorizontalScroll(textarea) {
   new ResizeObserver(fit).observe(textarea);
   return textarea;
 }
+
+/**
+ * GitHub 사진. 첫 글자 바탕 위에 그림을 얹고, 그림을 못 받으면 글자만 남는다.
+ * url 이 없으면 avatars.githubusercontent.com 의 로그인 사진. size: 'small'(18) · 기본(20) · 'large'(40).
+ */
+export function githubAvatar(login, { url, size } = {}) {
+  const px = size === 'large' ? 80 : 40;
+  const src = url ? `${url}${url.includes('?') ? '&' : '?'}s=${px}` : `https://avatars.githubusercontent.com/${encodeURIComponent(login)}?s=${px}`;
+  return el('span', { class: `cgh-avatar${size ? ` ${size}` : ''}` },
+    el('span', { text: (login[0] ?? '?').toUpperCase() }), el('img', { src, alt: '', onerror: (e) => e.target.remove() }));
+}

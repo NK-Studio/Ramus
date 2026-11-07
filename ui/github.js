@@ -439,7 +439,7 @@ export function createGitHub(ctx) {
 
   /** failure 가 있으면 원격이 계정을 거부한 뒤라 "이 계정으로 다시". 고르면 true(부른 쪽이 그 작업을 다시 한다). */
   function chooseAccount(failure = null) {
-    const SOURCE = { app: '앱 로그인(설정 > 로그인)', gh: 'GitHub CLI', credential: 'git 이 쓰는 계정' };
+    const SOURCE = { app: '앱 로그인(설정 > 로그인)', credential: 'git 이 쓰는 계정' };
     return new Promise((resolve) => {
       const backdrop = el('div', { class: 'modal-backdrop' });
       const card = el('div', { class: 'modal card account-dialog', role: 'dialog' });
@@ -522,11 +522,11 @@ export function createGitHub(ctx) {
         list.replaceChildren(el('div', { class: 'account-empty muted', text: '이 PC 의 계정과 접근 권한을 확인하는 중…' }));
         const accounts = await ctx.call('githubAccounts').catch((e) => { status.textContent = e?.message ?? String(e); status.hidden = false; return []; });
         const current = accounts.find((a) => a.inUse)?.login;
-        message.textContent = failure == null ? `${name} 에 쓸 계정을 고릅니다. 이 레포지토리에만 적용됩니다(다른 레포지토리·gh 의 활성 계정은 그대로).`
+        message.textContent = failure == null ? `${name} 에 쓸 계정을 고릅니다. 이 레포지토리에만 적용됩니다(다른 레포지토리는 그대로).`
           : current ? `${current} 계정으로 ${name} 에 접속했지만 거부됐습니다. GitHub 는 권한 없는 계정에게 비공개 레포지토리를 "없다" 고 답합니다.\n이 레포지토리에 접근할 수 있는 계정을 고르면 이 레포지토리에만 적용하고 다시 시도합니다.`
             : `${name} 에 접속할 계정을 찾지 못했습니다(로그인이 없거나 만료됨). 접근할 수 있는 계정을 고르거나 로그인하세요.`;
         if (!accounts.length) {
-          list.replaceChildren(el('div', { class: 'account-empty muted', text: '이 PC 에서 GitHub 계정을 찾지 못했습니다. gh auth login 이나 Git Credential Manager 로 로그인하거나, 아래에서 앱으로 로그인하세요.' }));
+          list.replaceChildren(el('div', { class: 'account-empty muted', text: '이 PC 에서 GitHub 계정을 찾지 못했습니다. 아래에서 앱으로 로그인하세요.' }));
           return;
         }
         // 접근할 수 있는 계정을 위로.

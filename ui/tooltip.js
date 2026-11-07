@@ -33,6 +33,9 @@ function show(element) {
   target = element;
   text.textContent = tip;
   bubble.classList.remove('side-right', 'side-below', 'side-above');
+  // 재기 전에 왼쪽 위로 옮긴다 — 지난 자리(화면 오른쪽 끝 등)에 둔 채 재면 남은 폭만큼만 펴져서 글이 한 글자씩 꺾인다.
+  bubble.style.left = '0px';
+  bubble.style.top = '0px';
   const r = element.getBoundingClientRect();
   const b = bubble.getBoundingClientRect();
   const gap = side0(element) === 'right' ? 6 : 4;

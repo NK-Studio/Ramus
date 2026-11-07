@@ -52,11 +52,11 @@ export function createRepoCache({ limit = 6 } = {}) {
 
 /** 열린 레포지토리와 상관없는 요청. 레포지토리를 여닫는 것, 설정, 로그인, Clone·만들기 창, 창 조작. */
 const GLOBAL_COMMANDS = new Set([
-  'app', 'gh', 'init', 'openRepo', 'closeRepo', 'closeTab', 'getSettings', 'setSettings', 'setUi', 'removeRecent',
+  'app', 'init', 'openRepo', 'closeRepo', 'closeTab', 'getSettings', 'setSettings', 'setUi', 'removeRecent',
   'newRepoTemplates', 'newRepoPath', 'createLocalRepo', 'githubCreateInfo', 'githubCreateRepo', 'githubCloneNew',
-  'clone', 'cloneName', 'githubCloneList', 'githubCloneAccounts', 'githubCloneCache', 'githubCloneCacheSave',
+  'clone', 'cancelJob', 'quit', 'cloneName', 'githubCloneList', 'githubCloneAccounts', 'githubCloneCache', 'githubCloneCacheSave',
   'avatar', 'exportKeychain', 'remoteLogin', 'forgetSshLogin', 'gitVersion', 'gitInfo', 'checkGit',
-  'githubDeviceStart', 'githubDevicePoll', 'githubStatus', 'githubLogout', 'githubAccounts', 'openUrl', 'openDefault', 'openFolder', 'trashRepo',
+  'githubDeviceStart', 'githubDevicePoll', 'githubStatus', 'githubLogout', 'githubAccounts', 'sshKeys', 'sshKeyRead', 'sshKeyGenerate', 'sshKeyUpload', 'openUrl', 'openDefault', 'openFolder', 'trashRepo',
   'pick', 'pickRepo', 'setZoom', 'menuState', 'toggleFullscreen', 'windowDrag', 'windowZoom', '__devResult',
 ]);
 

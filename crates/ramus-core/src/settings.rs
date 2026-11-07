@@ -33,6 +33,8 @@ pub struct Settings {
     /// 직접 지정한 git 실행 파일(`git_mode` 가 custom 일 때).
     pub git_path: String,
     pub ssl: SslSettings,
+    /// 앱이 부르는 git 이 쓸 SSH 개인 키. 비우면 ssh 설정(~/.ssh/config·ssh-agent)을 그대로 따른다.
+    pub ssh_key: String,
     pub pull_mode: PullMode,
     /// 자동 페치 간격(분). 0 이면 끈다.
     pub auto_fetch_minutes: u32,
@@ -55,6 +57,7 @@ impl Default for Settings {
             git_mode: String::new(),
             git_path: String::new(),
             ssl: SslSettings::default(),
+            ssh_key: String::new(),
             pull_mode: PullMode::FfOnly,
             auto_fetch_minutes: 10,
             diff_layout: "inline".into(),

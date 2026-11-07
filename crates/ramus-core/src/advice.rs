@@ -7,6 +7,8 @@ use serde::Serialize;
 #[serde(rename_all = "camelCase")]
 pub enum ErrorKind {
     Unknown,
+    /// 앱이 직접 쓴 한국어 오류(git 출력은 늘 영어로 받는다). 글 자체가 설명이라 원문 상자를 따로 보이지 않는다.
+    App,
     NoRemote,
     NoUpstream,
     RemoteAhead,
@@ -103,8 +105,24 @@ pub fn classify(message: &str) -> ErrorKind {
         ErrorKind::LockFile
     } else if lower.contains("conflict (") || lower.contains("automatic merge failed") || lower.contains("could not apply") {
         ErrorKind::Conflict
+    } else if is_app_message(message) {
+        ErrorKind::App
     } else {
         ErrorKind::Unknown
+    }
+}
+
+/// 앱이 쓴 글인가: git 은 영어로만 답하게 띄우므로(LC_MESSAGES=C) 한글이 있으면 앱의 것이다.
+fn is_app_message(message: &str) -> bool {
+    message.chars().any(|c| ('\u{AC00}'..='\u{D7A3}').contains(&c))
+}
+
+/// 앱이 쓴 오류 중 해결 방법을 덧붙일 수 있는 것.
+fn app_fix(message: &str) -> &'static str {
+    if message.starts_with("이미 파일이 있는 폴더입니다") {
+        "Clone 은 비어 있는 폴더에만 받을 수 있습니다. 폴더 이름을 바꾸거나 다른 곳을 고르세요."
+    } else {
+        ""
     }
 }
 
@@ -155,6 +173,7 @@ pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
     let mut remote = None;
     let mut branch = None;
     let (cause, fix): (String, &str) = match kind {
+        ErrorKind::App => (message.trim().to_string(), app_fix(message)),
         ErrorKind::Unknown => ("git 이 작업을 끝내지 못했습니다.".into(), "새로고침한 뒤 다시 해 보고, 그래도 안 되면 'git 원문' 을 확인하세요."),
         ErrorKind::NoRemote => {
             let r = group(r"(?i)'(?P<remote>[^']+)' does not appear to be a git repository", message, "remote").unwrap_or_else(|| "origin".into());
@@ -245,6 +264,7 @@ mod tests {
             ("remote: error: GH006: Protected branch update failed", ErrorKind::ProtectedBranch),
             ("SSL certificate problem: unable to get local issuer certificate", ErrorKind::Ssl),
             ("", ErrorKind::Unknown),
+            ("이미 파일이 있는 폴더입니다: /a/b", ErrorKind::App),
         ];
         for (message, kind) in cases {
             assert_eq!(classify(message), kind, "{message}");

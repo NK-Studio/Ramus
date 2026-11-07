@@ -73,7 +73,9 @@ export function createRefs(ctx) {
   }
 
   async function checkout(name, remote = false) {
-    await run(`${name} 로 전환하는 중…`, 'checkout', { name, remote }, `${remote ? name.replace(/^[^/]+\//, '') : name} 로 바꿨습니다.`);
+    // 전환은 LFS 파일을 서버에서 받느라 오래 걸릴 수 있어 작업 목록에 보인다(remote: 'checkout').
+    const done = `${remote ? name.replace(/^[^/]+\//, '') : name} 로 바꿨습니다.`;
+    await act(`${name} 로 전환하는 중…`, (job) => call('checkout', { name, remote, job }), { success: () => done, remote: 'checkout' });
   }
 
   async function checkoutCommit(hash, label) {
@@ -83,7 +85,8 @@ export function createRefs(ctx) {
       message: `${label ?? hash.slice(0, 7)} 을 브랜치 없이 봅니다(detached HEAD). 이 상태에서 만든 커밋은 브랜치를 만들지 않으면 잃기 쉽습니다.`,
       ok: '전환',
     }))) return;
-    await run('전환하는 중…', 'checkoutDetached', { hash }, `${label ?? hash.slice(0, 7)} 로 전환했습니다.`);
+    const done = `${label ?? hash.slice(0, 7)} 로 전환했습니다.`;
+    await act(`${label ?? hash.slice(0, 7)} 로 전환하는 중…`, (job) => call('checkoutDetached', { hash, job }), { success: () => done, remote: 'checkout' });
   }
 
   async function renameBranch(name) {

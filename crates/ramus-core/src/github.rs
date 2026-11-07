@@ -17,10 +17,13 @@ use crate::runner::GitRunner;
 
 /// NK-Studio 이름으로 등록한 OAuth App(Device Flow 켬). 공개 값이다.
 pub const CLIENT_ID: &str = "Ov23liwBBq0RMqbmU44U";
-/// repo: 비공개 레포지토리 읽기·쓰기·만들기, read:org: 속한 조직 목록(레포지토리 만들기 창의 계정 고르기).
-pub const SCOPE: &str = "repo read:org";
+/// repo: 비공개 레포지토리 읽기·쓰기·만들기, read:org: 속한 조직 목록(레포지토리 만들기 창의 계정 고르기),
+/// write:public_key: 설정 > 로그인 에서 SSH 키를 GitHub 계정에 올리기(읽기도 포함).
+pub const SCOPE: &str = "repo read:org write:public_key";
 /// 레포지토리 만들기에 필요한 scope.
 pub const CREATE_SCOPES: [&str; 2] = ["repo", "read:org"];
+/// SSH 키를 읽고 올리는 데 필요한 scope.
+pub const KEY_SCOPES: [&str; 1] = ["write:public_key"];
 const USER_AGENT: &str = "Ramus-Desktop";
 /// 앱 로그인 토큰을 넣어 둘 자격 증명 저장소의 이름(실제 git 접속에는 쓰지 않는 호스트).
 /// 앱 이름을 Ramus 로 바꾼 뒤에도 그대로 둔다 — 바꾸면 이미 로그인한 사람이 다시 로그인해야 한다.
@@ -31,7 +34,7 @@ const API: &str = "https://api.github.com";
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub login: String,
-    /// app | gh | credential
+    /// app | credential
     pub source: String,
     /// 이 레포지토리에 고른 계정.
     pub current: bool,
@@ -39,6 +42,26 @@ pub struct Account {
     pub in_use: bool,
     /// 이 레포지토리를 읽을 수 있는가(모르면 None).
     pub can_access: Option<bool>,
+    /// GitHub 프로필의 이름(없거나 못 읽으면 None).
+    pub name: Option<String>,
+    /// 프로필 사진 주소.
+    pub avatar_url: Option<String>,
+}
+
+/// `/user` 로 읽은 프로필과, 토큰이 받은 scope(세분화 토큰이면 None).
+pub struct Profile {
+    pub name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub scopes: Option<Vec<String>>,
+}
+
+/// 토큰 주인의 프로필. 연결이 안 되거나 토큰이 틀리면 None.
+pub fn profile(token: &str) -> Option<Profile> {
+    let response = agent("GET", &format!("{API}/user"), Some(token)).call().ok()?;
+    let scopes = response.header("X-OAuth-Scopes").map(|h| h.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
+    let user = read_json(response);
+    let text = |key: &str| user.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string);
+    Some(Profile { name: text("name"), avatar_url: text("avatar_url"), scopes })
 }
 
 fn quiet_env() -> HashMap<String, String> {
@@ -63,36 +86,6 @@ pub fn store_app_token(git: &GitRunner, dir: &Path, login: &str, token: &str) {
 
 pub fn forget_app_token(git: &GitRunner, dir: &Path, login: &str) {
     let _ = credential(git, dir, "reject", &format!("protocol=https\nhost={STORE_HOST}\nusername={login}\n\n"));
-}
-
-/// GitHub CLI 에 로그인한 계정들.
-pub fn gh_accounts() -> Vec<String> {
-    let Ok(out) = std::process::Command::new("gh").args(["auth", "status", "--hostname", "github.com"]).env("PATH", extended_path()).output() else {
-        return Vec::new();
-    };
-    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-    let re = regex::Regex::new(r"(?:account|as) ([A-Za-z0-9-]+)").unwrap();
-    let mut logins: Vec<String> = re.captures_iter(&text).map(|c| c[1].to_string()).collect();
-    logins.dedup();
-    logins
-}
-
-pub fn gh_token(login: &str) -> Option<String> {
-    let out = std::process::Command::new("gh").args(["auth", "token", "--hostname", "github.com", "--user", login]).env("PATH", extended_path()).output().ok()?;
-    let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (out.status.success() && !token.is_empty()).then_some(token)
-}
-
-/// 앱으로 실행하면 PATH 가 짧아 Homebrew 의 gh 를 못 찾는다.
-fn extended_path() -> String {
-    let mut path = std::env::var("PATH").unwrap_or_default();
-    for extra in ["/usr/local/bin", "/opt/homebrew/bin"] {
-        if !path.split(':').any(|p| p == extra) {
-            path.push(':');
-            path.push_str(extra);
-        }
-    }
-    path
 }
 
 /// 자격 증명 도우미(키체인·GCM)가 github.com 에 쓰는 계정과 토큰.
@@ -157,6 +150,7 @@ pub fn missing_scopes(granted: &[String], needed: &[&str]) -> Vec<String> {
         .iter()
         .filter(|&&n| match n {
             "read:org" => !(has("read:org") || has("write:org") || has("admin:org")),
+            "write:public_key" => !(has("write:public_key") || has("admin:public_key")),
             other => !has(other),
         })
         .map(|s| s.to_string())

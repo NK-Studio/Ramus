@@ -12,6 +12,7 @@
   --git-bg: #191a1c;
   /* 큰 창(Clone·만들기·설정) — JetBrains 설정 창: 바탕 = 칸 바탕, 드롭다운만 한 단 밝게, 구분선은 바탕보다 한 단. */
   --git-dialog-bg: #191a1c;
+  --jobs-track: rgba(255, 255, 255, 0.12);
   --git-dialog-border: #33353b;
   --git-dialog-divider: #25282c;
   --git-combo-bg: #25282c;
@@ -160,6 +161,7 @@
   color-scheme: light;
   --git-bg: #ffffff;
   --git-dialog-bg: #f7f8fa;
+  --jobs-track: rgba(0, 0, 0, 0.08);
   --git-dialog-border: #dfe1e5;
   --git-dialog-divider: #ebecf0;
   --git-combo-bg: #ffffff;
@@ -1046,6 +1048,70 @@ body { display: flex; flex-direction: column; }
 .tab-new { margin-left: 4px; }
 .tab-folder:hover, .tab-new:hover { background: var(--git-hover); color: var(--git-text); }
 .tab-new.active { color: var(--git-text-strong); }
+/* 작업 버튼(탭 막대 오른쪽 끝): 도는 원격 작업 개수 배지 + 아이콘을 두른 진행 고리. 누르면 .jobs-pop */
+.tab-jobs { position: relative; flex: none; align-self: center; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin-left: 4px; border: 0; border-radius: 6px; background: none; color: var(--git-text-muted); cursor: pointer; }
+.tab-jobs[hidden] { display: none; }
+.tab-jobs:hover, .tab-jobs.open { background: var(--git-hover); color: var(--git-text); }
+.tab-jobs.working { color: var(--git-accent-fg); }
+.tab-jobs-ring { position: absolute; inset: 0; width: 28px; height: 28px; transform: rotate(-90deg); pointer-events: none; }
+.tab-jobs-ring circle { fill: none; stroke-width: 2; }
+.tab-jobs-ring-track { stroke: transparent; }
+.tab-jobs.working .tab-jobs-ring-track { stroke: var(--git-border); }
+.tab-jobs-ring-fill { stroke: transparent; stroke-linecap: round; transition: stroke-dashoffset 240ms linear; }
+.tab-jobs.working .tab-jobs-ring.known .tab-jobs-ring-fill { stroke: var(--git-accent); }
+.tab-jobs.working .tab-jobs-ring:not(.known) { animation: spin 1.1s linear infinite; }
+.tab-jobs.working .tab-jobs-ring:not(.known) .tab-jobs-ring-fill { stroke: var(--git-accent); stroke-dashoffset: 55; }
+.tab-jobs-badge { position: absolute; right: -3px; bottom: -2px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--git-accent); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; font-variant-numeric: tabular-nums; }
+.tab-jobs-badge[hidden], .tab-jobs-dot[hidden] { display: none; }
+.tab-jobs-dot { position: absolute; right: 2px; top: 2px; width: 8px; height: 8px; border-radius: 4px; background: var(--git-success); box-shadow: 0 0 0 2px var(--git-titlebar-bg); }
+@media (prefers-reduced-motion: reduce) { .tab-jobs.working .tab-jobs-ring:not(.known) { animation: none; } }
+.jobs-pop { position: fixed; z-index: 40; width: 380px; max-width: calc(100vw - 16px); max-height: min(520px, calc(100vh - 60px)); display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--git-dialog-bg); border: 1px solid var(--git-dialog-border); box-shadow: 0 12px 40px var(--git-menu-shadow); animation: jobs-pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes jobs-pop-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .jobs-pop { animation: none; } }
+.jobs-pop-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; padding: 12px 16px 10px; border-bottom: 1px solid var(--git-dialog-divider); }
+.jobs-pop-title { font-weight: 700; color: var(--git-text-strong); }
+.jobs-pop-count { font-size: 12px; color: var(--git-text-secondary); font-variant-numeric: tabular-nums; }
+.jobs-pop-note { flex-basis: 100%; font-size: 12px; color: var(--git-warning); }
+.jobs-pop-list { flex: 1; min-height: 0; overflow: auto; padding: 4px 0; }
+.jobs-pop-empty { padding: 18px 16px; font-size: 12px; color: var(--git-text-muted); text-align: center; }
+.jobs-pop-foot { display: flex; justify-content: flex-end; padding: 8px 12px; border-top: 1px solid var(--git-dialog-divider); }
+.jobs-pop-foot[hidden] { display: none; }
+.jobs-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 12px 16px; }
+.jobs-row + .jobs-row { border-top: 1px solid var(--git-dialog-divider); }
+.jobs-row.linked { cursor: pointer; }
+.jobs-row.linked:hover { background: var(--git-hover); }
+.jobs-row-icon { flex: none; position: relative; width: 28px; height: 28px; border-radius: 14px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--git-selected); color: var(--git-accent-fg); }
+/* 도는 동안: 받기(Clone·Fetch·Pull)는 화살표가 아래로 빠져나가고 위에서 다시 들어온다, Push 는 위로. 둘레는 숨 쉬듯 번진다. */
+.jobs-row:not(.done):not(.failed) .jobs-row-icon { animation: jobs-icon-breathe 1.6s ease-in-out infinite; }
+.jobs-row:not(.done):not(.failed) .jobs-row-icon > svg { animation: jobs-arrow-down 1.1s cubic-bezier(0.55, 0, 0.45, 1) infinite; }
+.jobs-row.kind-push:not(.done):not(.failed) .jobs-row-icon > svg { animation-name: jobs-arrow-up; }
+.jobs-row.done .jobs-row-icon > svg, .jobs-row.failed .jobs-row-icon > svg { animation: jobs-icon-pop 320ms cubic-bezier(0.2, 1.6, 0.4, 1); }
+@keyframes jobs-arrow-down { 0% { transform: translateY(-120%); opacity: 0; } 25%, 70% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(120%); opacity: 0; } }
+@keyframes jobs-arrow-up { 0% { transform: translateY(120%); opacity: 0; } 25%, 70% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-120%); opacity: 0; } }
+@keyframes jobs-icon-breathe { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--git-accent) 35%, transparent); } 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--git-accent) 0%, transparent); } }
+@keyframes jobs-icon-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.jobs-row.done .jobs-row-icon { background: var(--git-success-soft); color: var(--git-success); }
+.jobs-row.failed .jobs-row-icon { background: var(--git-danger-soft); color: var(--git-danger); }
+.jobs-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.jobs-row-title { font-weight: 600; color: var(--git-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jobs-row-phase { font-size: 12px; color: var(--git-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.jobs-row.failed .jobs-row-phase { color: var(--git-danger); white-space: normal; }
+.jobs-row-bar { position: relative; height: 4px; margin-top: 8px; border-radius: 999px; overflow: hidden; background: var(--jobs-track); }
+.jobs-row.done .jobs-row-bar, .jobs-row.failed .jobs-row-bar { display: none; }
+/* macOS 진행 막대처럼: 얇은 캡슐에 단색 파랑. 진행률을 알면 부드럽게 늘고, 모르면 짧은 캡슐이 천천히 오간다(줄무늬·빛 번짐 없음). */
+.jobs-row-fill { position: absolute; top: 0; bottom: 0; left: 0; width: 28%; border-radius: inherit; background: var(--git-accent); animation: jobs-indeterminate 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+.jobs-row-bar.known .jobs-row-fill { min-width: 4px; animation: none; }
+@keyframes jobs-indeterminate { 0% { left: -28%; } 100% { left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .jobs-row-icon, .jobs-row-icon > svg { animation: none !important; }
+  .jobs-row-fill { animation-duration: 3s; }
+}
+.jobs-row-actions { display: flex; gap: 6px; margin-top: 6px; }
+.jobs-row-actions[hidden] { display: none; }
+.jobs-row-x { flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 11px; background: none; color: var(--git-text-muted); cursor: pointer; }
+.jobs-row-x:hover:not(:disabled) { background: var(--git-hover); color: var(--git-text); }
+.jobs-row-x:disabled { opacity: 0.4; cursor: default; }
+.jobs-row-x[hidden] { display: none; }
 .tab { position: relative; z-index: 1; flex: 0 1 auto; display: flex; align-items: center; gap: 8px; min-width: 96px; max-width: 240px; height: 32px; padding: 0 6px 0 14px; border-radius: 8px 8px 0 0; color: var(--git-text-muted); font-size: 13px; cursor: default; }
 .tab::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 1px; background: var(--git-border); }
 .tab-folder + .tab::before, .tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before { display: none; }
@@ -1636,7 +1702,35 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .git-choice .row.git-choice-path .field { flex: 1; min-width: 0; }
 .git-notice { color: var(--git-warning); }
 .git-notice[hidden] { display: none; }
-.gh-accounts { display: flex; flex-direction: column; gap: 4px; }
+.gh-accounts { display: flex; flex-direction: column; gap: 8px; }
+/* 설정 > 로그인: GitHub 계정 카드 */
+.gh-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--git-divider); border-radius: var(--radius); background: var(--git-field-bg); }
+.gh-card.loading { min-height: 40px; }
+.gh-card-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gh-card-name { font-weight: 600; color: var(--git-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gh-card-login, .gh-card-note { white-space: nowrap; }
+.gh-card-state { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.gh-status { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.gh-status.ok { color: var(--git-success); }
+.gh-badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.gh-badge { padding: 1px 6px; border: 1px solid var(--git-divider); border-radius: 9px; font-size: 11px; color: var(--git-text-secondary); white-space: nowrap; }
+.gh-badge.accent { border-color: var(--git-accent-soft); background: var(--git-accent-soft); color: var(--git-accent-fg); }
+.gh-badge.ok { border-color: var(--git-success-soft); background: var(--git-success-soft); color: var(--git-success); }
+.gh-badge.warn { border-color: var(--git-warning-soft); background: var(--git-warning-soft); color: var(--git-warning); }
+.cgh-avatar.large { width: 40px; height: 40px; border-radius: 20px; font-size: 16px; }
+.cgh-avatar.large svg { color: var(--git-accent-text); }
+/* SSH 키 목록과 만들기·고르기 칸 */
+.ssh-keys { display: flex; flex-direction: column; gap: 6px; }
+.ssh-key { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--git-divider); border-radius: var(--radius); }
+.ssh-key.on { border-color: var(--git-accent); }
+.ssh-key > svg { flex: none; color: var(--git-text-muted); }
+.ssh-key-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ssh-key-name { display: flex; align-items: baseline; gap: 6px; font-weight: 600; }
+.ssh-key-fp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
+.ssh-scope { align-items: center; gap: 6px; color: var(--git-warning); }
+.ssh-form { display: grid; grid-template-columns: max-content 1fr; gap: 8px 14px; align-items: start; }
+.ssh-form-label { padding-top: 5px; color: var(--git-text-secondary); text-align: right; }
+.ssh-form-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 
 /* ── 탭 · 배치별 화면(원본 GitWindow 탭, ForkChangesView, PendingChangesView, 탐색 화면) ── */
 
@@ -2088,8 +2182,7 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 @keyframes gh-login-pop { from { transform: scale(0.6); opacity: 0; } }
 .gh-login-code.failed .gh-login-cell.empty { animation: none; opacity: 0.45; }
 
-/* ── Clone 진행 무대(clonestage.js) ──────────────────────
-   폼을 걷고 대화상자 높이가 부드럽게 바뀐 뒤, 흐린 빛 위에 그라데이션 고리·큰 숫자·단계 점이 차례로 떠오른다. */
+/* ── Clone 창 ── */
 .clone-form { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* Clone 창의 GitHub/URL 전환과 GitHub 레포지토리 목록(clonepicker.js). */
 .modal.wide.clone-dialog { width: 640px; }
@@ -2180,96 +2273,11 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .cgh-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--git-border); border-top-color: var(--git-accent); animation: spin 0.8s linear infinite; box-sizing: border-box; }
 .cgh-spinner.small { width: 10px; height: 10px; border-width: 1.5px; }
 @media (prefers-reduced-motion: reduce) { .cgh-spinner { animation-duration: 2.4s; }  }
-.modal.locked { overflow: hidden; }
-.modal-backdrop:has(> .modal.locked) { background: rgba(0, 0, 0, 0.38); -webkit-backdrop-filter: blur(14px) saturate(150%); backdrop-filter: blur(14px) saturate(150%); transition: background 300ms; }
 .modal-backdrop.leaving { opacity: 0; transition: opacity 260ms ease-out; }
 .modal-backdrop.leaving > .modal { transform: scale(0.965); transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1); }
 
-:root { --cs-a: #5b8cff; --cs-b: #8f6bff; --cs-c: #3fd0e0; --cs-ok-a: #5fd38a; --cs-ok-b: #3fbf9b; --cs-aura-opacity: 0.42; }
-:root[data-theme="light"] { --cs-a: #3574f0; --cs-b: #7b5cf5; --cs-c: #1fb6c9; --cs-ok-a: #34b56a; --cs-ok-b: #1fa58a; --cs-aura-opacity: 0.22; }
-
-.clone-stage { position: relative; margin: 0; padding: 34px 28px 24px; overflow: hidden; isolation: isolate; }
-.cs-aura { position: absolute; left: 50%; top: 104px; width: 720px; height: 720px; margin: -360px 0 0 -360px; z-index: -1; pointer-events: none; opacity: var(--cs-aura-opacity); animation: cs-aura-in 1.2s ease-out both, cs-orbit 18s linear infinite; }
-.cs-blob { position: absolute; width: 190px; height: 190px; border-radius: 50%; filter: blur(46px); }
-.cs-blob.a { left: 200px; top: 215px; background: var(--cs-a); animation: cs-drift 7s ease-in-out infinite alternate; }
-.cs-blob.b { right: 195px; top: 250px; background: var(--cs-b); animation: cs-drift 9s ease-in-out -3s infinite alternate-reverse; }
-.cs-blob.c { left: 270px; bottom: 200px; background: var(--cs-c); animation: cs-drift 8s ease-in-out -5s infinite alternate; }
-.clone-stage.done .cs-blob { background: var(--cs-ok-a); transition: background 900ms; }
-.clone-stage.done .cs-blob.b { background: var(--cs-ok-b); }
-@keyframes cs-aura-in { from { opacity: 0; transform: scale(0.7); } }
-@keyframes cs-orbit { to { rotate: 360deg; } }
-@keyframes cs-drift { from { transform: translate(-14px, 8px) scale(0.92); } to { transform: translate(16px, -10px) scale(1.08); } }
-
-.cs-body { display: flex; flex-direction: column; align-items: center; text-align: center; }
-.cs-body > * { animation: cs-rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.cs-body > :nth-child(2) { animation-delay: 80ms; }
-.cs-body > :nth-child(3) { animation-delay: 130ms; }
-.cs-body > :nth-child(4) { animation-delay: 180ms; }
-.cs-body > :nth-child(5) { animation-delay: 230ms; }
-.cs-body > :nth-child(6) { animation-delay: 270ms; }
-@keyframes cs-rise { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } }
-
-/* 고리 */
-.cs-dial { position: relative; width: 140px; height: 140px; margin-bottom: 18px; }
-.cs-body > .cs-dial { animation: cs-dial-in 820ms cubic-bezier(0.34, 1.4, 0.64, 1) both; }
-@keyframes cs-dial-in { from { opacity: 0; transform: scale(0.6); filter: blur(10px); } }
-.cs-halo { position: absolute; inset: 14px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--cs-a) 38%, transparent) 0%, transparent 70%); animation: cs-breathe 3.2s ease-in-out infinite; }
-.clone-stage.done .cs-halo { background: radial-gradient(circle, color-mix(in srgb, var(--cs-ok-a) 45%, transparent) 0%, transparent 70%); }
-@keyframes cs-breathe { 0%, 100% { transform: scale(0.9); opacity: 0.7; } 50% { transform: scale(1.12); opacity: 1; } }
-.cs-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; rotate: -90deg; }
-.cs-ring circle { fill: none; stroke-width: 6; }
-.cs-track { stroke: color-mix(in srgb, var(--git-text) 10%, transparent); }
-.cs-arc { stroke-linecap: round; opacity: 0; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--cs-a) 70%, transparent)); transition: opacity 500ms, filter 900ms; }
-.clone-stage.known .cs-arc { opacity: 1; }
-.clone-stage.done .cs-arc { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--cs-ok-a) 80%, transparent)); }
-.cs-comet { stroke-linecap: round; transform-origin: 64px 64px; animation: spin 1.15s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite; transition: opacity 500ms; }
-.clone-stage.known .cs-comet { opacity: 0; }
-.cs-stop-a { stop-color: var(--cs-c); transition: stop-color 900ms; }
-.cs-stop-b { stop-color: var(--cs-a); transition: stop-color 900ms; }
-.cs-stop-c { stop-color: var(--cs-b); transition: stop-color 900ms; }
-.clone-stage.done .cs-stop-a { stop-color: var(--cs-ok-b); }
-.clone-stage.done .cs-stop-b, .clone-stage.done .cs-stop-c { stop-color: var(--cs-ok-a); }
-.cs-check { fill: none; stroke: var(--git-text-strong); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 60; stroke-dashoffset: 60; rotate: 90deg; transform-origin: 64px 64px; }
-.clone-stage.done .cs-check { stroke-dashoffset: 0; transition: stroke-dashoffset 460ms cubic-bezier(0.65, 0, 0.35, 1) 160ms; }
-.clone-stage.done .cs-body > .cs-dial { animation: cs-pop 620ms cubic-bezier(0.34, 1.56, 0.64, 1); }
-@keyframes cs-pop { 40% { transform: scale(1.07); } }
-
-.cs-percent { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 1px; color: var(--git-text-strong); font-variant-numeric: tabular-nums; opacity: 0.38; transition: opacity 500ms, transform 400ms cubic-bezier(0.32, 0.72, 0, 1), filter 400ms; }
-.clone-stage.known .cs-percent { opacity: 1; }
-.clone-stage.done .cs-percent { opacity: 0; transform: scale(0.7); filter: blur(4px); }
-.cs-digits { font-size: 36px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
-.cs-unit { align-self: flex-start; margin-top: 46px; font-size: 14px; font-weight: 600; opacity: 0.6; }
-
-/* 글 */
-.cs-name { max-width: 100%; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; color: var(--git-text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cs-headline { position: relative; width: 100%; height: 20px; margin-top: 4px; overflow: hidden; }
-.cs-line { position: absolute; inset: 0; font-size: 13px; font-weight: 500; line-height: 20px; color: var(--git-text-secondary); white-space: nowrap; }
-.cs-line.in { animation: cs-line-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.cs-line.out { animation: cs-line-out 360ms cubic-bezier(0.4, 0, 1, 1) both; }
-@keyframes cs-line-in { from { opacity: 0; transform: translateY(12px); filter: blur(4px); } }
-@keyframes cs-line-out { to { opacity: 0; transform: translateY(-12px); filter: blur(4px); } }
-
-/* 지금 단계 캡슐: ● 받기  2/4 */
-.cs-step { display: inline-flex; align-items: center; gap: 8px; height: 26px; margin-top: 16px; padding: 0 12px 0 11px; border-radius: 13px; background: color-mix(in srgb, var(--git-text) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--git-text) 9%, transparent); font-size: 12px; color: var(--git-text-strong); }
-.cs-step-dot { position: relative; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--cs-a); transition: background 600ms; }
-.cs-step-dot::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 1.5px solid var(--cs-a); animation: cs-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
-.clone-stage.done .cs-step-dot { background: var(--cs-ok-a); }
-.clone-stage.done .cs-step-dot::after { animation: none; opacity: 0; }
-.cs-step-label { position: relative; display: block; width: 44px; height: 18px; overflow: hidden; }
-.cs-step-label .cs-line { font-size: 12px; line-height: 18px; color: inherit; text-align: left; font-weight: 600; }
-.cs-step-count { font-size: 11px; color: var(--git-text-muted); font-variant-numeric: tabular-nums; }
-.cs-step-count:empty { display: none; }
-@keyframes cs-ping { from { opacity: 0.9; transform: scale(0.6); } to { opacity: 0; transform: scale(1.8); } }
-
-.cs-meta { display: flex; justify-content: center; gap: 10px; width: 100%; margin-top: 18px; font-size: 11px; color: var(--git-text-muted); font-variant-numeric: tabular-nums; }
-.cs-counts { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cs-counts:empty { display: none; }
-.cs-elapsed:empty { display: none; }
-.cs-counts:not(:empty) + .cs-elapsed::before { content: '·'; margin-right: 10px; }
-.cs-where { max-width: 100%; margin-top: 6px; font-size: 11px; color: var(--git-text-muted); opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (prefers-reduced-motion: reduce) {
-  .clone-stage *, .clone-stage *::before, .clone-stage *::after { animation: none !important; transition: none !important; }
   .modal-backdrop.leaving, .modal-backdrop.leaving > .modal { transition: none; }
 }
 
@@ -2368,7 +2376,9 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .newrepo-check { min-height: 20px; display: flex; align-items: center; }
 .newrepo-messages { flex: 1; min-width: 0; display: flex; }
 .newrepo-messages > .sheet-message { flex: 1; }
-/* 설정: 왼쪽 칸 목록 + 오른쪽 스크롤. 본문 틀은 스크롤하지 않고 안의 settings-body 가 스크롤한다. */
+/* 설정: 왼쪽 칸 목록 + 오른쪽은 고른 칸 하나만. 본문 틀은 스크롤하지 않고, 칸이 길면 안의 settings-body 가 스크롤한다. */
+.settings-section[hidden] { display: none; }
+.settings-section h3 { font-size: 15px; }
 .modal.sheet.settings { width: 780px; height: min(640px, calc(100% - 48px)); }
 .modal.sheet.settings .sheet-body { overflow: hidden; padding-bottom: 0; }
 .modal.sheet.settings .settings-layout { padding-bottom: 14px; }

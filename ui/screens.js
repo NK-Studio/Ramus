@@ -1,9 +1,7 @@
 // 큰 창들: clone, 설정(일반·SSL 인증서·로그인), GitHub 가 아닌 서버 로그인.
 
-import { el } from './util.js';
+import { el, githubAvatar } from './util.js';
 import { icon } from './icons.js';
-import { onProgress } from './progress.js';
-import { cloneStage } from './clonestage.js';
 import { githubPicker } from './clonepicker.js';
 import { sheetHead, sheetBody, sheetFoot, sheetMessage, sheetModes, morph } from './sheet.js';
 import { showMenu } from './dialogs.js';
@@ -18,8 +16,7 @@ function modal(className, build) {
       resolve(value);
     };
     const onKey = (event) => {
-      // locked: 되돌릴 수 없는 일(Clone 등)이 도는 동안은 닫지 않는다.
-      if (event.key === 'Escape' && !document.querySelector('.menu') && !dialog.classList.contains('locked')) {
+      if (event.key === 'Escape' && !document.querySelector('.menu')) {
         event.stopPropagation();
         close(null);
       }
@@ -116,11 +113,12 @@ function gitChoices(call, s) {
 }
 
 /**
- * clone 창. 받으면 열린 레포지토리 정보, 이미 받아 둔 것을 고르면 {open: 폴더}, 취소하면 null.
+ * clone 창. Clone 을 누르면 {clone: {url, dest, name, account, upstream}} 로 바로 닫힌다 — 받기는 작업 목록(jobs.js)이 뒤에서 한다.
+ * 이미 받아 둔 것을 고르면 {open: 폴더}, 취소하면 null.
  * GitHub 쪽(로그인한 계정의 레포지토리 목록)과 URL 쪽(주소를 직접 적기)을 위에서 바꾼다. 받을 폴더·이름 칸은 둘이 같이 쓴다.
- * signedIn: 앱 로그인을 했으면 GitHub 쪽으로 연다. login: github.login(Device Flow).
+ * signedIn: 앱 로그인을 했으면 GitHub 쪽으로 연다. login: github.login(Device Flow). busyDests: 지금 받는 중인 받을 곳들.
  */
-export function cloneDialog({ call, cloneDir, withLogin, showError, login, signedIn }) {
+export function cloneDialog({ call, cloneDir, login, signedIn, busyDests = new Set() }) {
   return modal('sheet wide clone-dialog', (dialog, done) => {
     let mode = signedIn ? 'github' : 'url';
     let picked = null; // GitHub 쪽에서 고른 레포지토리
@@ -129,7 +127,22 @@ export function cloneDialog({ call, cloneDir, withLogin, showError, login, signe
     const name = input('');
     const sep = cloneDir.includes('\\') ? '\\' : '/';
     const target = el('div', { class: 'muted small sheet-target' });
-    const updateTarget = () => { target.textContent = name.value ? `받을 곳: ${parent.value.replace(/[\\/]$/, '')}${sep}${name.value}` : ''; };
+    // 받을 곳에 이미 파일이 있으면 git 이 거절한다 — 누르기 전에 알린다. 묻는 사이 칸이 바뀌면 늦게 온 답은 버린다.
+    let occupied = null; // 파일이 있는 받을 곳의 경로
+    let destAsked = '';
+    const destPath = () => `${parent.value.replace(/[\\/]$/, '')}${sep}${name.value.trim()}`;
+    const checkDest = async () => {
+      const path = parent.value.trim() && name.value.trim() ? destPath() : '';
+      destAsked = path;
+      const state = path ? await call('newRepoPath', { path }).catch(() => null) : null;
+      if (destAsked !== path) return;
+      occupied = state && !state.empty ? path : null;
+      validate();
+    };
+    const updateTarget = () => {
+      target.textContent = name.value ? `받을 곳: ${parent.value.replace(/[\\/]$/, '')}${sep}${name.value}` : '';
+      checkDest();
+    };
     // 폴더 이름은 사람이 고치지 않았으면(비었거나 지난번에 채운 그대로면) 주소·고른 레포지토리를 따라간다.
     let autoName = '';
     const suggestName = (value) => {
@@ -221,7 +234,9 @@ export function cloneDialog({ call, cloneDir, withLogin, showError, login, signe
       const reason = src?.local ? ''
         : !src ? (mode === 'github' ? '받을 레포지토리를 고르세요.' : '레포지토리 주소를 적어 주세요.')
           : !parent.value.trim() ? '받을 폴더를 정해 주세요.'
-            : !name.value.trim() ? '폴더 이름을 적어 주세요.' : '';
+            : !name.value.trim() ? '폴더 이름을 적어 주세요.'
+              : busyDests.has(destPath()) ? '이 자리로 이미 받는 중입니다. 폴더 이름을 바꾸거나 다른 곳을 고르세요.'
+                : occupied === destPath() ? '받을 곳에 이미 파일이 있습니다. 폴더 이름을 바꾸거나 다른 곳을 고르세요.' : '';
       message.say(reason);
       ok.disabled = !!reason;
     }
@@ -257,26 +272,8 @@ export function cloneDialog({ call, cloneDir, withLogin, showError, login, signe
       }
       validate();
       if (ok.disabled) return;
-      const dest = `${parent.value.replace(/[\\/]$/, '')}${sep}${name.value.trim()}`;
-      // 받는 동안 폼을 걷고 진행 무대를 띄운다 — 큰 레포지토리는 오래 걸린다. git 에는 멈추는 길이 없어 닫지 못하게 한다.
-      const stage = cloneStage({ name: name.value.trim(), where: dest });
-      dialog.classList.add('locked');
-      morph(dialog, () => { form.hidden = true; dialog.append(stage.node); });
-      const stop = onProgress(stage.update);
-      try {
-        const upstreamUrl = src.parent?.url && upstream.box.checked ? src.parent.url : null;
-        const repo = await withLogin(() => call('clone', { url: src.url, dest, account: src.account, upstream: upstreamUrl }));
-        stop();
-        await stage.finish();
-        dialog.closest('.modal-backdrop')?.classList.add('leaving');
-        setTimeout(() => close(repo), 260);
-      } catch (e) {
-        stop();
-        stage.dispose();
-        dialog.classList.remove('locked');
-        morph(dialog, () => { stage.node.remove(); form.hidden = false; });
-        showError(e);
-      }
+      const upstreamUrl = src.parent?.url && upstream.box.checked ? src.parent.url : null;
+      close({ clone: { url: src.url, dest: destPath(), name: name.value.trim(), account: src.account, upstream: upstreamUrl } });
     });
     setMode(mode);
     dialog.append(form);
@@ -338,7 +335,7 @@ function select(options, value) {
  * 설정 화면. 바꾼 설정을 돌려준다(닫으면 null). 왼쪽 구역: 일반 · 동기화 · diff · 그래프 · 오류 표시 · SSL 인증서 · git · 로그인.
  * Rust 가 쓰는 값(테마·풀 방식·자동 페치·SSL·git 경로)은 setSettings, 화면만 쓰는 값은 prefs(설정 파일의 ui).
  */
-export function settingsDialog({ call, settings, onTheme, showError, toast, section, prefs, graph, onPrefs }) {
+export function settingsDialog({ call, settings, onTheme, showError, toast, section, prefs, graph, onPrefs, githubLogin }) {
   return modal('sheet settings', async (dialog, close) => {
     const s = structuredClone(settings);
     const p = (key, fallback) => prefs?.get(key) ?? fallback;
@@ -346,7 +343,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     const mac = s.platform === 'macos';
 
     // ── 일반
-    const theme = select([{ value: 'dark', label: 'JetBrains 다크' }, { value: 'light', label: 'JetBrains 라이트' }, { value: 'system', label: '시스템 따르기' }], s.theme);
+    const theme = select([{ value: 'dark', label: '다크' }, { value: 'light', label: '라이트' }, { value: 'system', label: '시스템 따르기' }], s.theme);
     theme.addEventListener('change', () => onTheme(theme.value));
     const layout = select([{ value: 'gitkraken', label: 'GitKraken' }, { value: 'fork', label: 'Fork' }, { value: 'unity', label: 'Unity VCS' }], p('layout', 'gitkraken'));
     const explorer = select([{ value: 'fork', label: 'Fork' }, { value: 'unity', label: 'Unity VCS' }], p('explorer', 'fork'));
@@ -444,34 +441,149 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     // ── git: 내장(기본) · 시스템 · 직접 지정. 각 칸에 자리와 버전을 보이고, 직접 지정은 고르자마자 실제로 돌려 본다.
     const git = gitChoices(call, s);
 
-    // ── 로그인
+    // ── 로그인: GitHub 계정 카드 + SSH 키. 네트워크를 쓰므로 로그인 페이지를 처음 볼 때 읽는다(loadLogin).
     const sshInfo = el('div', { class: 'row' });
     const renderSsh = () => {
       sshInfo.replaceChildren(...[s.sshLogin
         ? el('span', { text: `SSH: ${s.sshLogin} 의 비밀번호를 기억하는 중 (앱을 끄면 잊습니다)` })
-        : el('span', { class: 'muted', text: '기억한 SSH 로그인이 없습니다. 비밀번호를 받는 서버에 접속하면 로그인 창이 뜹니다.' }),
+        : el('span', { class: 'muted small', text: '기억한 SSH 비밀번호가 없습니다. 비밀번호를 받는 서버에 접속하면 로그인 창이 뜹니다.' }),
       s.sshLogin ? el('button', { class: 'btn', text: '잊기', onclick: async () => { await call('forgetSshLogin'); s.sshLogin = null; renderSsh(); } }) : null].filter(Boolean));
     };
     renderSsh();
+    const SOURCES = { app: '앱 로그인', credential: '자격 증명' };
+    const signIn = async () => {
+      if (!githubLogin) return;
+      await githubLogin.dialog();
+      renderGithub();
+      renderKeys();
+    };
     const githubAccounts = el('div', { class: 'gh-accounts' });
     const renderGithub = async () => {
+      githubAccounts.replaceChildren(el('div', { class: 'gh-card loading' }, el('span', { class: 'muted small', text: 'GitHub 계정을 읽는 중…' })));
       const accounts = await call('githubAccounts').catch(() => null);
       if (!accounts) {
         githubAccounts.replaceChildren(el('span', { class: 'muted small', text: 'GitHub 계정 정보를 읽지 못했습니다.' }));
         return;
       }
-      githubAccounts.replaceChildren(...(accounts.length ? accounts.map((a) => el('div', { class: 'row' },
-        el('span', { text: `${a.login}${a.source === 'app' ? '' : ` (${a.source})`}` }),
-        a.source === 'app' ? el('button', { class: 'btn', text: '로그아웃', onclick: async () => { await call('githubLogout', { login: a.login }); renderGithub(); } }) : null))
-        : [el('span', { class: 'muted small', text: '로그인한 GitHub 계정이 없습니다. ⋮ 메뉴 > GitHub 로그인 으로 연결하세요.' })]));
+      const cards = accounts.map((a) => el('div', { class: 'gh-card' },
+        githubAvatar(a.login, { url: a.avatarUrl, size: 'large' }),
+        el('div', { class: 'gh-card-who' },
+          el('div', { class: 'gh-card-name', text: a.name || a.login }),
+          el('div', { class: 'gh-card-login muted small', text: `@${a.login}` })),
+        el('div', { class: 'gh-card-state' },
+          el('span', { class: 'gh-status ok' }, icon('check', 12), el('span', { text: '연결됨' })),
+          el('div', { class: 'gh-badges' },
+            el('span', { class: 'gh-badge', text: SOURCES[a.source] ?? a.source }),
+            a.inUse ? el('span', { class: 'gh-badge accent', text: '이 레포에서 사용 중' }) : null,
+            a.canAccess === false ? el('span', { class: 'gh-badge warn', text: '이 레포를 읽을 수 없음' }) : null)),
+        a.source === 'app'
+          ? el('button', { class: 'btn danger', text: '로그아웃', onclick: async () => { await call('githubLogout', { login: a.login }); renderGithub(); renderKeys(); } })
+          : el('span', { class: 'muted small gh-card-note', text: '자격 증명 저장소에서 지웁니다' })));
+      const hasApp = accounts.some((a) => a.source === 'app');
+      githubAccounts.replaceChildren(
+        ...(cards.length ? cards : [el('div', { class: 'gh-card empty' },
+          el('span', { class: 'cgh-avatar large' }, icon('github', 20)),
+          el('div', { class: 'gh-card-who' }, el('div', { class: 'gh-card-name', text: 'GitHub 에 연결되지 않음' }), el('div', { class: 'muted small', text: '로그인하면 비공개 레포지토리를 받고 SSH 키를 올릴 수 있습니다.' })),
+          el('button', { class: 'btn primary', text: 'GitHub 로그인', onclick: signIn }))]),
+        cards.length && !hasApp ? el('div', { class: 'row' }, el('button', { class: 'btn', text: '앱으로 GitHub 로그인', onclick: signIn })) : null);
     };
-    renderGithub();
+
+    // SSH 키. 고른 키(sshKey)는 저장할 때 반영한다. 만들기·올리기는 누르면 바로 한다.
+    let sshKey = s.sshKey ?? '';
+    const sshKeys = el('div', { class: 'ssh-keys' });
+    const keyTitle = input('', { placeholder: '(선택) 새 SSH 키의 이름 — 비우면 Ramus (사용자 이름)' });
+    const keyMessage = el('div', { class: 'small', hidden: true });
+    const note = (text, kind = 'muted') => { keyMessage.hidden = !text; keyMessage.className = `small ${kind}`; keyMessage.textContent = text ?? ''; };
+    const generate = el('button', { class: 'btn success' });
+    const busy = async (button, work) => {
+      button.disabled = true;
+      try { await work(); } catch (e) { note(e.message ?? String(e), 'error-text'); } finally { button.disabled = false; }
+    };
+    const usePicked = async (path, publicPath = '') => {
+      const key = await call('sshKeyRead', { path, public: publicPath });
+      sshKey = key.path;
+      note(`${key.name} 을(를) 고르셨습니다. 저장하면 앱이 부르는 git 이 이 키를 씁니다.`);
+      renderKeys();
+    };
+    const browsePrivate = el('button', { class: 'btn', text: '개인 키 찾아보기…', onclick: () => busy(browsePrivate, async () => {
+      const picked = await call('pick', { kind: 'file', title: 'SSH 개인 키 고르기' });
+      if (!picked) return;
+      try {
+        await usePicked(picked);
+      } catch (e) {
+        // 옆에 .pub 가 없고 암호가 걸린 키 — 공개 키를 따로 고르게 한다.
+        note(`${e.message ?? e} 아래 "공개 키 찾아보기…" 로 골라 주세요.`, 'error-text');
+        browsePublic.hidden = false;
+        browsePublic.dataset.private = picked;
+      }
+    }) });
+    const browsePublic = el('button', { class: 'btn', text: '공개 키 찾아보기…', hidden: true, onclick: () => busy(browsePublic, async () => {
+      const picked = await call('pick', { kind: 'file', title: 'SSH 공개 키(.pub) 고르기', filters: [{ name: '공개 키', ext: ['pub'] }, { name: '모든 파일', ext: ['*'] }] });
+      if (!picked) return;
+      await usePicked(browsePublic.dataset.private, picked);
+      browsePublic.hidden = true;
+    }) });
+    let keyInfo = null;
+    const renderKeys = async () => {
+      sshKeys.replaceChildren(el('span', { class: 'muted small', text: 'SSH 키를 읽는 중…' }));
+      keyInfo = await call('sshKeys').catch((e) => ({ error: e.message ?? String(e) }));
+      if (keyInfo.error) {
+        sshKeys.replaceChildren(el('span', { class: 'muted small', text: `SSH 키를 읽지 못했습니다: ${keyInfo.error}` }));
+        return;
+      }
+      const canUpload = keyInfo.signedIn && !keyInfo.missingScopes.length;
+      generate.textContent = canUpload ? '만들어서 GitHub 에 올리기' : '만들기';
+      generate.disabled = !keyInfo.keygen;
+      const upload = (k, button) => busy(button, async () => {
+        await call('sshKeyUpload', { path: k.path });
+        toast(`${k.name} 을(를) GitHub(${keyInfo.login})에 올렸습니다.`, 'success');
+        renderKeys();
+      });
+      const rows = keyInfo.keys.map((k) => {
+        const chosen = sshKey === k.path;
+        const up = el('button', { class: 'btn small', text: 'GitHub 에 올리기' });
+        up.onclick = () => upload(k, up);
+        return el('div', { class: `ssh-key${chosen ? ' on' : ''}` },
+          icon('lock', 16),
+          el('div', { class: 'ssh-key-who' },
+            el('div', { class: 'ssh-key-name' }, el('span', { text: k.name }), el('span', { class: 'muted small', text: k.kind })),
+            el('div', { class: 'muted small ssh-key-fp', text: [k.fingerprint, k.comment].filter(Boolean).join(' · ') || k.path })),
+          el('div', { class: 'gh-badges' },
+            k.onGithub === true ? el('span', { class: 'gh-badge ok', text: 'GitHub 에 등록됨' }) : null,
+            chosen ? el('span', { class: 'gh-badge accent', text: '앱이 사용 중' }) : null),
+          canUpload && k.onGithub === false ? up : null,
+          el('button', { class: 'btn small', text: chosen ? '쓰지 않기' : '이 키 쓰기', onclick: () => { sshKey = chosen ? '' : k.path; note(chosen ? '저장하면 ssh 설정(~/.ssh/config·ssh-agent)을 그대로 따릅니다.' : `저장하면 앱이 부르는 git 이 ${k.name} 을(를) 씁니다.`); renderKeys(); } }));
+      });
+      sshKeys.replaceChildren(
+        el('div', { class: 'muted small', text: sshKey ? `앱이 부르는 git 은 고른 키만 씁니다(-i ${sshKey}).` : '고른 키가 없으면 ssh 설정(~/.ssh/config·ssh-agent)을 그대로 따릅니다.' }),
+        ...(rows.length ? rows : [el('div', { class: 'muted', text: 'SSH 키가 없습니다. 아래에서 새로 만들 수 있습니다.' })]),
+        keyInfo.signedIn && keyInfo.missingScopes.length
+          ? el('div', { class: 'row ssh-scope' }, icon('warning', 14), el('span', { class: 'small', text: '지금 로그인으로는 SSH 키를 GitHub 에 올릴 수 없습니다(권한 부족).' }), el('button', { class: 'btn small primary', text: '권한 추가 — 다시 로그인', onclick: signIn }))
+          : null,
+        keyInfo.keygen ? null : el('div', { class: 'small error-text', text: 'ssh-keygen 을 찾지 못해 키를 만들 수 없습니다. OpenSSH 를 깔아 주세요.' }));
+    };
+    generate.onclick = () => busy(generate, async () => {
+      const upload = keyInfo?.signedIn && !keyInfo.missingScopes.length;
+      const key = await call('sshKeyGenerate', { title: keyTitle.value.trim(), upload });
+      keyTitle.value = '';
+      sshKey = key.path;
+      if (key.uploadError) note(`${key.name} 을(를) 만들었지만 올리지 못했습니다: ${key.uploadError}`, 'error-text');
+      else note(`${key.path} 을(를) 만들었습니다${upload ? '. GitHub 에도 올렸습니다' : ''}. 저장하면 앱이 이 키를 씁니다.`);
+      renderKeys();
+    });
+    let loginLoaded = false;
+    const loadLogin = () => {
+      if (loginLoaded) return;
+      loginLoaded = true;
+      renderGithub();
+      renderKeys();
+    };
 
     const save = async () => {
       const minutes = autoFetchOn.box.checked ? Math.max(1, Math.min(120, parseInt(autoFetch.value, 10) || 10)) : 0;
       try {
         const saved = await call('setSettings', {
-          theme: theme.value, pullMode: pullMode.value, diffLayout: diffView.value === 'split' ? 'split' : 'inline', autoFetchMinutes: minutes, ...git.value(), ssl: sslState(),
+          theme: theme.value, pullMode: pullMode.value, diffLayout: diffView.value === 'split' ? 'split' : 'inline', autoFetchMinutes: minutes, ...git.value(), ssl: sslState(), sshKey,
         });
         const values = {
           layout: layout.value, explorer: explorer.value, language: language.value, 'ui.scale': Number(scale.value), 'ui.fontSize': Number(fontSize.value),
@@ -502,46 +614,33 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
         el('label', { class: 'modal-field' }, el('span', { class: 'modal-label', text: 'CA 인증서 파일' }), el('div', { class: 'row' }, caFile, browseCa)),
         keychain ? el('div', { class: 'row' }, keychain) : null, el('div', { class: 'row' }, testUrl, testButton), testResult),
       sectionEl('git', 'git', git.node),
-      sectionEl('login', '로그인', el('div', { class: 'modal-label', text: 'GitHub' }), githubAccounts, el('div', { class: 'modal-label', text: 'GitHub 가 아닌 서버' }), sshInfo,
+      sectionEl('login', '로그인',
+        el('div', { class: 'modal-label', text: 'GitHub' }), githubAccounts,
+        el('div', { class: 'modal-label', text: 'SSH 키' }), sshKeys,
+        el('div', { class: 'ssh-form' },
+          el('span', { class: 'ssh-form-label', text: '새 SSH 키 만들기' }), el('div', { class: 'ssh-form-body' }, keyTitle, el('div', { class: 'row' }, generate)),
+          el('span', { class: 'ssh-form-label', text: '가진 키 고르기' }), el('div', { class: 'ssh-form-body' }, el('div', { class: 'row' }, browsePrivate, browsePublic))),
+        keyMessage,
+        el('div', { class: 'modal-label', text: 'GitHub 가 아닌 서버' }), sshInfo,
         el('div', { class: 'muted small', text: 'https 서버(사내 GitLab 등)의 계정은 이 PC 의 자격 증명 저장소에 들어갑니다. 지우려면 키체인 접근·자격 증명 관리자에서 지워 주세요.' })),
     ];
     const body = el('div', { class: 'settings-body' }, sections);
-    // 왼쪽 목록: 누른 칸을 고른 채로 둔다. 맨 아래의 짧은 칸(git·로그인)은 머리가 위에 닿을 만큼 스크롤되지 않으므로
-    // 스크롤 위치만으로 고르면 앞 칸이 계속 골라진다 — 누른 뒤에는 사용자가 직접 스크롤할 때까지 누른 칸을 지킨다.
-    let picked = null;
-    const mark = (active) => nav.querySelectorAll('.settings-tab').forEach((b, i) => b.classList.toggle('on', i === active));
+    // 왼쪽 목록은 페이지 넘김: 고른 칸 하나만 오른쪽에 보이고, 나머지는 숨긴다(한 줄로 이어 스크롤하지 않는다).
+    const show = (active) => {
+      sections.forEach((sec, i) => { sec.hidden = i !== active; });
+      if (sections[active].dataset.section === 'login') loadLogin();
+      nav.querySelectorAll('.settings-tab').forEach((b, i) => b.classList.toggle('on', i === active));
+      body.scrollTop = 0;
+    };
     const nav = el('nav', { class: 'settings-nav' }, sections.map((sec, i) => el('button', {
       class: 'settings-tab', text: sec.querySelector('h3').textContent,
-      onclick: () => {
-        picked = i;
-        mark(i);
-        sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      },
+      onclick: () => show(i),
     })));
-    const release = () => { picked = null; };
-    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) body.addEventListener(type, release, { passive: true });
-    body.addEventListener('scroll', () => {
-      if (picked != null) return;
-      const top = body.scrollTop;
-      let active = 0;
-      sections.forEach((sec, i) => { if (sec.offsetTop - body.offsetTop - 20 <= top) active = i; });
-      // 끝까지 내렸으면 마지막 칸.
-      if (top + body.clientHeight >= body.scrollHeight - 2) active = sections.length - 1;
-      mark(active);
-    });
     dialog.append(
       sheetHead('설정'),
       sheetBody(el('div', { class: 'settings-layout' }, nav, body)),
       sheetFoot(sheetMessage(), el('button', { class: 'btn', text: '취소', onclick: () => close(null) }), el('button', { class: 'btn primary', text: '저장', onclick: save })));
-    if (section) {
-      const at = sections.findIndex((sec) => sec.dataset.section === section);
-      if (at >= 0) {
-        picked = at;
-        mark(at);
-        requestAnimationFrame(() => sections[at].scrollIntoView({ block: 'start' }));
-      }
-    }
-    body.dispatchEvent(new Event('scroll'));
+    show(Math.max(0, sections.findIndex((sec) => sec.dataset.section === section)));
   });
 }
 
@@ -549,7 +648,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
  * 탭 막대(GitKraken 모양). tabs: [{path, name}], active: 지금 열린 경로(없으면 null).
  * macOS 는 이 막대가 창 제목 막대를 겸한다 — 빈 곳을 끌면 창이 움직이고, 두 번 누르면 창을 키운다.
  */
-export function renderTabs(container, { tabs, active, onOpen, onClose, onNew, onBrowse }) {
+export function renderTabs(container, { tabs, active, onOpen, onClose, onNew, onBrowse, extra = null }) {
   container.replaceChildren(
     el('button', { class: 'tab-folder', 'data-tip': '레포지토리 열기…', onclick: onBrowse }, icon('folder', 16)),
     ...tabs.map((tab) => el('div', {
@@ -567,7 +666,9 @@ export function renderTabs(container, { tabs, active, onOpen, onClose, onNew, on
     el('span', { class: 'tab-name', text: tab.name }),
     el('button', { class: 'tab-close', 'aria-label': '탭 닫기', onclick: (event) => { event.stopPropagation(); onClose(tab.path); } }, icon('close', 10)))),
     el('button', { class: `tab-new${active ? '' : ' active'}`, 'data-tip': '새 탭 — 레포지토리 열기·Clone', onclick: onNew }, icon('plus', 16)),
-    el('div', { class: 'tabs-drag' }));
+    el('div', { class: 'tabs-drag' }),
+    // 오른쪽 끝: 원격 작업 버튼(jobs.js). 늘 같은 노드를 다시 붙인다.
+    ...(extra ? [extra] : []));
 }
 
 /** macOS: 탭 막대의 빈 곳(막대 자체·끝의 여백)을 끌면 창을 옮기고, 두 번 누르면 창을 키운다. */

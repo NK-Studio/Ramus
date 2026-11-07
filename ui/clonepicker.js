@@ -5,9 +5,9 @@
 // 1) 지난번에 다 읽은 목록(디스크 캐시, githubCloneCache)을 창을 열자마자 보인다. 읽은 지 FRESH_MS 가 안 됐으면 다시 읽지 않고,
 //    지났으면 뒤에서 조용히 새로 읽어 다 읽으면 한 번에 바꾼다(아래 줄의 새로고침 버튼만 돈다). 버튼으로 언제든 새로 읽는다.
 // 2) 캐시가 없으면 100개씩 읽는 쪽이 올 때마다 목록을 늘려 보인다(첫 쪽부터 고를 수 있다).
-// 3) 계정 목록(GitHub CLI 를 부르는 느린 일)은 목록 읽기와 따로 부른다.
+// 3) 계정 목록은 목록 읽기와 따로 부른다.
 
-import { el, relativeTime, formatDate } from './util.js';
+import { el, relativeTime, formatDate, githubAvatar } from './util.js';
 import { icon } from './icons.js';
 
 /** 한 번에 보일 레포지토리 수의 끝(100개씩 10쪽). 넘으면 앞쪽(최근 push 순)만 보인다. */
@@ -22,8 +22,9 @@ let lastAccount = null;
 /** 지난번에 읽은 계정 목록 [{source, login}] — 메뉴를 바로 열 수 있게. */
 let knownAccounts = null;
 const accountKey = (a) => (a ? `${a.source}:${a.login.toLowerCase()}` : '');
-const SOURCE_HINT = { app: '앱 로그인', gh: 'GitHub CLI' };
-const avatarUrl = (login) => `https://avatars.githubusercontent.com/${encodeURIComponent(login)}?s=40`;
+const SOURCE_HINT = { app: '앱 로그인' };
+/** 남이 만든 fork 는 뺀다(조직 레포를 팀원들이 fork 해 둔 것이 원본 옆에 줄줄이 뜨지 않게). 내 계정의 fork 는 남긴다. */
+const withoutForeignForks = (repos, who) => (repos ?? []).filter((r) => !r.fork || (r.owner ?? '').toLowerCase() === (who?.login ?? '').toLowerCase());
 
 /** 마우스를 올려 두고 카드가 뜰 때까지(카드가 이미 떠 있으면 줄을 옮길 때 바로 바뀐다). */
 const CARD_DELAY_MS = 500;
@@ -194,8 +195,7 @@ export function githubPicker({ call, login, onSelect, onActivate, onUrl }) {
 
   // ── 계정 ──
 
-  const avatarOf = (login, small = false) => el('span', { class: `cgh-avatar${small ? ' small' : ''}` },
-    el('span', { text: (login[0] ?? '?').toUpperCase() }), el('img', { src: avatarUrl(login), alt: '', onerror: (e) => e.target.remove() }));
+  const avatarOf = (login, small = false) => githubAvatar(login, { size: small ? 'small' : undefined });
 
   function drawAccount() {
     const who = data?.account ?? account;
@@ -205,7 +205,7 @@ export function githubPicker({ call, login, onSelect, onActivate, onUrl }) {
     accountButton.replaceChildren(avatarOf(who.login), el('span', { class: 'cgh-account-name', text: who.login }), icon('chevronDown', 12));
   }
 
-  // 계정 드롭다운: 열려 있는 동안 계정 목록(GitHub CLI 를 부르는 느린 일)이 도착하면 그 자리에서 다시 그린다.
+  // 계정 드롭다운: 열려 있는 동안 계정 목록이 도착하면 그 자리에서 다시 그린다.
   let accountPop = null; // {close, redraw}
 
   function toggleAccountPopover() {
@@ -225,7 +225,7 @@ export function githubPicker({ call, login, onSelect, onActivate, onUrl }) {
       const now = accountKey(who);
       const list = accounts ?? (who ? [who] : []);
       entries = list.map((a) => ({ account: a, chosen: accountKey(a) === now }));
-      // 앱으로 로그인한 계정이 없으면(GitHub CLI 계정만 있으면) 여기서 로그인할 수 있게.
+      // 앱으로 로그인한 계정이 없으면 여기서 로그인할 수 있게.
       if (accounts && !list.some((a) => a.source === 'app')) entries.push({ login: true });
       if (active < 0) active = Math.max(0, entries.findIndex((e) => e.chosen));
       active = Math.min(active, entries.length - 1);
@@ -517,7 +517,7 @@ export function githubPicker({ call, login, onSelect, onActivate, onUrl }) {
       if (cached?.repos) {
         signedIn = true;
         account = cached.account;
-        data = { account: cached.account, repos: cached.repos, truncated: !!cached.truncated, at: Number(cached.savedAt) || 0 };
+        data = { account: cached.account, repos: withoutForeignForks(cached.repos, cached.account), truncated: !!cached.truncated, at: Number(cached.savedAt) || 0 };
         caches.set(accountKey(cached.account), data);
         drawAll();
       }
@@ -545,7 +545,7 @@ export function githubPicker({ call, login, onSelect, onActivate, onUrl }) {
         }
         signedIn = true;
         who = page.account;
-        repos = repos.concat(page.repos ?? []);
+        repos = repos.concat(withoutForeignForks(page.repos, page.account));
         after = page.next ?? null;
         if (growing) {
           account = who;

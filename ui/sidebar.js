@@ -1,5 +1,5 @@
 // 왼쪽 사이드바. 원본 Elements/RefSidebar.cs·RefTreeBuilder.cs 를 옮겼다.
-// 맨 위 필터 칸, 구역(로컬 · 리모트(원격별) · 워크트리 · 스태시 · Pull Requests · 서브모듈 · 태그), '/' 로 묶는 폴더 트리(폴더·원격은 늘 펼침),
+// 맨 위 필터 칸, 구역(로컬 · 리모트(원격별) · 워크트리 · 스태시 · Pull Requests · 서브모듈 · 태그), '/' 로 묶는 폴더 트리(폴더는 눌러 접고 펼침, 원격은 늘 펼침),
 // 브랜치 줄 끝 ⋮, 구역 머리 hover 의 "+",
 // 키보드(↑↓ 이동, ←→ 접기·펼치기, Enter = 더블클릭 동작). 접힘 상태와 필터 값은 기억한다.
 
@@ -80,15 +80,18 @@ export function createSidebar(container, ctx) {
   }
 
   /**
-   * 걸린 잎과 그 조상만 남긴 트리를 줄로 편다. 폴더는 원본처럼 늘 펼쳐 두고 접을 수 없다(화살표 자리는 남겨 들여쓰기를 맞춘다).
+   * 걸린 잎과 그 조상만 남긴 트리를 줄로 편다. 폴더는 줄을 누르면 접고 펼친다(기본은 펼침, 접힘은 기억한다).
+   * 화살표 같은 표시는 달지 않는다(화살표 자리는 남겨 들여쓰기를 맞춘다). 필터로 찾는 동안은 걸린 것이 보이게 늘 펼친다.
    */
   function emitTree(out, node, depth, keyPrefix, leafRow) {
     for (const [name, child] of [...node.children.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
       const childRows = [];
       emitTree(childRows, child, depth + 1, `${keyPrefix}/${name}`, leafRow);
       if (!childRows.length) continue;
-      out.push({ key: `${keyPrefix}/${name}/`, depth, folder: true, fixed: true, label: name, glyph: 'folder' });
-      out.push(...childRows);
+      const key = `${keyPrefix}/${name}/`;
+      const expanded = !!filter.value.trim() || isOpen(key, true);
+      out.push({ key, depth, folder: true, bare: true, label: name, glyph: 'folder', expanded, toggle: () => toggle(key, true) });
+      if (expanded) out.push(...childRows);
     }
     for (const leaf of node.leaves) {
       const row = leafRow(leaf.item, leaf.label, depth);
@@ -242,7 +245,7 @@ export function createSidebar(container, ctx) {
         row.menu(event);
       }),
     },
-    row.folder && !row.fixed ? el('span', { class: `side-chev${row.expanded ? ' open' : ''}` }, icon('chevronRight', 12))
+    row.folder && !row.fixed && !row.bare ? el('span', { class: `side-chev${row.expanded ? ' open' : ''}` }, icon('chevronRight', 12))
       : el('span', { class: `side-chev${row.synced ? ' synced' : ''}` }, row.synced ? icon('check', 12) : null),
     row.plain ? null : icon(row.folder && !row.glyph ? 'folder' : row.glyph, 16, 'side-icon'),
     el('span', { class: 'side-name', text: row.label }),

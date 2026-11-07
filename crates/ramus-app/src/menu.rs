@@ -48,8 +48,7 @@ const ACCELERATORS: &[(&str, &str)] = &[
     ("newTag", "CmdOrCtrl+Shift+KeyG"),
 ];
 
-/// Rust 가 직접 처리하는 항목(화면에 넘기지 않는다).
-#[cfg(not(target_os = "macos"))]
+/// Rust 가 직접 처리하는 항목(화면에 넘기지 않는다). 끄기는 도는 원격 작업이 있으면 먼저 묻는다(main.rs).
 pub const QUIT: &str = "quit";
 #[cfg(not(target_os = "macos"))]
 pub const FULLSCREEN: &str = "fullscreen";
@@ -61,6 +60,10 @@ pub struct AppMenu {
 
 /// 그 항목의 단축키. 표의 글은 테스트가 모두 읽어 본다.
 fn accelerator(id: &str) -> Option<Accelerator> {
+    // macOS 의 끄기는 ⌘Q(표의 Alt+F4 는 Windows 것).
+    if cfg!(target_os = "macos") && id == QUIT {
+        return "Cmd+KeyQ".parse().ok();
+    }
     let (_, text) = ACCELERATORS.iter().find(|(key, _)| *key == id)?;
     text.parse().ok()
 }
@@ -95,7 +98,8 @@ impl AppMenu {
                     &PredefinedMenuItem::hide_others(Some("기타 가리기")),
                     &PredefinedMenuItem::show_all(Some("모두 보기")),
                     &sep(),
-                    &PredefinedMenuItem::quit(Some("Ramus 종료")),
+                    // 기본 종료 항목은 NSApp 이 바로 끝내 버려서, 도는 작업을 묻지 못한다 — 보통 항목으로 받아 main.rs 가 처리한다.
+                    &item(QUIT, "Ramus 종료"),
                 ],
             )
             .expect("앱 메뉴");

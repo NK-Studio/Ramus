@@ -30,6 +30,8 @@ pub struct GitError {
     pub stale: bool,
     /// 레포지토리 폴더가 앱 밖에서 사라졌다(지움·이름 바꿈·드라이브 분리). 화면은 오류 창 대신 그 탭을 거두고 한 줄만 알린다.
     pub gone: bool,
+    /// 사용자가 멈췄다(뒤에서 받던 Clone 취소 등). 화면은 오류 창을 띄우지 않는다.
+    pub cancelled: bool,
 }
 
 impl GitError {
@@ -44,7 +46,13 @@ impl GitError {
             message,
             stale: false,
             gone: false,
+            cancelled: false,
         }
+    }
+
+    /// 사용자가 멈춘 작업.
+    pub fn cancelled(message: impl Into<String>) -> Self {
+        GitError { cancelled: true, ..GitError::new(message) }
     }
 
     /// 레포지토리 폴더가 사라져 아무것도 할 수 없다는 오류.

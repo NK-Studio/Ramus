@@ -8,6 +8,7 @@ use ramus_core::conflict::Side;
 use ramus_core::refs::ResetMode;
 use ramus_core::repo::{DiffTarget, LineAction, PullMode, Result};
 use ramus_core::avatar::{self, Avatar, AvatarCache};
+use ramus_core::sshkey;
 use ramus_core::github;
 use ramus_core::ops::MergeMode;
 use ramus_core::rewrite::RewriteKind;
@@ -44,11 +45,21 @@ pub struct AppState {
     journals: Mutex<std::collections::HashMap<String, Journal>>,
     /// 앱으로 로그인한 GitHub 계정 (login, token). None 이면 아직 레포지토리에서 읽지 않았다, Some(None) 이면 없다.
     github_login: Mutex<Option<Option<(String, String)>>>,
-    /// GitHub CLI 계정 목록과 읽은 때. `gh auth status` 는 토큰을 온라인으로 확인해 느려서 잠깐 기억해 둔다.
-    gh_accounts: Mutex<Option<(Instant, Vec<String>)>>,
-    /// GitHub CLI 토큰(login → 읽은 때, 토큰). `gh auth token` 은 프로세스 하나라 레포지토리를 열 때마다 부르면 느리다.
-    gh_tokens: Mutex<std::collections::HashMap<String, (Instant, String)>>,
+    /// 도는 원격 작업(job 이름 → 종류 clone·fetch·pull·push). 앱을 끌 때 묻고, 끄기 전에 멈춘다.
+    jobs: Mutex<std::collections::HashMap<String, &'static str>>,
     emit: Emit,
+}
+
+/// 원격 작업 하나가 도는 동안 `AppState::jobs` 에 남는다. 끝나면(성공·실패·취소) 빠진다.
+struct JobGuard<'a> {
+    jobs: &'a Mutex<std::collections::HashMap<String, &'static str>>,
+    job: String,
+}
+
+impl Drop for JobGuard<'_> {
+    fn drop(&mut self) {
+        self.jobs.lock().unwrap().remove(&self.job);
+    }
 }
 
 /// 화면에 알릴 일. 응답 말고도 창 제목 같은 것을 바꿔야 할 때.
@@ -74,8 +85,7 @@ impl AppState {
             github_remote: Mutex::new(None),
             journals: Mutex::new(Default::default()),
             github_login: Mutex::new(None),
-            gh_accounts: Mutex::new(None),
-            gh_tokens: Mutex::new(Default::default()),
+            jobs: Mutex::new(Default::default()),
             emit,
         }
     }
@@ -85,6 +95,24 @@ impl AppState {
             && let Err(e) = settings.save(path)
         {
             eprintln!("설정을 저장하지 못했습니다: {e}");
+        }
+    }
+
+    fn track_job(&self, job: &str, kind: &'static str) -> JobGuard<'_> {
+        self.jobs.lock().unwrap().insert(job.to_string(), kind);
+        JobGuard { jobs: &self.jobs, job: job.to_string() }
+    }
+
+    /// 지금 도는 원격 작업의 종류들. 비었으면 앱을 바로 꺼도 된다.
+    pub fn running_jobs(&self) -> Vec<&'static str> {
+        self.jobs.lock().unwrap().values().copied().collect()
+    }
+
+    /// 앱을 끄기 전에: Clone·Fetch·Push 는 멈춘다. Pull·브랜치 전환은 파일을 고치는 중일 수 있어 끝날 때까지 둔다.
+    pub fn cancel_for_quit(&self) {
+        let jobs: Vec<String> = self.jobs.lock().unwrap().iter().filter(|(_, kind)| !touches_files(kind)).map(|(job, _)| job.clone()).collect();
+        for job in jobs {
+            ramus_core::cancel_job(&job);
         }
     }
 
@@ -118,84 +146,49 @@ impl AppState {
         let root = self.repo.lock().unwrap().as_ref().map(|r| r.root().display().to_string())?;
         let settings = self.settings.lock().unwrap();
         let v = settings.ui.get(&format!("github.account:{root}"))?;
-        Some((v.get("source")?.as_str()?.to_string(), v.get("login")?.as_str()?.to_string()))
+        let source = v.get("source")?.as_str()?;
+        // GitHub CLI(gh) 연결은 더 이상 쓰지 않는다 — 예전에 gh 계정을 골라 둔 레포지토리는 고른 것이 없는 것처럼 본다.
+        if source == "gh" {
+            return None;
+        }
+        Some((source.to_string(), v.get("login")?.as_str()?.to_string()))
     }
 
-    /// git 이 github.com 에 쓸 토큰: 이 레포지토리에 앱·gh 계정을 골랐을 때만(아니면 사용자의 자격 증명 도우미 그대로).
+    /// git 이 github.com 에 쓸 토큰: 이 레포지토리에 앱 계정을 골랐을 때만(아니면 사용자의 자격 증명 도우미 그대로).
     fn github_git_token(&self) -> Option<String> {
         match self.github_choice()? {
             (source, _) if source == "app" => self.app_login().map(|(_, t)| t),
-            (source, login) if source == "gh" => self.gh_token(&login),
             _ => None,
         }
     }
 
-    /// GitHub CLI 계정의 토큰. 10분 동안은 지난번 것을 쓴다(`gh auth token` 프로세스를 레포지토리 전환마다 띄우지 않게).
-    fn gh_token(&self, login: &str) -> Option<String> {
-        let mut cached = self.gh_tokens.lock().unwrap();
-        if let Some((at, token)) = cached.get(login)
-            && at.elapsed() < Duration::from_secs(10 * 60)
-        {
-            return Some(token.clone());
-        }
-        let token = github::gh_token(login)?;
-        cached.insert(login.to_string(), (Instant::now(), token.clone()));
-        Some(token)
-    }
-
-    /// API 에 쓸 토큰: 고른 계정 → 앱 로그인 → gh → 자격 증명 도우미.
+    /// API 에 쓸 토큰: 고른 계정 → 앱 로그인 → 자격 증명 도우미.
     fn github_api_token(&self) -> Option<(String, String)> {
         let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| std::env::temp_dir());
         match self.github_choice() {
             Some((source, _)) if source == "app" => return self.app_login(),
-            Some((source, login)) if source == "gh" => return self.gh_token(&login).map(|t| (login, t)),
             Some((_, login)) => return github::credential_account(&self.runner, &dir, Some(&login)),
             None => {}
         }
-        self.app_login()
-            .or_else(|| self.gh_logins().into_iter().find_map(|l| self.gh_token(&l).map(|t| (l, t))))
-            .or_else(|| github::credential_account(&self.runner, &dir, None))
+        self.app_login().or_else(|| github::credential_account(&self.runner, &dir, None))
     }
 
-    /// GitHub CLI 에 로그인한 계정들. 1분 동안은 지난번 것을 쓴다.
-    fn gh_logins(&self) -> Vec<String> {
-        let mut cached = self.gh_accounts.lock().unwrap();
-        if let Some((at, list)) = cached.as_ref()
-            && at.elapsed() < Duration::from_secs(60)
-        {
-            return list.clone();
-        }
-        let list = github::gh_accounts();
-        *cached = Some((Instant::now(), list.clone()));
-        list
-    }
-
-    /// Clone 창이 고를 수 있는 GitHub 계정 (source, login): 앱 로그인 먼저, 그다음 GitHub CLI 계정들(앱 계정과 같은 이름은 뺀다).
+    /// Clone 창이 고를 수 있는 GitHub 계정 (source, login): 앱 로그인 하나.
     fn clone_accounts(&self) -> Vec<(String, String)> {
-        let mut list: Vec<(String, String)> = self.app_login().map(|(login, _)| ("app".to_string(), login)).into_iter().collect();
-        for login in self.gh_logins() {
-            if !list.iter().any(|(_, l)| l.eq_ignore_ascii_case(&login)) {
-                list.push(("gh".to_string(), login));
-            }
-        }
-        list
+        self.app_login().map(|(login, _)| ("app".to_string(), login)).into_iter().collect()
     }
 
-    /// 계정 하나의 (source, login, token). 앱 로그인이거나 GitHub CLI 계정일 때만.
-    fn clone_token(&self, source: &str, login: &str) -> Option<(String, String, String)> {
+    /// 계정 하나의 (source, login, token). 앱 로그인일 때만.
+    fn clone_token(&self, source: &str, _login: &str) -> Option<(String, String, String)> {
         match source {
             "app" => self.app_login().map(|(l, t)| ("app".to_string(), l, t)),
-            "gh" => github::gh_token(login).map(|t| ("gh".to_string(), login.to_string(), t)),
             _ => None,
         }
     }
 
-    /// 목록을 읽을 계정 (source, login): 고른 것(account), 없으면 앱 로그인, 그것도 없으면 첫 GitHub CLI 계정.
-    /// 앱 로그인이 있으면 GitHub CLI 를 부르지 않는다(느리다).
+    /// 목록을 읽을 계정 (source, login): 고른 것(account), 없으면 앱 로그인.
     fn clone_default_account(&self, args: &Value) -> Option<(String, String)> {
-        account_arg(args)
-            .or_else(|| self.app_login().map(|(login, _)| ("app".to_string(), login)))
-            .or_else(|| self.gh_logins().into_iter().next().map(|login| ("gh".to_string(), login)))
+        account_arg(args).or_else(|| self.app_login().map(|(login, _)| ("app".to_string(), login)))
     }
 
     /// Clone 창의 GitHub 목록 한 쪽: 계정(account {source, login}, 없으면 기본 계정)이 볼 수 있는 레포지토리 100개와
@@ -642,13 +635,32 @@ impl AppState {
                     }
                     None => None,
                 };
-                let repo = match &account {
+                let url = a.s("url")?;
+                // job: 화면이 붙인 작업 이름. 진행 알림에 이 이름이 붙고 cancelJob 으로 멈출 수 있다.
+                let job = a.s("job").ok().filter(|j| !j.is_empty()).map(str::to_string);
+                let _tracked = job.as_deref().map(|j| self.track_job(j, "clone"));
+                // 받기 전에 비어 있던(없던) 폴더만 취소 뒤에 치운다 — 파일이 있던 폴더는 clone 이 애초에 거절한다.
+                let was_empty = !dest.exists() || std::fs::read_dir(&dest).map(|mut d| d.next().is_none()).unwrap_or(false);
+                let run = || match &account {
                     Some((_, _, token)) => {
                         let mut globals = self.runner.globals();
                         globals.env.extend(github::token_environment(token));
-                        remote::clone(&GitRunner::new(globals), a.s("url")?, &dest)?
+                        remote::clone(&GitRunner::new(globals), url, &dest)
                     }
-                    None => remote::clone(&self.runner, a.s("url")?, &dest)?,
+                    None => remote::clone(&self.runner, url, &dest),
+                };
+                let repo = match &job {
+                    Some(job) => match ramus_core::with_job(job, run) {
+                        (Err(_), true) => {
+                            // git 이 TERM 을 받아 스스로 지웠으면 없다. 남았으면(Windows 강제 종료 등) 받다 만 것을 치운다.
+                            if was_empty && dest.exists() {
+                                let _ = std::fs::remove_dir_all(&dest);
+                            }
+                            return Err(GitError::cancelled("Clone 을 취소했습니다."));
+                        }
+                        (result, _) => result?,
+                    },
+                    None => run()?,
                 };
                 {
                     let mut settings = self.settings.lock().unwrap();
@@ -665,11 +677,22 @@ impl AppState {
                     let out = self.runner.run(repo.root(), &["remote", "add", "upstream", url.trim()]);
                     (!out.success()).then(|| format!("원본을 upstream 원격으로 붙이지 못했습니다: {}", out.message()))
                 });
-                let mut info = self.open_repo(repo.root(), effects)?;
+                // open: false 면 받기만 하고 열지 않는다(뒤에서 받은 것 — 사용자가 다른 레포지토리를 보고 있을 수 있다). 화면이 나중에 연다.
+                let mut info = if args.get("open").and_then(Value::as_bool).unwrap_or(true) {
+                    self.open_repo(repo.root(), effects)?
+                } else {
+                    let path = repo.root().display().to_string();
+                    let name = repo.root().file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+                    json!({ "path": path, "name": name })
+                };
                 if let Some(warning) = warning {
                     info["warning"] = json!(warning);
                 }
                 Ok(info)
+            }
+            "cancelJob" => {
+                ramus_core::cancel_job(Args(&args).s("job")?);
+                Ok(Value::Null)
             }
             "githubCloneList" => self.github_clone_list(&args),
             "githubCloneAccounts" => {
@@ -829,6 +852,13 @@ impl AppState {
                         _ => "bundled".into(),
                     };
                 }
+                if let Some(key) = a.ssh_key {
+                    let key = key.trim().to_string();
+                    if !key.is_empty() && !Path::new(&key).is_file() {
+                        return Err(GitError::new("고른 SSH 키 파일이 없습니다."));
+                    }
+                    settings.ssh_key = key;
+                }
                 // 직접 지정은 실제로 git 이 도는지 보고 나서 저장한다(잘못 고른 파일로 앱이 못 쓰게 되지 않게).
                 if settings.git_mode == "custom"
                     && let Err(e) = gitbin::version(Path::new(&settings.git_path), &Default::default())
@@ -930,10 +960,6 @@ impl AppState {
                 if let Some((login, token)) = self.app_login() {
                     list.push((login, "app".into(), Some(token)));
                 }
-                for login in github::gh_accounts() {
-                    let token = github::gh_token(&login);
-                    list.push((login, "gh".into(), token));
-                }
                 if let Some((login, token)) = github::credential_account(&self.runner, &dir, None)
                     && !list.iter().any(|(l, s, _)| l.eq_ignore_ascii_case(&login) && s != "app")
                     && login != "x-access-token"
@@ -946,18 +972,49 @@ impl AppState {
                         let current = choice.as_ref().is_some_and(|(s, l)| *s == source && (source == "app" || l.eq_ignore_ascii_case(&login)));
                         (login, source, token, current)
                     })
-                    .map(|(login, source, token, current)| github::Account {
-                        in_use: current || (choice.is_none() && source == "credential"),
-                        current,
-                        can_access: match (&repo_ids, token) {
-                            (Some((o, r)), Some(t)) => Some(github::can_access(o, r, &t)),
-                            _ => None,
-                        },
-                        login,
-                        source,
+                    .map(|(login, source, token, current)| {
+                        let profile = token.as_deref().and_then(github::profile);
+                        github::Account {
+                            in_use: current || (choice.is_none() && source == "credential"),
+                            current,
+                            can_access: match (&repo_ids, token) {
+                                (Some((o, r)), Some(t)) => Some(github::can_access(o, r, &t)),
+                                _ => None,
+                            },
+                            name: profile.as_ref().and_then(|p| p.name.clone()),
+                            avatar_url: profile.and_then(|p| p.avatar_url),
+                            login,
+                            source,
+                        }
                     })
                     .collect();
                 to_json(accounts)
+            }
+            "sshKeys" => self.ssh_keys(),
+            "sshKeyRead" => {
+                let a = Args(&args);
+                let public = a.s("public").ok().filter(|p| !p.is_empty()).map(PathBuf::from);
+                to_json(sshkey::read(Path::new(a.s("path")?), public.as_deref())?)
+            }
+            "sshKeyGenerate" => {
+                let a = Args(&args);
+                let title = a.s("title").unwrap_or("").trim().to_string();
+                let comment = if title.is_empty() { format!("Ramus ({})", whoami()) } else { title };
+                let home = dirs::home_dir().ok_or_else(|| GitError::new("홈 폴더를 찾지 못했습니다."))?;
+                let key = sshkey::generate(&home, &comment)?;
+                let mut value = to_json(&key)?;
+                if a.b("upload") {
+                    value["uploadError"] = json!(self.upload_ssh_key(&key, &comment).err().map(|e| e.to_string()));
+                }
+                Ok(value)
+            }
+            "sshKeyUpload" => {
+                let a = Args(&args);
+                let public = a.s("public").ok().filter(|p| !p.is_empty()).map(PathBuf::from);
+                let key = sshkey::read(Path::new(a.s("path")?), public.as_deref())?;
+                let title = if key.comment.is_empty() { format!("Ramus ({})", whoami()) } else { key.comment.clone() };
+                self.upload_ssh_key(&key, &title)?;
+                Ok(Value::Null)
             }
             "githubChoose" => {
                 let a = Args(&args);
@@ -1145,7 +1202,17 @@ impl AppState {
                 let name_or_hash = |s: &undo::Snapshot| if s.branch.is_empty() { short(&s.head) } else { s.branch.clone() };
                 match cmd {
                     "checkout" | "checkoutDetached" => {
-                        let r = if cmd == "checkout" { repo.checkout(a.s("name")?, a.b("remote")) } else { repo.checkout_detached(a.s("hash")?) };
+                        // 화면이 이름(job)을 붙이면 작업 목록에 보이는 작업이다 — LFS 파일을 서버에서 받느라 오래 걸릴 수 있다.
+                        // 파일을 고치는 일이라 취소는 받지 않고, 앱을 끌 때도 끝날 때까지 기다린다(Pull 처럼).
+                        let job = args.get("job").and_then(Value::as_str).filter(|j| !j.is_empty()).map(str::to_string);
+                        let switch = || if cmd == "checkout" { repo.checkout(a.s("name")?, a.b("remote")) } else { repo.checkout_detached(a.s("hash")?) };
+                        let r = match &job {
+                            Some(job) => {
+                                let _tracked = self.track_job(job, "checkout");
+                                ramus_core::with_job(job, switch).0
+                            }
+                            None => switch(),
+                        };
                         self.recorded(&repo, done(r), &before, |b, after| {
                             let mut e = UndoEntry::new(UndoKind::Switch, format!("{} → {} 전환", name_or_hash(b), name_or_hash(after)));
                             e.head_before = b.head.clone();
@@ -1252,74 +1319,99 @@ impl AppState {
             "stage" | "unstage" | "stageAll" | "unstageAll" | "commit" | "push" | "applyLines" | "discard" | "fetch" | "pull" | "ignore" | "lfsTrack"
             | "lfsPull" | "stashPaths" | "deletePath" | "restoreFile" => {
                 let repo = self.repo()?;
-                let _guard = self.write_lock.lock().unwrap();
-                let before = repo.undo_snapshot();
-                match cmd {
-                    "stage" => repo.stage(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
-                    "unstage" => repo.unstage(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
-                    "stageAll" => repo.stage_all().map(|_| Value::Null),
-                    "unstageAll" => repo.unstage_all().map(|_| Value::Null),
-                    // worktreeOnly: Unstaged 목록의 버리기 — Stage 한 내용은 남긴다. 아니면 HEAD 상태로(Stage 한 것까지).
-                    "discard" => {
-                        let worktree_only = Args(&args).b("worktreeOnly");
-                        let paths = parse::<PathsArg>(args)?.paths;
-                        if worktree_only { repo.discard_worktree(&paths) } else { repo.discard(&paths) }.map(|_| Value::Null)
+                // Fetch·Pull·Push 는 화면이 이름(job)을 붙인다: 진행 알림이 그 작업 것으로 나뉘고 cancelJob 으로 멈출 수 있다.
+                // 다른 작업이 쓰기 잠금을 쥐고 있는 동안 온 취소도 지키려고, 잠금을 기다리는 것부터 작업 안에서 한다.
+                let kind: Option<&'static str> = match cmd {
+                    "fetch" => Some("fetch"),
+                    "pull" => Some("pull"),
+                    "push" => Some("push"),
+                    _ => None,
+                };
+                let job = kind.and(args.get("job").and_then(Value::as_str).filter(|j| !j.is_empty()).map(str::to_string));
+                let exec = move || -> Result<Value> {
+                    let _guard = self.write_lock.lock().unwrap();
+                    let before = repo.undo_snapshot();
+                    match cmd {
+                        "stage" => repo.stage(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
+                        "unstage" => repo.unstage(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
+                        "stageAll" => repo.stage_all().map(|_| Value::Null),
+                        "unstageAll" => repo.unstage_all().map(|_| Value::Null),
+                        // worktreeOnly: Unstaged 목록의 버리기 — Stage 한 내용은 남긴다. 아니면 HEAD 상태로(Stage 한 것까지).
+                        "discard" => {
+                            let worktree_only = Args(&args).b("worktreeOnly");
+                            let paths = parse::<PathsArg>(args)?.paths;
+                            if worktree_only { repo.discard_worktree(&paths) } else { repo.discard(&paths) }.map(|_| Value::Null)
+                        }
+                        "applyLines" => {
+                            let a: LinesArg = parse(args)?;
+                            repo.apply_lines_with(a.action, &a.path, a.untracked, &a.fingerprint, &a.lines, a.context.unwrap_or(3)).map(|_| Value::Null)
+                        }
+                        "ignore" | "lfsTrack" => {
+                            let a = Args(&args);
+                            let kind: ramus_core::files::PatternKind = serde_json::from_value(args.get("kind").cloned().unwrap_or_default())
+                                .map_err(|_| GitError::new("무시 방식이 잘못되었습니다."))?;
+                            let r = if cmd == "ignore" { repo.ignore(a.s("path")?, kind) } else { repo.lfs_track(a.s("path")?, kind) };
+                            r.map(|p| json!(p))
+                        }
+                        "lfsPull" => repo.lfs_pull(Args(&args).s("path")?).map(|_| Value::Null),
+                        "stashPaths" => {
+                            let message = Args(&args).s("message").unwrap_or("").to_string();
+                            let paths = parse::<PathsArg>(args)?.paths;
+                            let r = repo.stash_paths(&paths, &message).map(|_| Value::Null);
+                            self.recorded_any(&repo, r, &before, |b, after| {
+                                let mut e = UndoEntry::new(UndoKind::Stash, if message.is_empty() { "Stash (고른 파일)".to_string() } else { message.clone() });
+                                e.hash = after.stash.clone();
+                                e.paths = paths.clone();
+                                (!after.stash.is_empty() && after.stash != b.stash).then_some(e)
+                            })
+                        }
+                        "deletePath" => repo.delete_path(Args(&args).s("path")?).map(|_| Value::Null),
+                        "restoreFile" => repo.restore_file(Args(&args).s("revision")?, Args(&args).s("path")?).map(|_| Value::Null),
+                        "commit" => {
+                            let a: CommitArg = parse(args)?;
+                            let subject = a.message.lines().next().unwrap_or_default().to_string();
+                            let r = repo.commit(&a.message, a.amend).map(|hash| json!(hash));
+                            self.recorded(&repo, r, &before, |b, after| {
+                                let title = if a.amend { format!("커밋 고쳐 쓰기 '{subject}'") } else { format!("커밋 '{subject}'") };
+                                let mut e = UndoEntry::new(UndoKind::Commit, title);
+                                e.head_before = b.head.clone();
+                                e.head_after = after.head.clone();
+                                Some(e)
+                            })
+                        }
+                        "fetch" => repo.fetch(false).map(|fetched| json!(fetched)),
+                        "pull" => {
+                            let mode = args
+                                .get("mode")
+                                .and_then(|m| serde_json::from_value::<PullMode>(m.clone()).ok())
+                                .unwrap_or_else(|| self.settings.lock().unwrap().pull_mode);
+                            let r = repo.pull(mode).map(|msg| json!(msg));
+                            self.recorded(&repo, r, &before, |b, after| {
+                                if after.head == b.head {
+                                    return None;
+                                }
+                                let mut e = UndoEntry::new(UndoKind::Pull, format!("Pull {} → {}", &b.head[..7.min(b.head.len())], &after.head[..7.min(after.head.len())]));
+                                e.head_before = b.head.clone();
+                                e.head_after = after.head.clone();
+                                Some(e)
+                            })
+                        }
+                        _ => repo.push_to(Args(&args).s("remote").ok()).map(|msg| json!(msg)),
                     }
-                    "applyLines" => {
-                        let a: LinesArg = parse(args)?;
-                        repo.apply_lines_with(a.action, &a.path, a.untracked, &a.fingerprint, &a.lines, a.context.unwrap_or(3)).map(|_| Value::Null)
+                };
+                match (job, kind) {
+                    (Some(job), Some(kind)) => {
+                        let _tracked = self.track_job(&job, kind);
+                        match ramus_core::with_job(&job, exec) {
+                            (Err(_), true) => Err(GitError::cancelled(match kind {
+                                "fetch" => "Fetch 를 취소했습니다.",
+                                "pull" => "Pull 을 취소했습니다.",
+                                _ => "Push 를 취소했습니다.",
+                            })),
+                            (result, _) => result,
+                        }
                     }
-                    "ignore" | "lfsTrack" => {
-                        let a = Args(&args);
-                        let kind: ramus_core::files::PatternKind = serde_json::from_value(args.get("kind").cloned().unwrap_or_default())
-                            .map_err(|_| GitError::new("무시 방식이 잘못되었습니다."))?;
-                        let r = if cmd == "ignore" { repo.ignore(a.s("path")?, kind) } else { repo.lfs_track(a.s("path")?, kind) };
-                        r.map(|p| json!(p))
-                    }
-                    "lfsPull" => repo.lfs_pull(Args(&args).s("path")?).map(|_| Value::Null),
-                    "stashPaths" => {
-                        let message = Args(&args).s("message").unwrap_or("").to_string();
-                        let paths = parse::<PathsArg>(args)?.paths;
-                        let r = repo.stash_paths(&paths, &message).map(|_| Value::Null);
-                        self.recorded_any(&repo, r, &before, |b, after| {
-                            let mut e = UndoEntry::new(UndoKind::Stash, if message.is_empty() { "Stash (고른 파일)".to_string() } else { message.clone() });
-                            e.hash = after.stash.clone();
-                            e.paths = paths.clone();
-                            (!after.stash.is_empty() && after.stash != b.stash).then_some(e)
-                        })
-                    }
-                    "deletePath" => repo.delete_path(Args(&args).s("path")?).map(|_| Value::Null),
-                    "restoreFile" => repo.restore_file(Args(&args).s("revision")?, Args(&args).s("path")?).map(|_| Value::Null),
-                    "commit" => {
-                        let a: CommitArg = parse(args)?;
-                        let subject = a.message.lines().next().unwrap_or_default().to_string();
-                        let r = repo.commit(&a.message, a.amend).map(|hash| json!(hash));
-                        self.recorded(&repo, r, &before, |b, after| {
-                            let title = if a.amend { format!("커밋 고쳐 쓰기 '{subject}'") } else { format!("커밋 '{subject}'") };
-                            let mut e = UndoEntry::new(UndoKind::Commit, title);
-                            e.head_before = b.head.clone();
-                            e.head_after = after.head.clone();
-                            Some(e)
-                        })
-                    }
-                    "fetch" => repo.fetch(false).map(|fetched| json!(fetched)),
-                    "pull" => {
-                        let mode = args
-                            .get("mode")
-                            .and_then(|m| serde_json::from_value::<PullMode>(m.clone()).ok())
-                            .unwrap_or_else(|| self.settings.lock().unwrap().pull_mode);
-                        let r = repo.pull(mode).map(|msg| json!(msg));
-                        self.recorded(&repo, r, &before, |b, after| {
-                            if after.head == b.head {
-                                return None;
-                            }
-                            let mut e = UndoEntry::new(UndoKind::Pull, format!("Pull {} → {}", &b.head[..7.min(b.head.len())], &after.head[..7.min(after.head.len())]));
-                            e.head_before = b.head.clone();
-                            e.head_after = after.head.clone();
-                            Some(e)
-                        })
-                    }
-                    _ => repo.push_to(Args(&args).s("remote").ok()).map(|msg| json!(msg)),
+                    _ => exec(),
                 }
             }
             _ => Err(GitError::new(format!("모르는 요청: {cmd}"))),
@@ -1364,6 +1456,63 @@ impl AppState {
         json!({ "undo": undo, "redo": redo })
     }
 
+    /// 설정 > 로그인 의 SSH 키 목록. 앱 로그인이 있고 권한이 되면 GitHub 에 올라간 키와 견준다.
+    fn ssh_keys(&self) -> Result<Value> {
+        let home = dirs::home_dir().ok_or_else(|| GitError::new("홈 폴더를 찾지 못했습니다."))?;
+        let mut keys = sshkey::list(&home);
+        let current = self.settings.lock().unwrap().ssh_key.clone();
+        // ~/.ssh 밖에서 고른 키도 목록에 보인다.
+        if !current.is_empty()
+            && !keys.iter().any(|k| Path::new(&k.path) == Path::new(&current))
+            && let Ok(key) = sshkey::read(Path::new(&current), None)
+        {
+            keys.push(key);
+        }
+        let login = self.app_login();
+        let mut missing: Vec<String> = Vec::new();
+        let mut uploaded: Option<Vec<String>> = None;
+        if let Some((_, token)) = &login {
+            if let Some(granted) = github::profile(token).and_then(|p| p.scopes) {
+                missing = github::missing_scopes(&granted, &github::KEY_SCOPES);
+            }
+            if missing.is_empty() {
+                uploaded = github::api("GET", "/user/keys?per_page=100", None, Some(token)).ok().and_then(|v| {
+                    v.as_array().map(|list| list.iter().filter_map(|k| k.get("key").and_then(Value::as_str)).map(sshkey::key_body).collect())
+                });
+            }
+        }
+        let keys: Vec<Value> = keys
+            .iter()
+            .map(|k| {
+                let mut v = json!(k);
+                v["inUse"] = json!(!current.is_empty() && Path::new(&k.path) == Path::new(&current));
+                v["onGithub"] = json!(uploaded.as_ref().map(|list| list.contains(&k.body())));
+                v
+            })
+            .collect();
+        Ok(json!({
+            "keys": keys,
+            "current": current,
+            "signedIn": login.is_some(),
+            "login": login.map(|(l, _)| l),
+            "missingScopes": missing,
+            "keygen": sshkey::ssh_keygen().is_some(),
+        }))
+    }
+
+    /// 공개 키를 앱 로그인 계정에 올린다. 이미 올라가 있으면 그냥 넘어간다.
+    fn upload_ssh_key(&self, key: &sshkey::SshKey, title: &str) -> Result<()> {
+        let (_, token) = self.app_login().ok_or_else(|| GitError::new("GitHub 에 로그인해 주세요."))?;
+        match github::api("POST", "/user/keys", Some(&json!({ "title": title, "key": key.body() })), Some(&token)) {
+            Ok(_) => Ok(()),
+            Err(e) if e.to_string().contains("already in use") => Ok(()),
+            Err(e) if e.to_string().contains("404") || e.to_string().contains("403") => {
+                Err(GitError::new("키를 올릴 권한이 없습니다. 설정 > 로그인 에서 \"권한 추가\" 로 다시 로그인해 주세요."))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     fn settings_json(&self) -> Value {
         let s = self.settings.lock().unwrap();
         let ssh = self.ssh_login.lock().unwrap().as_ref().map(|(host, _)| host.clone());
@@ -1395,6 +1544,7 @@ impl AppState {
             "cloneDir": if s.clone_dir.is_empty() { dirs::home_dir().map(|h| h.display().to_string()).unwrap_or_default() } else { s.clone_dir.clone() },
             "openTabs": tabs,
             "sshLogin": ssh,
+            "sshKey": s.ssh_key,
             "ui": s.ui,
             "platform": std::env::consts::OS,
         })
@@ -1416,9 +1566,18 @@ fn repo_info(repo: &Repository) -> Value {
 }
 
 /// 설정으로 모든 git 호출에 붙일 것을 만든다.
+/// 작업 트리 파일을 고치는 원격 작업(Pull·브랜치 전환): 끊으면 트리가 찢어지므로 앱을 끌 때도 멈추지 않고 끝까지 기다린다.
+pub fn touches_files(kind: &str) -> bool {
+    matches!(kind, "pull" | "checkout")
+}
+
 pub fn globals_for(settings: &Settings) -> GitGlobals {
     let git = gitbin::resolve(gitbin::GitMode::from_settings(&settings.git_mode, &settings.git_path), &settings.git_path);
-    GitGlobals { git_path: Some(git.path), config_args: ssl::build_arguments(&settings.ssl, cfg!(windows)), env: git.env }
+    let mut env = git.env;
+    if !settings.ssh_key.is_empty() && Path::new(&settings.ssh_key).is_file() {
+        env.extend(sshkey::environment(&settings.ssh_key));
+    }
+    GitGlobals { git_path: Some(git.path), config_args: ssl::build_arguments(&settings.ssl, cfg!(windows)), env }
 }
 
 /// 설정의 git 칸: 고른 모드, 실제로 쓰는 git(돌아갔으면 그 사유), 내장·시스템 git 의 자리와 버전.
@@ -1642,6 +1801,7 @@ struct SettingsArg {
     ssl: Option<ramus_core::ssl::SslSettings>,
     git_path: Option<String>,
     git_mode: Option<String>,
+    ssh_key: Option<String>,
 }
 
 #[derive(Deserialize)]

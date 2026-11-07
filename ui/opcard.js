@@ -1,12 +1,22 @@
 // 오래 걸리는 작업(Pull·Push·Fetch·Clone 등)의 진행 카드. 오른쪽 아래(알림 자리)에 뜬다.
 // 짧게 끝나는 작업은 깜빡이지 않게 0.9초가 지나야 보인다. git 이 알리는 진행(받기 45% 등)이 오면 단계·막대·숫자를 채우고,
 // 진행을 모르는 동안은 "서버 응답을 기다리는 중…" 과 흐르는 막대. 끝나면 "완료" 를 잠깐 보이고 사라진다(실패는 오류 창이 알린다).
+// 원격 작업(Clone·Fetch·Pull·Push)은 여기가 아니라 탭 막대의 작업 목록(jobs.js)에 보인다 — 이 카드는 그 밖의 오래 걸리는 작업용.
 
 import { el } from './util.js';
 import { icon } from './icons.js';
 import { onProgress, progressText } from './progress.js';
 
 const SHOW_AFTER_MS = 900;
+
+/** 지금 보고 있는 레포지토리(탭). owner 가 붙은 카드는 그 탭에서만 보인다. */
+let viewing = null;
+
+/** 탭을 바꿨다: 그 탭에서 시작한 작업의 카드만 보이고 나머지는 숨긴다(작업은 뒤에서 계속 돈다). */
+export function setOpCardViewing(path, host) {
+  viewing = path ?? null;
+  for (const card of host.querySelectorAll('.op-card[data-owner]')) card.hidden = card.dataset.owner !== viewing;
+}
 const DONE_LINGER_MS = 1400;
 
 /** 진행 글("풀 하는 중… (앞으로 감기만)")로 아이콘을 고른다. */
@@ -14,7 +24,6 @@ function glyphOf(label) {
   if (/^풀/.test(label)) return 'pull';
   if (/^푸시/.test(label)) return 'push';
   if (/페치|Fetch/.test(label)) return 'fetch';
-  if (/Clone|받는/.test(label)) return 'fetch';
   return 'refresh';
 }
 
@@ -24,9 +33,10 @@ const seconds = (ms) => {
 };
 
 /**
- * 작업 하나의 카드를 시작한다. host: 카드를 넣을 곳(알림 묶음). 돌려준 finish(ok) 로 끝낸다.
+ * 작업 하나의 카드를 시작한다. host: 카드를 넣을 곳(알림 묶음). 돌려준 finish(ok, doneText) 로 끝낸다.
+ * showAfter: 몇 ms 뒤에 보일지(기본 0.9초). owner: 작업을 시작한 레포지토리 경로. 주면 그 탭을 보고 있을 때만 카드가 보인다.
  */
-export function startOpCard(host, label) {
+export function startOpCard(host, label, { showAfter = SHOW_AFTER_MS, owner = null } = {}) {
   const started = performance.now();
   const title = label;
   // "풀 하는 중… (앞으로 감기만)" → "풀"(완료 제목용).
@@ -51,8 +61,12 @@ export function startOpCard(host, label) {
     if (ended) return;
     shown = true;
     tick();
+    if (owner != null) {
+      node.dataset.owner = owner;
+      node.hidden = owner !== viewing;
+    }
     host.prepend(node);
-  }, SHOW_AFTER_MS);
+  }, showAfter);
   const clock = setInterval(tick, 1000);
   const stop = onProgress((p) => {
     if (ended) return;

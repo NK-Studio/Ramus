@@ -21,10 +21,15 @@ const PHASES = {
 const handlers = new Set();
 on('progress', (p) => { for (const handler of handlers) handler(p); });
 
-/** 진행 알림을 받는다. 그만 받을 때 부르는 함수를 돌려준다. */
-export function onProgress(handler) {
-  handlers.add(handler);
-  return () => handlers.delete(handler);
+/**
+ * 진행 알림을 받는다. 그만 받을 때 부르는 함수를 돌려준다.
+ * job: 이 이름이 붙은 작업(Clone·Fetch·Pull·Push)의 진행만 받는다. 주지 않으면 이름 없는 작업의 것만 —
+ * 여러 작업의 진행이 섞이지 않게. '*' 면 모두 받는다(받는 쪽이 p.job 으로 가린다).
+ */
+export function onProgress(handler, job = null) {
+  const filtered = (p) => { if (job === '*' || (p?.job ?? null) === job) handler(p); };
+  handlers.add(filtered);
+  return () => handlers.delete(filtered);
 }
 
 /** git 단계 이름의 한국어("Receiving objects" → "받기"). 모르는 이름은 그대로. */
@@ -33,6 +38,11 @@ export function phaseName(phase) {
 }
 
 export const number = (n) => Number(n).toLocaleString('ko-KR');
+
+/** 단계 이름만("받기", 서버 단계는 "서버 …") — 개수·세부 글 없이. 작업 목록의 한 줄 상태. */
+export function phaseLabel(p) {
+  return p ? `${p.remote ? '서버 ' : ''}${phaseName(p.phase)}` : '';
+}
 
 /** "받기 45% (1,234/2,700) · 1.20 MiB | 2.00 MiB/s", 서버 단계는 앞에 "서버 ". */
 export function progressText(p) {
@@ -44,4 +54,40 @@ export function progressText(p) {
   else if (p.current != null) text += ` ${number(p.current)}개`;
   if (p.detail) text += ` · ${p.detail}`;
   return text;
+}
+
+// Clone 의 전체 진행에서 각 단계가 차지하는 몫. 받기가 대부분의 시간을 쓴다. git 은 단계마다 0~100% 를 따로 알리므로 몫을 더해 하나로 잇는다.
+const CLONE_STAGES = [0.06, 0.64, 0.2, 0.1]; // 연결 · 받기 · 정리 · 꺼내기
+
+function cloneStage(p) {
+  if (p.remote) return 0;
+  switch (p.phase) {
+    case 'Receiving objects': return 1;
+    case 'Resolving deltas': return 2;
+    case 'Updating files':
+    case 'Checking out files':
+    case 'Filtering content':
+    case 'Downloading LFS objects': return 3;
+    default: return 0;
+  }
+}
+
+/**
+ * Clone 의 전체 진행(0~1). memo({stage, value})에 지난 값을 두고 넘겨 받는다 — 단계가 바뀌어도 뒤로 가지 않는다.
+ */
+export function cloneOverall(memo, p) {
+  if (!p) return memo.value ?? 0;
+  const index = cloneStage(p);
+  memo.stage = Math.max(memo.stage ?? 0, index);
+  memo.value = memo.value ?? 0;
+  if (index === memo.stage && p.percent != null) {
+    const before = CLONE_STAGES.slice(0, index).reduce((sum, w) => sum + w, 0);
+    memo.value = Math.max(memo.value, Math.min(1, before + CLONE_STAGES[index] * (p.percent / 100)));
+  }
+  return memo.value;
+}
+
+/** 이 진행이 작업 트리 파일을 고치는 단계인가(Pull 을 이때 끊으면 작업 트리가 찢어진다). */
+export function touchesFiles(p) {
+  return !!p && !p.remote && ['Updating files', 'Checking out files', 'Filtering content', 'Downloading LFS objects', 'Unpacking objects'].includes(p.phase);
 }

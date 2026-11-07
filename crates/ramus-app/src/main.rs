@@ -61,6 +61,10 @@ enum UserEvent {
     WindowDrag,
     /// 탭 막대 빈 곳을 두 번 눌렀다 — 창을 키우거나 되돌린다(macOS).
     WindowZoom,
+    /// 끄기를 물었더니 "계속하기" — 다음 닫기 요청에 다시 묻는다.
+    QuitDismissed,
+    /// 원격 작업을 정리했다 — 이제 끈다.
+    Quit,
 }
 
 /// 고르기 창 하나. kind: folder | file | save.
@@ -252,6 +256,28 @@ fn main() -> wry::Result<()> {
                 let event = if request.cmd == "windowDrag" { UserEvent::WindowDrag } else { UserEvent::WindowZoom };
                 let _ = ipc_proxy.send_event(event);
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "quit" {
+                // 끄기 확인에 대한 답. cancel: 끈다 — Clone·Fetch·Push 는 멈추고, Pull 은 끝날 때까지 기다린 뒤 끈다.
+                if request.args.get("cancel").and_then(Value::as_bool).unwrap_or(false) {
+                    let state = ipc_state.clone();
+                    let proxy = ipc_proxy.clone();
+                    thread::spawn(move || {
+                        state.cancel_for_quit();
+                        let started = std::time::Instant::now();
+                        loop {
+                            let running = state.running_jobs();
+                            // 멈추라고 한 작업이 10초 넘게 안 끝나면(프로세스가 말을 안 들음) 기다리지 않는다. Pull·브랜치 전환은 끝까지 기다린다.
+                            if running.is_empty() || (started.elapsed() > Duration::from_secs(10) && !running.iter().any(|k| commands::touches_files(k))) {
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(100));
+                        }
+                        let _ = proxy.send_event(UserEvent::Quit);
+                    });
+                } else {
+                    let _ = ipc_proxy.send_event(UserEvent::QuitDismissed);
+                }
+                let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
             } else if request.cmd == "pickRepo" {
                 let _ = ipc_proxy.send_event(UserEvent::PickRepo(request.id));
             } else if request.cmd == "pick" {
@@ -264,15 +290,33 @@ fn main() -> wry::Result<()> {
         .build(&window)?;
 
     let mut was_fullscreen = false;
+    // 끄기를 물어본 뒤 답을 기다리는 중. 이때 또 닫으면(화면이 멈췄을 수 있다) 묻지 않고 끈다.
+    let mut quit_asked = false;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
             // macOS 는 NSApp 이 다 뜬 뒤에 앱 메뉴를 붙인다.
             #[cfg(target_os = "macos")]
             Event::NewEvents(tao::event::StartCause::Init) => app_menu.attach(&window, menu_theme),
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *control_flow = ControlFlow::Exit,
-            #[cfg(not(target_os = "macos"))]
-            Event::UserEvent(UserEvent::Menu(id)) if id == menu::QUIT => *control_flow = ControlFlow::Exit,
+            // 창 닫기·종료 메뉴: 원격 작업(Clone·Fetch·Pull·Push)이 돌면 화면에 묻는다. 끊으면 받다 만 폴더·작업 트리가 남는다.
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                if quit_asked || state.running_jobs().is_empty() {
+                    *control_flow = ControlFlow::Exit;
+                } else {
+                    quit_asked = true;
+                    let _ = webview.evaluate_script("window.__gitvcs && window.__gitvcs.event({\"event\":\"quitRequested\",\"data\":null})");
+                }
+            }
+            Event::UserEvent(UserEvent::Menu(id)) if id == menu::QUIT => {
+                if quit_asked || state.running_jobs().is_empty() {
+                    *control_flow = ControlFlow::Exit;
+                } else {
+                    quit_asked = true;
+                    let _ = webview.evaluate_script("window.__gitvcs && window.__gitvcs.event({\"event\":\"quitRequested\",\"data\":null})");
+                }
+            }
+            Event::UserEvent(UserEvent::QuitDismissed) => quit_asked = false,
+            Event::UserEvent(UserEvent::Quit) => *control_flow = ControlFlow::Exit,
             #[cfg(not(target_os = "macos"))]
             Event::UserEvent(UserEvent::Menu(id)) if id == menu::FULLSCREEN => toggle_fullscreen(&window),
             Event::UserEvent(UserEvent::Menu(id)) => {

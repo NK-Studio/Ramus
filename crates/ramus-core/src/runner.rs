@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, OnceLock, RwLock};
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -24,10 +26,74 @@ pub struct Progress {
     /// 쉼표 뒤 덧붙임(받은 양·속도). 없으면 빈 글.
     pub detail: String,
     pub done: bool,
+    /// 작업 이름(`with_job`). 화면이 여러 작업(뒤에서 도는 Clone 과 Pull 등)의 진행을 나눠 본다. 없으면 빠진다.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job: Option<String>,
 }
 
 type ProgressSink = Box<dyn Fn(&Progress) + Send + Sync>;
 static PROGRESS_SINK: OnceLock<ProgressSink> = OnceLock::new();
+
+// ── 이름 붙은 작업(취소할 수 있는 git 호출) ──
+// Clone 처럼 오래 걸리는 일은 작업 이름을 붙여 돌린다. 그 스레드의 git 호출은 진행 알림에 이름이 붙고,
+// `cancel_job` 으로 도는 git(과 그 자식 git-remote-https·index-pack)을 끝낼 수 있다.
+
+thread_local! {
+    static JOB: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// 작업 이름 → 지금 도는 git 의 프로세스 번호.
+fn running_jobs() -> &'static Mutex<HashMap<String, u32>> {
+    static RUNNING: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+    RUNNING.get_or_init(Default::default)
+}
+
+/// 취소를 받은 작업 이름. 작업이 끝날 때 지운다.
+fn cancelled_jobs() -> &'static Mutex<HashSet<String>> {
+    static CANCELLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    CANCELLED.get_or_init(Default::default)
+}
+
+fn current_job() -> Option<String> {
+    JOB.with(|j| j.borrow().clone())
+}
+
+/// `f` 안에서 이 스레드가 부르는 git 에 작업 이름 `job` 을 붙인다. 돌려준 둘째 값은 그사이 취소되었는지.
+pub fn with_job<T>(job: &str, f: impl FnOnce() -> T) -> (T, bool) {
+    cancelled_jobs().lock().unwrap().remove(job);
+    let previous = JOB.with(|j| j.replace(Some(job.to_string())));
+    let out = f();
+    JOB.with(|j| *j.borrow_mut() = previous);
+    let cancelled = cancelled_jobs().lock().unwrap().remove(job);
+    (out, cancelled)
+}
+
+/// 작업을 멈춘다. 도는 git 이 있으면 그 프로세스 묶음을 끝내고, 아직 시작 전이면 시작하지 않게 한다.
+pub fn cancel_job(job: &str) {
+    cancelled_jobs().lock().unwrap().insert(job.to_string());
+    if let Some(pid) = running_jobs().lock().unwrap().get(job).copied() {
+        kill_tree(pid);
+    }
+}
+
+fn job_cancelled(job: &str) -> bool {
+    cancelled_jobs().lock().unwrap().contains(job)
+}
+
+/// git 과 그 자식들을 끝낸다. 유닉스는 작업 git 을 따로 프로세스 묶음으로 띄우므로 묶음째 TERM 을 보낸다 —
+/// git 은 TERM 을 받으면 만들던 폴더를 스스로 지운다.
+#[cfg(unix)]
+fn kill_tree(pid: u32) {
+    let _ = Command::new("kill").args(["-TERM", "--", &format!("-{pid}")]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+}
+
+#[cfg(windows)]
+fn kill_tree(pid: u32) {
+    let mut cmd = Command::new("taskkill");
+    cmd.args(["/PID", &pid.to_string(), "/T", "/F"]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    hide_console(&mut cmd);
+    let _ = cmd.status();
+}
 
 /// `RAMUS_TRACE` 환경 변수가 있으면 git 호출마다 걸린 시간을 stderr 에 적는다(개발 중 병목 찾기).
 pub fn trace_enabled() -> bool {
@@ -82,11 +148,11 @@ pub fn parse_progress(line: &str) -> Option<Progress> {
     } else {
         current = head.trim().trim_end_matches(',').parse().ok();
     }
-    Some(Progress { remote, phase: phase.to_string(), percent, current, total, detail, done })
+    Some(Progress { remote, phase: phase.to_string(), percent, current, total, detail, done, job: None })
 }
 
 /// stderr 를 흘려 읽으며 진행 줄은 알림으로 보내고(너무 잦지 않게), 나머지만 모아 돌려준다.
-fn drain_stderr(mut stderr: impl Read) -> Vec<u8> {
+fn drain_stderr(mut stderr: impl Read, job: Option<String>) -> Vec<u8> {
     let sink = PROGRESS_SINK.get();
     let mut kept = Vec::new();
     let mut line = Vec::new();
@@ -101,7 +167,8 @@ fn drain_stderr(mut stderr: impl Read) -> Vec<u8> {
         }
         let text = String::from_utf8_lossy(line).into_owned();
         match parse_progress(&text) {
-            Some(progress) => {
+            Some(mut progress) => {
+                progress.job = job.clone();
                 if let Some(sink) = sink {
                     // 단계가 바뀌거나 끝났거나 0.1초가 지났을 때만 보낸다.
                     let due = match &last {
@@ -234,6 +301,18 @@ impl GitRunner {
         cmd.envs(&globals.env);
         cmd.envs(extra_env);
         hide_console(&mut cmd);
+        let job = current_job();
+        if let Some(job) = &job {
+            if job_cancelled(job) {
+                return GitOutput::failed("작업을 취소했습니다.".into());
+            }
+            // 취소할 때 자식 git(git-remote-https 등)까지 함께 끝내려고 따로 묶는다.
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                cmd.process_group(0);
+            }
+        }
         cmd.stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() });
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
@@ -242,6 +321,13 @@ impl GitRunner {
             Ok(child) => child,
             Err(e) => return GitOutput::failed(format!("git 을 실행하지 못했습니다({}): {e}", git.display())),
         };
+        if let Some(job) = &job {
+            running_jobs().lock().unwrap().insert(job.clone(), child.id());
+            // 띄우는 사이에 취소가 왔으면 바로 끝낸다.
+            if job_cancelled(job) {
+                kill_tree(child.id());
+            }
+        }
         if let (Some(text), Some(mut stdin)) = (input, child.stdin.take()) {
             let text = text.to_string();
             // 큰 패치를 쓰는 동안 stdout 이 차서 멈추지 않게 따로 쓴다.
@@ -252,13 +338,17 @@ impl GitRunner {
         // stdout·stderr 를 동시에 비우지 않으면 한쪽 파이프 버퍼가 차서 git 이 멈춘다.
         // `--progress` 로 부른 명령의 진행 줄은 여기서 알림으로 나가고 stderr 글에는 남지 않는다.
         let stderr = child.stderr.take().unwrap();
-        let err_thread = thread::spawn(move || drain_stderr(stderr));
+        let tag = job.clone();
+        let err_thread = thread::spawn(move || drain_stderr(stderr, tag));
         let mut out = Vec::new();
         if let Some(mut stdout) = child.stdout.take() {
             let _ = stdout.read_to_end(&mut out);
         }
         let err = err_thread.join().unwrap_or_default();
         let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+        if let Some(job) = &job {
+            running_jobs().lock().unwrap().remove(job);
+        }
         GitOutput {
             code,
             stdout: String::from_utf8_lossy(&out).into_owned(),
@@ -317,7 +407,7 @@ mod tests {
     #[test]
     fn drain_keeps_messages_and_drops_progress() {
         let raw = b"remote: Counting objects:  50% (1/2)\rremote: Counting objects: 100% (2/2), done.\nTo origin\n   abc..def  main -> main\n";
-        let kept = String::from_utf8(drain_stderr(&raw[..])).unwrap();
+        let kept = String::from_utf8(drain_stderr(&raw[..], None)).unwrap();
         assert_eq!(kept, "To origin\n   abc..def  main -> main\n");
     }
 }
