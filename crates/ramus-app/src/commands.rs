@@ -1611,10 +1611,21 @@ fn reveal(repo: &Repository, path: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     let spawned = std::process::Command::new("/usr/bin/open").arg("-R").arg(&target).spawn();
     #[cfg(windows)]
-    let spawned = std::process::Command::new("explorer").arg(format!("/select,{}", target.display())).spawn();
+    let spawned = {
+        use std::os::windows::process::CommandExt;
+        // `arg` 로 넘기면 `"/select,C:\a b\c"` 처럼 통째로 따옴표가 붙어 탐색기가 못 알아듣는다 — 경로만 감싼다.
+        std::process::Command::new("explorer").raw_arg(format!("/select,\"{}\"", native_path(&target).display())).spawn()
+    };
     #[cfg(not(any(target_os = "macos", windows)))]
     let spawned = std::process::Command::new("xdg-open").arg(target.parent().unwrap_or(&target)).spawn();
     spawned.map(|_| ()).map_err(|e| GitError::new(format!("파일 관리자를 열지 못했습니다: {e}")))
+}
+
+/// Windows 의 탐색기·cmd 는 `/` 구분자를 제대로 못 읽는다(엉뚱한 폴더가 열린다).
+/// git 이 주는 루트(`C:/Users/...`)와 UI 가 이어 붙인 경로(`.../src/a.rs`)를 `\` 로 바꾼다.
+#[cfg(windows)]
+fn native_path(path: &Path) -> std::path::PathBuf {
+    path.components().collect()
 }
 
 /// 주소를 기본 브라우저로 연다.
@@ -1638,7 +1649,7 @@ fn open_path(path: &Path) -> Result<()> {
     #[cfg(windows)]
     let spawned = {
         use std::os::windows::process::CommandExt;
-        std::process::Command::new("cmd").args(["/C", "start", ""]).arg(path).creation_flags(0x0800_0000).spawn()
+        std::process::Command::new("cmd").args(["/C", "start", ""]).arg(native_path(path)).creation_flags(0x0800_0000).spawn()
     };
     #[cfg(not(any(target_os = "macos", windows)))]
     let spawned = std::process::Command::new("xdg-open").arg(path).spawn();
@@ -1693,7 +1704,7 @@ fn open_folder(path: &Path) -> Result<()> {
     #[cfg(target_os = "macos")]
     let spawned = std::process::Command::new("/usr/bin/open").arg(path).spawn();
     #[cfg(windows)]
-    let spawned = std::process::Command::new("explorer").arg(path).spawn();
+    let spawned = std::process::Command::new("explorer").arg(native_path(path)).spawn();
     #[cfg(not(any(target_os = "macos", windows)))]
     let spawned = std::process::Command::new("xdg-open").arg(path).spawn();
     spawned.map(|_| ()).map_err(|e| GitError::new(format!("파일 관리자를 열지 못했습니다: {e}")))
@@ -1707,7 +1718,8 @@ fn open_terminal(root: &Path) -> Result<()> {
     let spawned = {
         use std::os::windows::process::CommandExt;
         // Windows Terminal 이 있으면 그것, 없으면 cmd.
-        std::process::Command::new("wt").arg("-d").arg(root).spawn().or_else(|_| {
+        let root = native_path(root);
+        std::process::Command::new("wt").arg("-d").arg(&root).spawn().or_else(|_| {
             std::process::Command::new("cmd").args(["/C", "start", "cmd", "/K"]).arg(format!("cd /d \"{}\"", root.display())).creation_flags(0x0800_0000).spawn()
         })
     };
