@@ -103,7 +103,8 @@ export function fileList(opts) {
   const pad = (depth) => `${(eye ? 20 : 4) + depth * 14}px`;
   const eyeButton = (path, hidden) => (eye ? el('button', {
     class: 'row-eye',
-    'data-tip': hidden ? '다시 보이기 (H)' : '숨기기 (H) — 보기에서만 감춥니다. Option(Alt)+클릭: 이것만 보기',
+    // 툴팁은 띄우지 않는다(줄마다 나타나 거슬린다) — 화면 읽기용 이름만 둔다.
+    'aria-label': hidden ? '다시 보이기' : '숨기기',
     onclick: (event) => eye.toggle([path], { solo: event.altKey && !hidden }),
   }, icon(hidden ? 'eyeOff' : 'eye', 14)) : null);
   const st = opts.state ?? { selected: new Set(), anchor: null };
