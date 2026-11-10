@@ -16,6 +16,9 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+### 변경
+- macOS 판을 zip 대신 DMG 로 배포합니다. 열면 Ramus 를 Applications 폴더로 끌어다 놓으라는 안내 창이 뜹니다.
+
 ## [1.4.0] - 2026-11-10
 
 ### 추가

@@ -107,10 +107,27 @@ jobs:
             --wait
           xcrun stapler staple target/release/Ramus.app
           spctl -a -vv -t exec target/release/Ramus.app
-      - name: Package
+      # 끌어다 놓아 설치하는 DMG(왼쪽 Ramus → 오른쪽 Applications). 서명 빌드에서는 DMG 도 서명·공증한다.
+      - name: Package DMG
         run: |
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent target/release/Ramus.app "dist/Ramus-${{ github.ref_name }}-macos-arm64.zip"
+          sh scripts/make-dmg.sh target/release/Ramus.app "dist/Ramus-${{ github.ref_name }}-macos-arm64.dmg"
+      - name: Sign & notarize DMG
+        if: env.MACOS_KEYCHAIN != ''
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          DMG="dist/Ramus-${{ github.ref_name }}-macos-arm64.dmg"
+          IDENTITY=$(security find-identity -v -p codesigning "$MACOS_KEYCHAIN" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --key "$RUNNER_TEMP/AuthKey.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple "$DMG"
+          spctl -a -vv -t open --context context:primary-signature "$DMG"
       - name: Remove signing keychain
         if: always()
         run: |
@@ -179,14 +196,14 @@ jobs:
 
             | OS | 파일 |
             | --- | --- |
-            | macOS (Apple Silicon, macOS 12 이상) | `Ramus-${{ github.ref_name }}-macos-arm64.zip` |
+            | macOS (Apple Silicon, macOS 12 이상) | `Ramus-${{ github.ref_name }}-macos-arm64.dmg` |
             | Windows 10/11 (x64) | `Ramus-${{ github.ref_name }}-windows-x64.zip` |
 
             git 이 앱에 들어 있어(git-lfs 포함) 따로 설치하지 않아도 됩니다. 설정 > git 에서 시스템 git 이나 직접 고른 git 으로 바꿀 수 있습니다.
             Windows 는 WebView2 런타임(Windows 10/11 기본 포함)을 씁니다. Windows 압축 파일은 `Ramus.exe` 와 `git` 폴더를 같은 자리에 함께 풀어 두세요.
 
             ### macOS 처음 실행
-            Apple Developer ID 로 서명·공증된 앱입니다. 압축을 풀고 `Ramus.app` 을 응용 프로그램 폴더로 옮기면 바로 실행됩니다.
+            Apple Developer ID 로 서명·공증된 앱입니다. DMG 를 열고 창 안의 `Ramus` 를 옆의 `Applications` 폴더로 끌어다 놓으면 설치됩니다.
 
             ### Windows 처음 실행
             SmartScreen 경고가 뜨면 **추가 정보 → 실행** 을 누르세요.

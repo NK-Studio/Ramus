@@ -7,7 +7,7 @@ Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.
 
 [Releases](https://github.com/NK-Studio/gitvcs-desktop/releases/latest) 에서 받습니다.
 
-- macOS(Apple Silicon): `Ramus-<버전>-macos-arm64.zip` — 서명하지 않은 빌드라 처음 한 번 `xattr -dr com.apple.quarantine /Applications/Ramus.app` 을 실행합니다.
+- macOS(Apple Silicon): `Ramus-<버전>-macos-arm64.dmg` — 열린 창에서 `Ramus` 를 `Applications` 폴더로 끌어다 놓습니다.
 - Windows 10/11(x64): `Ramus-<버전>-windows-x64.zip` — 압축을 풀고 `Ramus.exe` 를 실행합니다(WebView2 런타임 사용).
 
 git 은 앱에 들어 있어(GitHub Desktop 의 [dugite-native](https://github.com/desktop/dugite-native): git + git-lfs + 자격 증명 도우미) 따로 설치하지 않아도 됩니다.
@@ -30,8 +30,10 @@ node tests/ui/hidden.test.mjs     # 변경 목록 숨기기 규칙
 node tests/ui/changelog.test.mjs  # ChangeLog.md 맨 위 버전이 Cargo.toml 과 같은지
 cargo run -p ramus-app
 scripts/bundle-macos.sh release   # target/release/Ramus.app (내장 git 포함, 처음 한 번 vendor/git 에 받음)
+scripts/make-dmg.sh target/release/Ramus.app  # 끌어다 놓아 설치하는 DMG(target/release/Ramus-<버전>-macos-arm64.dmg)
 scripts/fetch-git.sh windows-x64  # 내장 git 만 받기(vendor/git/<플랫폼>). git 을 올릴 때는 이 파일의 TAG·SHA256 을 바꿈
 scripts/make-icons.sh             # assets/icon/ramus.svg → Ramus.icns·ramus.ico (아이콘을 고쳤을 때만, macOS 에서)
+swift scripts/make-dmg-background.swift  # DMG 창 배경 assets/dmg/background.tiff (배경을 고쳤을 때만)
 ```
 
 개발 중에는 `RAMUS_UI_DIR=$PWD/ui` 를 주면 화면 파일을 디스크에서 바로 읽습니다. `cargo run` 에는 내장 git 이 없어 시스템 git 을 쓰고, `RAMUS_BUNDLED_GIT_DIR=$PWD/vendor/git/macos-arm64` 를 주면 내장 git 으로 돌립니다. `RAMUS_SETTINGS` 로 설정 파일 위치를 바꿀 수 있습니다.
