@@ -14,7 +14,8 @@ export const CHANGE_STATE = { A: 'added', M: 'modified', D: 'deleted', R: 'renam
  * 이름 변경·충돌은 원본이 쓰는 UVCS 오버레이 그림(16px, 테마마다 따로).
  */
 export function stateIcon(state) {
-  return el('span', { class: `state-icon st-${state}`, 'data-tip': STATE_LABEL[state] });
+  // 툴팁은 띄우지 않는다(목록을 훑을 때 줄마다 떠서 거슬린다) — 화면 읽기용 이름만 둔다.
+  return el('span', { class: `state-icon st-${state}`, role: 'img', 'aria-label': STATE_LABEL[state] ?? state });
 }
 
 const KINDS = [
@@ -210,7 +211,7 @@ export function fileList(opts) {
     },
     eyeButton(entry.path, hidden),
     // 툴팁은 상태 그림·아이콘에만 단다(원본과 같다 — 줄 전체에 달면 아래 줄을 덮는다).
-    el('span', { class: 'file-badges', 'data-tip': `${STATE_LABEL[entry.state] ?? entry.state}  ${entry.originalPath ? `${entry.originalPath} → ` : ''}${entry.path}` }, stateIcon(entry.state), fileIcon(entry.path)),
+    el('span', { class: 'file-badges' }, stateIcon(entry.state), fileIcon(entry.path)),
     el('span', { class: 'file-name', text: showDir ? entry.path : splitPath(entry.path).name }),
     entry.originalPath ? el('span', { class: 'file-orig', text: `← ${entry.originalPath}` }) : null,
     entry.note ? el('span', { class: 'file-note', text: entry.note }) : null,
@@ -255,7 +256,7 @@ export function fileList(opts) {
         }, eyeButton(folder.path, hidden), el('span', { class: `side-chev${isCollapsed ? '' : ' open'}` }, icon('chevronRight', 12)), icon('folder', 16, 'folder-icon'),
         // 폴더는 파일 수를 보이지 않는다. 접힌 폴더만 아래 파일의 상태별 수를 보인다(펼치면 아래 파일이 다 보인다).
         el('span', { class: 'file-name', text: folder.name }),
-        isCollapsed ? el('span', { class: 'file-summary' }, stateSummary(folderFiles(folder)).flatMap(([state, n]) => [stateIcon(state), el('span', { class: 'file-summary-count', 'data-tip': STATE_LABEL[state], text: n })])) : null));
+        isCollapsed ? el('span', { class: 'file-summary' }, stateSummary(folderFiles(folder)).flatMap(([state, n]) => [stateIcon(state), el('span', { class: 'file-summary-count', text: n })])) : null));
         if (!isCollapsed) emit(folder, depth + 1);
       }
       for (const entry of [...node.files].sort((a, b) => a.path.localeCompare(b.path))) children.push(row(entry, depth + 1, false));
