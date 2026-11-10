@@ -1355,12 +1355,20 @@ const actions = {
   /** 파일 하나 버리기. side 는 discardMany 와 같다. */
   discard: (entry, side = 'unstaged') => actions.discardMany([entry], side),
   prefs,
+  /** 지금 연 레포지토리(워크트리)의 뿌리 경로. 레포지토리마다 따로 남기는 화면 설정의 키에 쓴다. */
+  repoPath: () => state.repo?.path ?? '',
+  /** 숨기기 묶음(메뉴). eye: {hidden, toggle(), solo()} — 변경 목록(Unstaged)이 준다. 보기에서만 감추는 것이라 "무시"(.gitignore)와 다르다. */
+  eyeItems: (eye) => (eye ? [
+    { label: eye.hidden ? '다시 보이기' : '숨기기', hint: 'H', action: () => eye.toggle() },
+    { label: '이것만 보기', action: () => eye.solo() },
+  ] : []),
   /**
    * 파일 우클릭(여럿 골랐으면 고른 것 모두에). 원본 StagingLists.Populate*Menu + FileActionMenu 순서:
    * [Stage · 변경 버리기] [충돌: 해결됨으로 표시 · 한쪽으로 해결] [무시 › · LFS › · 파일 Stash] [히스토리 · Blame] [외부 편집기 · 기본 프로그램 · Finder] [경로 복사 · 패치] [파일 편집 · 파일 삭제].
    * mode: 'unstaged' | 'staged' | 'conflict'(충돌 중 "충돌 파일" 목록 — 맨 위 묶음 없이 작업·공통 묶음만). clicked: 우클릭한 줄(공통 묶음의 대상).
+   * eye: 숨기기 동작(Unstaged 목록만) — Stage·버리기 바로 아래에 [숨기기 · 이것만 보기].
    */
-  fileMenu(event, entries, mode, clicked) {
+  fileMenu(event, entries, mode, clicked, eye = null) {
     const busy = !!state.busy;
     const entry = clicked ?? entries[0];
     const many = entries.length > 1;
@@ -1371,12 +1379,14 @@ const actions = {
         items.push({ label: `파일 ${entries.length}개 Stage`, disabled: busy, action: () => actions.stage(entries.map((e) => e.path)) });
         const discardable = entries.filter((e) => e.state !== 'untracked');
         if (discardable.length) items.push({ label: `파일 ${discardable.length}개 변경 버리기`, disabled: busy, action: () => actions.discardMany(discardable, 'unstaged') });
+        if (eye) items.push('-', ...actions.eyeItems(eye));
         items.push('-', ...actions.commonFileItems(entry, false));
         showMenu(event.clientX, event.clientY, items);
         return;
       }
       items.push({ label: 'Stage', disabled: busy, action: () => actions.stage([entry.path]) });
       if (entry.state !== 'untracked') items.push({ label: '변경 버리기', disabled: busy, action: () => actions.discardMany([entry], 'unstaged') });
+      if (eye) items.push('-', ...actions.eyeItems(eye), '-');
     } else if (mode === 'staged') {
       items.push({ label: many ? `파일 ${entries.length}개 Unstage` : 'Unstage', disabled: busy, action: () => actions.unstage(entries.map((e) => e.path)) }, '-');
     }
@@ -1436,7 +1446,7 @@ const actions = {
   },
   /**
    * 폴더 우클릭(트리 보기). 원본 StagingLists.Populate*FolderMenu + FileActionMenu.AppendFolderItems + FileTree.PopulateFolderMenu:
-   * git 동작이 맨 위, 보기 동작(모두 펼치기·접기·경로 복사)이 아래. view: {expandAll, collapseAll}.
+   * git 동작이 맨 위, 보기 동작(숨기기·이것만 보기·모두 펼치기·접기·경로 복사)이 아래. view: {expandAll, collapseAll, eye}.
    */
   folderMenu(event, folder, entries, mode, view = {}) {
     const busy = !!state.busy;
@@ -1454,6 +1464,7 @@ const actions = {
       { label: `${fm} 에서 열기`, action: () => call('openFolder', { path: `${state.repo.path}/${folder.path}` }).catch(showError) },
       { label: '이 폴더에 파일 만들기', disabled: !tools.newFile, action: () => tools.newFile?.(folder.path) },
       '-',
+      ...(staged || !view.eye ? [] : [...actions.eyeItems(view.eye), '-']),
       { label: '모두 펼치기', action: () => view.expandAll?.() },
       { label: '모두 접기', action: () => view.collapseAll?.() },
       { label: '경로 복사', action: () => navigator.clipboard?.writeText(folder.path) },
@@ -1507,10 +1518,14 @@ const actions = {
     if (entries.some((e) => state.diffKey?.endsWith(`:${e.path}`))) closeDiff();
     return (await act('되돌리는 중…', () => call('discard', { paths: entries.map((e) => e.path), worktreeOnly: side === 'unstaged' }).then(() => true))) === true;
   },
-  async discardAll() {
+  /** 모든 변경 버리기. keep: 그대로 둘 경로(변경 목록에서 숨긴 파일) — 버리지 않고, 확인 창에 몇 개를 남기는지 적는다. */
+  async discardAll(keep = []) {
     if (state.busy) return;
-    const all =[...new Map([...state.status.unstaged, ...state.status.staged].map((e) => [e.path, e])).values()];
-    if (!(await confirmDialog({ title: '모든 변경 버리기', glyph: 'trash', danger: true, message: `${state.status.branch.name} 의 변경 ${all.length}개를 모두 버립니다. Stage 한 것도 마지막 커밋 상태로 되돌리고 새 파일은 지웁니다. 실행 취소로도 되살릴 수 없습니다.`, ok: '모두 버리기' }))) return;
+    const kept = new Set(keep);
+    const all = [...new Map([...state.status.unstaged, ...state.status.staged].map((e) => [e.path, e])).values()].filter((e) => !kept.has(e.path));
+    if (!all.length) return;
+    const left = kept.size ? `\n\n숨긴 파일 ${kept.size}개는 버리지 않고 그대로 둡니다.` : '';
+    if (!(await confirmDialog({ title: '모든 변경 버리기', glyph: 'trash', danger: true, message: `${state.status.branch.name} 의 변경 ${all.length}개를 모두 버립니다. Stage 한 것도 마지막 커밋 상태로 되돌리고 새 파일은 지웁니다. 실행 취소로도 되살릴 수 없습니다.${left}`, ok: '모두 버리기' }))) return;
     closeDiff();
     await act('모두 버리는 중…', () => call('discard', { paths: all.map((e) => e.path) }), { success: () => '모든 변경을 버렸습니다.' });
   },

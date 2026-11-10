@@ -26,6 +26,7 @@ Windows 는 `Ramus.exe` 옆의 `git` 폴더가 내장 git 이니 둘을 함께 �
 ```bash
 cargo test
 node tests/ui/syntax.test.mjs     # 문법 색(원본 GitTextEditorTests 의 Tokenize 시험)
+node tests/ui/hidden.test.mjs     # 변경 목록 숨기기 규칙
 node tests/ui/changelog.test.mjs  # ChangeLog.md 맨 위 버전이 Cargo.toml 과 같은지
 cargo run -p ramus-app
 scripts/bundle-macos.sh release   # target/release/Ramus.app (내장 git 포함, 처음 한 번 vendor/git 에 받음)

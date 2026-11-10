@@ -38,6 +38,7 @@ jobs:
           node-version: 22
       - run: node tests/ui/syntax.test.mjs
       - run: node tests/ui/repocache.test.mjs
+      - run: node tests/ui/hidden.test.mjs
       - run: node tests/ui/changelog.test.mjs
 
   build-macos:

@@ -662,6 +662,17 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 /* 줄에 마우스를 올리면 오른쪽에 나오는 버튼(원본 file-row__action): 평소엔 자리도 차지하지 않는다. 옅은 바탕 + 상태 색 테두리, 올리면 꽉 채운다. */
 .row-action { display: none; flex: none; height: 18px; margin: 0 2px 0 6px; padding: 0 8px; border: 1px solid transparent; border-radius: 3px; color: var(--git-text); font-size: 11px; font-weight: 700; cursor: pointer; }
 .file-row:hover .row-action { display: inline-flex; align-items: center; }
+/* 숨기기(눈): 줄 맨 왼쪽의 고정 칸. 마우스를 올린 줄에만 보이고, 숨긴 줄(흐리게 보이는 중)은 꺼진 눈이 늘 보인다. 줄은 들여쓰기 앞에 이 칸만큼 비워 둔다. */
+.row-eye { position: absolute; left: 2px; top: 2px; display: none; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--git-text-muted); cursor: pointer; }
+.file-row:hover .row-eye, .file-row.is-hidden .row-eye { display: flex; }
+.row-eye:hover { background: var(--git-pressed); color: var(--git-text); }
+.file-row.selected .row-eye, .file-row.active .row-eye { color: var(--git-selected-text); }
+.file-row.is-hidden > :not(.row-eye):not(.row-action) { opacity: 0.45; }
+/* 목록 머리 줄의 "숨김 n" 과, 숨긴 줄을 보이는 동안 목록 위에 뜨는 안내 줄. */
+.hidden-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.hidden-chip:hover, .hidden-chip.on { background: var(--git-hover); color: var(--git-text); }
+.hidden-banner { flex: none; display: flex; align-items: center; height: 26px; padding: 0 4px 0 8px; background: var(--git-list-bg); border-bottom: 1px solid var(--git-divider); color: var(--git-text-muted); font-size: 11px; }
+.hidden-banner-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-action.stage, .row-action.success { background: var(--git-success-soft); border-color: var(--git-success); }
 .row-action.stage:hover, .row-action.success:hover { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
 .row-action.unstage, .row-action.danger { background: var(--git-danger-soft); border-color: var(--git-danger); }

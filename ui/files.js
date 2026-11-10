@@ -80,16 +80,32 @@ export function selectedEntries(st, entries) {
   return entries.filter((e) => st.selected.has(e.path) || folders.some((f) => e.path.startsWith(`${f}/`)));
 }
 
+/** 고른 줄의 경로(폴더는 폴더 경로 그대로). 고른 폴더 아래의 폴더·파일은 그 폴더에 들어 있으니 뺀다 — 숨기기처럼 폴더째 다루는 동작이 쓴다. */
+export function selectionPaths(st) {
+  const folders = [...(st.folders ?? [])];
+  const inside = (path) => folders.some((f) => path.startsWith(`${f}/`));
+  return [...folders.filter((f) => !inside(f)), ...[...st.selected].filter((p) => !inside(p))];
+}
+
 /**
  * 파일 목록. opts:
  *  entries: [{path, originalPath, state, note}], view: 'path'|'tree',
  *  state: {selected: Set<path>, folders: Set<folderPath>, anchor, cursor} (그리기 사이에 남는 선택. anchor·cursor 는 줄 키 'f:경로'|'d:폴더'),
  *  activeKey, keyOf(entry), collapsed: Set<folderPath>, onToggleFolder(path), onSetCollapsed(paths[]),
  *  onSelect(entries), onOpen(entry, { toggle }?), onActivate(entries), onMenu(event, entries, clicked), onFolderMenu(event, folder, entries, {expandAll, collapseAll}),
- *  onDelete(entries), rowAction: {label, kind, run(entry), labelOf(entry)} | null, expandToggle: 트리 위 [모두 펼치기/접기], empty: '…'
+ *  onDelete(entries), rowAction: {label, kind, run(entry), labelOf(entry)} | null, expandToggle: 트리 위 [모두 펼치기/접기], empty: '…',
+ *  eye: {isHidden(path), toggle(paths[], {solo})} | null — 줄 맨 왼쪽의 눈 버튼(마우스를 올린 줄에만 보인다). 누르면 그 줄을 숨기고,
+ *       Alt(Option) 로 누르면 그 줄만 남긴다. 숨긴 줄(isHidden)은 흐리게 그리고 꺼진 눈을 늘 보인다. H 키는 고른 줄 전부에.
  */
 export function fileList(opts) {
-  const { entries, view = 'path' } = opts;
+  const { entries, view = 'path', eye = null } = opts;
+  // 눈 버튼이 있으면 들여쓰기 앞에 그 자리(16px)를 비워 둔다.
+  const pad = (depth) => `${(eye ? 20 : 4) + depth * 14}px`;
+  const eyeButton = (path, hidden) => (eye ? el('button', {
+    class: 'row-eye',
+    'data-tip': hidden ? '다시 보이기 (H)' : '숨기기 (H) — 보기에서만 감춥니다. Option(Alt)+클릭: 이것만 보기',
+    onclick: (event) => eye.toggle([path], { solo: event.altKey && !hidden }),
+  }, icon(hidden ? 'eyeOff' : 'eye', 14)) : null);
   const st = opts.state ?? { selected: new Set(), anchor: null };
   st.folders ??= new Set();
   const selected = st.selected;
@@ -162,13 +178,14 @@ export function fileList(opts) {
   const row = (entry, depth, showDir) => {
     const key = opts.keyOf?.(entry);
     const action = opts.rowAction?.labelOf ? opts.rowAction.labelOf(entry) : opts.rowAction;
+    const hidden = !!eye?.isHidden(entry.path);
     order.push({ key: fileKey(entry.path), entry });
     return el('div', {
-      class: `file-row${selected.has(entry.path) ? ' selected' : ''}${key && key === opts.activeKey ? ' active' : ''}${st.cursor === fileKey(entry.path) ? ' cursor' : ''}`,
+      class: `file-row${selected.has(entry.path) ? ' selected' : ''}${key && key === opts.activeKey ? ' active' : ''}${st.cursor === fileKey(entry.path) ? ' cursor' : ''}${hidden ? ' is-hidden' : ''}`,
       'data-path': entry.path,
       'data-key': fileKey(entry.path),
       'data-diff-key': key ?? null,
-      style: depth ? { paddingLeft: `${4 + depth * 14}px` } : null,
+      style: depth || eye ? { paddingLeft: pad(depth) } : null,
       onmousedown: (event) => {
         // Shift 로 누를 때 글자가 끌려 선택되지 않게.
         if (event.shiftKey) event.preventDefault();
@@ -190,6 +207,7 @@ export function fileList(opts) {
         opts.onMenu(event, picked(entry), entry);
       }),
     },
+    eyeButton(entry.path, hidden),
     // 툴팁은 상태 그림·아이콘에만 단다(원본과 같다 — 줄 전체에 달면 아래 줄을 덮는다).
     el('span', { class: 'file-badges', 'data-tip': `${STATE_LABEL[entry.state] ?? entry.state}  ${entry.originalPath ? `${entry.originalPath} → ` : ''}${entry.path}` }, stateIcon(entry.state), fileIcon(entry.path)),
     el('span', { class: 'file-name', text: showDir ? entry.path : splitPath(entry.path).name }),
@@ -207,20 +225,22 @@ export function fileList(opts) {
     const emit = (node, depth) => {
       for (const folder of [...node.folders.values()].sort((a, b) => a.name.localeCompare(b.name))) {
         const isCollapsed = opts.collapsed?.has(folder.path);
+        const hidden = !!eye?.isHidden(folder.path);
         order.push({ key: folderKey(folder.path), folder, collapsed: isCollapsed });
         children.push(el('div', {
-          class: `file-row folder${st.folders.has(folder.path) ? ' selected' : ''}${st.cursor === folderKey(folder.path) ? ' cursor' : ''}`,
-          style: { paddingLeft: `${4 + depth * 14}px` }, 'data-folder': folder.path, 'data-key': folderKey(folder.path),
+          class: `file-row folder${st.folders.has(folder.path) ? ' selected' : ''}${st.cursor === folderKey(folder.path) ? ' cursor' : ''}${hidden ? ' is-hidden' : ''}`,
+          style: { paddingLeft: pad(depth) }, 'data-folder': folder.path, 'data-key': folderKey(folder.path),
           onmousedown: (event) => {
             if (event.shiftKey) event.preventDefault();
           },
           onclick: (event) => {
-            // 화살표는 펼치고 접고, 줄은 고른다(원본 TreeView).
+            // 눈 버튼은 제 일만 한다. 화살표는 펼치고 접고, 줄은 고른다(원본 TreeView).
+            if (event.target.closest('button')) return;
             if (event.target.closest('.side-chev')) opts.onToggleFolder?.(folder.path);
             else selectFolder(folder, event);
           },
           ondblclick: (event) => {
-            if (!event.target.closest('.side-chev')) opts.onToggleFolder?.(folder.path);
+            if (!event.target.closest('.side-chev, button')) opts.onToggleFolder?.(folder.path);
           },
           oncontextmenu: opts.onFolderMenu && ((event) => {
             event.preventDefault();
@@ -231,7 +251,7 @@ export function fileList(opts) {
             if (opts.onMenu && (st.folders.size > 1 || all.length > mine.length)) opts.onMenu(event, all, mine[0]);
             else opts.onFolderMenu(event, folder, mine, { expandAll: () => opts.onSetCollapsed?.([]), collapseAll: () => opts.onSetCollapsed?.(allFolders(tree)) });
           }),
-        }, el('span', { class: `side-chev${isCollapsed ? '' : ' open'}` }, icon('chevronRight', 12)), icon('folder', 16, 'folder-icon'),
+        }, eyeButton(folder.path, hidden), el('span', { class: `side-chev${isCollapsed ? '' : ' open'}` }, icon('chevronRight', 12)), icon('folder', 16, 'folder-icon'),
         // 폴더는 파일 수를 보이지 않는다. 접힌 폴더만 아래 파일의 상태별 수를 보인다(펼치면 아래 파일이 다 보인다).
         el('span', { class: 'file-name', text: folder.name }),
         isCollapsed ? el('span', { class: 'file-summary' }, stateSummary(folderFiles(folder)).flatMap(([state, n]) => [stateIcon(state), el('span', { class: 'file-summary-count', 'data-tip': STATE_LABEL[state], text: n })])) : null));
@@ -290,6 +310,12 @@ export function fileList(opts) {
       if (!targets.length) return;
       event.preventDefault();
       opts.onDelete(targets);
+    } else if (eye && event.code === 'KeyH' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+      // H: 고른 줄을 숨긴다(이미 숨긴 줄이면 다시 보인다). 한글 자판에서도 되게 글쇠 자리(code)로 본다.
+      const paths = selectionPaths(st);
+      if (!paths.length) return;
+      event.preventDefault();
+      eye.toggle(paths, {});
     } else if (event.key === ' ') {
       // Space 는 아무것도 하지 않는다(원본 IgnoreSpace).
       event.preventDefault();

@@ -3,13 +3,14 @@
 
 import { el, formatDate, initials, isComposing, autoHorizontalScroll } from './util.js';
 import { icon } from './icons.js';
-import { fileList, viewSwitch, selectedEntries, stateIcon, CHANGE_STATE } from './files.js';
+import { fileList, viewSwitch, selectedEntries, selectionPaths, stateIcon, CHANGE_STATE } from './files.js';
+import { hiddenKey, isHidden, isAllHidden, hidePaths, showPath, soloRules } from './hidden.js';
 import { authorRgb } from './graph.js';
 
 /** diff 를 연 파일을 알아보는 키. */
 export const diffKey = (mode, path) => `${mode}:${path}`;
 
-// 그리기 사이에 남는 것: 고른 파일·폴더, 찾기 글, 이번 충돌에서 충돌로 보인 경로, 바쁜 동안 누른 "모두 Stage/Unstage".
+// 그리기 사이에 남는 것: 고른 파일·폴더, 찾기 글, 숨긴 줄을 흐리게 보이는 중인지, 이번 충돌에서 충돌로 보인 경로, 바쁜 동안 누른 "모두 Stage/Unstage".
 const ui = {
   unstaged: { selected: new Set(), folders: new Set(), anchor: null },
   staged: { selected: new Set(), folders: new Set(), anchor: null },
@@ -17,6 +18,7 @@ const ui = {
   filter: '',
   filterOpen: false,
   filterOpening: false,
+  showHidden: false,
   conflictSeen: new Set(),
   queued: null,
 };
@@ -157,7 +159,39 @@ export function renderStaging(container, status, draft, api) {
   for (const e of conflicts) ui.conflictSeen.add(e.path);
   const conflictMode = conflicts.length > 0 || (!!operation && ui.conflictSeen.size > 0);
   const unstagedAll = status.unstaged.filter((e) => e.state !== 'conflicted');
-  const unstaged = conflictMode ? [...conflicts, ...unstagedAll.filter(matches)] : unstagedAll.filter(matches);
+
+  // ── 숨기기: Unstaged 목록에서 보기에서만 감춘다(git 은 그대로). 규칙은 레포지토리(워크트리)마다 설정에 남는다.
+  // Staged 는 커밋될 내용이라 늘 다 보이고, 충돌 중에는 숨기지 않는다. "모두 Stage"·"모든 변경 버리기" 는 숨긴 파일을 건드리지 않는다.
+  const hiddenPref = hiddenKey(api.repoPath?.() ?? '');
+  const rules = conflictMode ? [] : api.prefs.get(hiddenPref) ?? [];
+  const ruleSet = new Set(rules);
+  const hiddenAll = ruleSet.size ? unstagedAll.filter((e) => isHidden(e.path, ruleSet)) : [];
+  const visibleAll = hiddenAll.length ? unstagedAll.filter((e) => !isHidden(e.path, ruleSet)) : unstagedAll;
+  if (!hiddenAll.length) ui.showHidden = false;
+  const setRules = (next) => {
+    api.prefs.set(hiddenPref, next.length ? next : null);
+    rerender();
+  };
+  const rowHidden = (path) => isAllHidden(path, ruleSet, unstagedAll);
+  /** 숨기거나 다시 보인다(모두 숨긴 것이면 다시 보이기). solo: 이것만 남기고 나머지를 숨긴다. */
+  const toggleHidden = (paths, { solo = false } = {}) => {
+    if (!paths.length) return;
+    if (solo) setRules(soloRules(rules, unstagedAll, paths));
+    else if (paths.every(rowHidden)) setRules(paths.reduce((acc, path) => showPath(acc, path, unstagedAll), rules));
+    else setRules(hidePaths(rules, paths));
+  };
+  // 숨긴 줄은 "숨김 n" 을 눌러 흐리게 보이는 동안에만 목록에 있다.
+  const eye = conflictMode ? null : { isHidden: ui.showHidden ? rowHidden : () => false, toggle: toggleHidden };
+  /** 우클릭 메뉴가 쓸 숨기기 동작: 고른 줄 전부에(없으면 누른 줄). */
+  const eyeOps = (fallback) => {
+    if (!eye) return null;
+    const picked = selectionPaths(ui.unstaged);
+    const paths = picked.length ? picked : fallback;
+    return { hidden: paths.every(rowHidden), toggle: () => toggleHidden(paths), solo: () => toggleHidden(paths, { solo: true }) };
+  };
+  // 머리 버튼("모두 Stage")이 옮길 것: 숨기지 않았고 찾기에 걸린 파일.
+  const stageable = visibleAll.filter(matches);
+  const unstaged = conflictMode ? [...conflicts, ...unstagedAll.filter(matches)] : ui.showHidden ? unstagedAll.filter(matches) : stageable;
   // 이번에 풀었지만 바뀐 것이 없는 파일은 "해결한 파일" 에 "변경 없음" 으로 남긴다(푼 파일이 사라진 것처럼 보이지 않게).
   const known = new Set([...status.unstaged, ...status.staged].map((e) => e.path));
   const unchanged = conflictMode ? [...ui.conflictSeen].filter((p) => !known.has(p)).sort().map((path) => ({ path, state: 'modified', note: '변경 없음', unchanged: true })) : [];
@@ -185,7 +219,7 @@ export function renderStaging(container, status, draft, api) {
   const unstagedList = fileList({
     ...common('unstaged', ui.unstaged),
     entries: unstaged,
-    empty: filtering ? '찾는 파일이 없습니다.' : conflictMode ? '남은 충돌이 없습니다.' : '바뀐 파일이 없습니다.',
+    empty: filtering ? '찾는 파일이 없습니다.' : conflictMode ? '남은 충돌이 없습니다.' : hiddenAll.length ? '보이는 파일이 없습니다. 위의 "숨김" 을 누르면 숨긴 파일이 보입니다.' : '바뀐 파일이 없습니다.',
     // GitKraken 배치만: 줄에 마우스를 올리면 그 파일 하나만 옮기는 버튼. 충돌 파일은 "해결됨으로 표시".
     rowAction: fork ? null : {
       labelOf: (e) => (e.state === 'conflicted'
@@ -194,8 +228,9 @@ export function renderStaging(container, status, draft, api) {
     },
     // 더블클릭·Enter = Stage. 충돌 파일은 병합 편집기에서 푼다.
     onActivate: (entries) => stageEntries(entries),
-    onMenu: (event, entries, clicked) => api.fileMenu(event, entries, conflictMode ? 'conflict' : 'unstaged', clicked),
-    onFolderMenu: (event, folder, entries, viewOps) => api.folderMenu(event, folder, entries, 'unstaged', viewOps),
+    eye,
+    onMenu: (event, entries, clicked) => api.fileMenu(event, entries, conflictMode ? 'conflict' : 'unstaged', clicked, eyeOps([clicked.path])),
+    onFolderMenu: (event, folder, entries, viewOps) => api.folderMenu(event, folder, entries, 'unstaged', { ...viewOps, eye: eyeOps([folder.path]) }),
     onDelete: conflictMode ? null : (entries) => api.discardMany(entries, 'unstaged'),
     onSelect: () => {
       clearOther(ui.staged, stagedHost);
@@ -220,13 +255,13 @@ export function renderStaging(container, status, draft, api) {
   unstagedHost.append(unstagedList);
   stagedHost.append(stagedList);
 
-  // 머리 줄 버튼이 옮길 파일: 고른 것, 없거나 Shift(Fork)면 전부. 찾는 중이면 "… All" 은 보이는 것만(원본 ButtonTargets).
+  // 머리 줄 버튼이 옮길 파일: 고른 것, 없거나 Shift(Fork)면 전부. 찾는 중이거나 숨긴 파일이 있으면 "… All" 은 보이는 것만(원본 ButtonTargets).
   // 바쁜 동안 누른 "모두 …" 는 앞 작업이 끝나면 이어서 한다.
   const bulk = (run) => () => {
     if (isBusy()) ui.queued = run;
     else run();
   };
-  const stageAll = bulk(() => (filtering ? api.stage(unstagedAll.filter(matches).map((e) => e.path)) : api.stageAll()));
+  const stageAll = bulk(() => (filtering || hiddenAll.length ? api.stage(stageable.map((e) => e.path)) : api.stageAll()));
   const unstageAll = bulk(() => (filtering ? api.unstage(status.staged.filter(matches).map((e) => e.path)) : api.unstageAll()));
   const unstagedButton = el('span', { class: 'header-btn-host' });
   const stagedButton = el('span', { class: 'header-btn-host' });
@@ -235,20 +270,35 @@ export function renderStaging(container, status, draft, api) {
     const pickS = realStaged(selectedEntries(ui.staged, staged));
     unstagedButton.replaceChildren(conflictMode
       ? el('button', { class: 'staging-btn resolve', disabled: !conflicts.length, 'data-tip': '충돌 파일을 모두 지금 내용 그대로 해결됨으로 표시합니다(git add).', text: '모두 해결됨으로 표시', onclick: () => api.markResolved(conflicts.map((e) => e.path)) })
-      : headerButton('stage', { fork, picked: pickU.length, total: unstaged.length, onAll: stageAll, onSome: () => api.stage(pickU.map((e) => e.path)) }));
+      : headerButton('stage', { fork, picked: pickU.length, total: stageable.length, onAll: stageAll, onSome: () => api.stage(pickU.map((e) => e.path)) }));
     stagedButton.replaceChildren(headerButton('unstage', { fork, picked: pickS.length, total: realStaged(staged).length, onAll: unstageAll, onSome: () => api.unstage(pickS.map((e) => e.path)) }));
   }
   updateButtons();
 
-  const section = (cls, title, host, button) => el('div', { class: `stage-section ${cls}` },
-    el('div', { class: 'stage-header' }, el('span', { class: 'stage-title', text: title }), button),
+  const section = (cls, title, host, button, extra = null) => el('div', { class: `stage-section ${cls}` },
+    el('div', { class: 'stage-header' }, el('span', { class: 'stage-title', text: title }), extra, button),
     host);
-  const unstagedTitle = conflictMode ? `충돌 파일 (${unstaged.length})` : `Unstaged (${unstagedAll.length})`;
+  const unstagedTitle = conflictMode ? `충돌 파일 (${unstaged.length})` : `Unstaged (${visibleAll.length})`;
+  // 숨긴 파일이 있으면 머리 줄에 "숨김 n". 누르면 숨긴 줄을 제자리에 흐리게 보이고(다시 누르면 감춘다), 그 줄의 눈을 눌러 되살린다.
+  const toggleShowHidden = () => {
+    ui.showHidden = !ui.showHidden;
+    rerender();
+  };
+  const hiddenChip = hiddenAll.length ? el('button', {
+    class: `hidden-chip${ui.showHidden ? ' on' : ''}`,
+    'data-tip': ui.showHidden ? '숨긴 파일을 다시 감춥니다.' : '숨긴 파일을 흐리게 보입니다. 숨긴 파일은 "모두 Stage"·"모든 변경 버리기" 에서 빠집니다.',
+    onclick: toggleShowHidden,
+  }, icon('eyeOff', 13), el('span', { text: `숨김 ${hiddenAll.length}` })) : null;
+  if (ui.showHidden) {
+    unstagedHost.prepend(el('div', { class: 'hidden-banner' },
+      el('span', { class: 'hidden-banner-text', text: `숨긴 파일 ${hiddenAll.length}개를 흐리게 보이는 중` }),
+      el('button', { class: 'expand-toggle', 'data-tip': '이 레포지토리에서 숨긴 것을 모두 다시 보입니다.', text: '모두 보이기', onclick: () => setRules([]) })));
+  }
   const stagedTitle = conflictMode ? `해결한 파일 (${status.staged.length + unchanged.length})` : `Staged (${status.staged.length})`;
   const stagedSection = section('staged', stagedTitle, stagedHost, stagedButton);
   stagedSection.style.height = `${api.prefs.get('staging.stagedHeight') ?? 200}px`;
   const lists = el('div', { class: 'staging-lists' });
-  lists.append(section('unstaged', unstagedTitle, unstagedHost, unstagedButton), splitter(lists, api), stagedSection);
+  lists.append(section('unstaged', unstagedTitle, unstagedHost, unstagedButton, hiddenChip), splitter(lists, api), stagedSection);
 
   // ── 경로/트리 줄(+ Fork 배치는 왼쪽 돋보기) ──
   const toggleFilter = () => {
@@ -305,12 +355,15 @@ export function renderStaging(container, status, draft, api) {
   let head = null;
   if (!forkLists) {
     const total = new Set([...status.unstaged, ...status.staged].map((e) => e.path)).size;
+    // 숨긴 파일은 버리지 않는다(Staged 에도 있어 보이는 파일은 버린다).
+    const stagedPaths = new Set(status.staged.map((e) => e.path));
+    const keep = hiddenAll.map((e) => e.path).filter((path) => !stagedPaths.has(path));
     const branch = status.branch?.name || '-';
     const merging = operation === 'merge';
     const incoming = merging ? (api.mergeMessage?.() ?? '').match(/Merge (?:remote-tracking )?branch '([^']+)'/)?.[1] ?? 'MERGE_HEAD' : null;
     head = [
       el('div', { class: `wip-header${merging ? ' merging' : ''}` },
-        el('button', { class: 'wip-discard', 'data-tip': '모든 변경 버리기', disabled: !total, onclick: () => api.discardAll() }, icon('trash', 16)),
+        el('button', { class: 'wip-discard', 'data-tip': keep.length ? `모든 변경 버리기 (숨긴 파일 ${keep.length}개는 그대로 둡니다)` : '모든 변경 버리기', disabled: total <= keep.length, onclick: () => api.discardAll(keep) }, icon('trash', 16)),
         merging ? el('span', { class: 'wip-warning' }, icon('warning', 15)) : null,
         el('span', { class: 'wip-title', text: merging ? '병합 충돌' : `${branch} 의 변경 ${total}개` })),
       merging ? el('div', { class: 'wip-merge-info' },
