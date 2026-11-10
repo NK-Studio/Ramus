@@ -4,7 +4,7 @@
 import { el } from './util.js';
 import { icon } from './icons.js';
 import { confirmDialog, formDialog, showMenu, openDrawer, searchSelect, pickDialog, drawerPrimary, drawerProblem, drawerField } from './dialogs.js';
-import { branchNameProblem } from './graph.js';
+import { branchNameProblem, stashLabel } from './graph.js';
 
 const copy = (text) => navigator.clipboard?.writeText(text);
 
@@ -260,8 +260,8 @@ export function createRefs(ctx) {
   }
 
   async function stashDrop(stash) {
-    if (!(await confirmDialog({ title: 'Stash 버리기', glyph: 'stash', message: `${stash.name} (${stash.message}) 를 버릴까요?\n\n버린 stash 는 되살리기 어렵습니다.`, ok: '삭제', danger: true }))) return;
-    await run('Stash 를 지우는 중…', 'stashDrop', { name: stash.name }, 'Stash 를 지웠습니다.');
+    if (!(await confirmDialog({ title: 'Stash 삭제', glyph: 'stash', message: `되돌릴 수 없는 작업입니다.\n\nstash "${stashLabel(stash.message)}" 를 정말 삭제할까요?`, ok: '삭제', danger: true }))) return;
+    await run('Stash 를 삭제하는 중…', 'stashDrop', { name: stash.name }, 'Stash 를 삭제했습니다.');
   }
 
   async function stashBranch(stash) {
@@ -788,9 +788,9 @@ export function createRefs(ctx) {
     },
     // 원본 PopulateStashMenu.
     stash: (event, stash) => menuAt(event, [
-      { label: 'Apply (목록에 남김)', disabled: busyOp(), action: () => stashApply(stash) },
-      { label: 'Pop (적용하고 목록에서 뺌)', disabled: busyOp(), action: () => stashPop(stash.name) },
-      { label: 'Drop…', danger: true, disabled: busy(), action: () => stashDrop(stash) },
+      { label: 'Apply Stash', disabled: busyOp(), action: () => stashApply(stash) },
+      { label: 'Pop Stash', disabled: busyOp(), action: () => stashPop(stash.name) },
+      { label: 'Delete Stash…', danger: true, disabled: busy(), action: () => stashDrop(stash) },
       '-',
       { label: '변경 보기', action: () => ctx.showCommit(stash.hash, `${stash.name}: ${stash.message}`) },
       { label: '여기서 브랜치 만들기…', disabled: busyOp(), action: () => stashBranch(stash) },

@@ -3,7 +3,7 @@
 // 가지마다 한 줄, 시간은 왼쪽→오른쪽. 배치(가지·칸·줄)는 Rust graph::build(원본 GitGraph.cs)가 하고, 여기는 선·원 그리기(canvas 2D)와
 // 글자(가지 이름표·머리글자·메시지·알약·날짜 — 원본처럼 절대 위치 요소를 재사용), 입력(끌기·휠·클릭)만 맡는다.
 
-import { namedLaneRgb } from './graph.js';
+import { namedLaneRgb, STASH, drawStashBox, stashLabel } from './graph.js';
 import { formatDate, initials } from './util.js';
 import { icon } from './icons.js';
 
@@ -69,7 +69,7 @@ export function buildModel(h) {
   const commits = h?.commits ?? [];
   const n = commits.length;
   const lanes = (h?.graph?.lanes ?? []).map((l) => ({
-    name: l.name, row: l.column, colorIndex: l.color, anonymous: !!l.anonymous, remote: !!l.remote, current: !!l.current,
+    name: l.name, row: l.column, colorIndex: l.color, anonymous: !!l.anonymous, remote: !!l.remote, current: !!l.current, stash: !!l.stash,
     firstColumn: Infinity, lastColumn: -1, rgb: namedLaneRgb({ color: l.color, anonymous: !!l.anonymous }),
   }));
   const nodes = [];
@@ -323,7 +323,8 @@ export function createBranchGraph(opts = {}) {
     const compact = isCompact();
     g.lineWidth = Math.max(1, 1.5 * viewport.zoom);
     for (const lane of graph.lanes) {
-      if (lane.lastColumn < 0) continue;
+      // stash 는 관 없이 점선 상자 하나로 그린다(drawNodes).
+      if (lane.lastColumn < 0 || lane.stash) continue;
       const x0 = canvasX(lane.firstColumn) - radius;
       const x1 = canvasX(lane.lastColumn) + radius;
       if (x1 < -10 || x0 > size.w + 10) continue;
@@ -354,7 +355,10 @@ export function createBranchGraph(opts = {}) {
     const sweepOf = (dy, span) => Math.min(span, clamp(Math.abs(dy) * 1.7, column * 1.6, column * 6));
     for (const edge of graph.edges) {
       const from = nodePos(edge.parent);
+      // stash 로 가는 선은 점선이고 상자 왼쪽 변에서 멈춘다(상자 안은 비워 둔다).
+      const stash = !!edge.child.commit.stash;
       const to = nodePos(edge.child);
+      if (stash) to.x -= NODE_RADIUS * zoom;
       if (Math.max(from.x, to.x) < -50 || Math.min(from.x, to.x) > size.w + 50) continue;
       // 같은 가지 안은 곧은 선 + 부모 쪽 화살촉, 가지를 만든 선은 부모에서 가지 관 머리까지 곧게, 병합 선은 초록 곡선.
       // 색은 새 커밋 쪽 가지 색이고 병합 선만 병합 색이다.
@@ -391,7 +395,12 @@ export function createBranchGraph(opts = {}) {
       } else {
         g.lineTo(to.x, to.y);
       }
+      if (stash) {
+        const dash = Math.max(2, 3 * zoom);
+        g.setLineDash([dash, dash]);
+      }
       g.stroke();
+      if (stash) g.setLineDash([]);
       if (sameLane) drawArrowHead(g, from, color);
     }
     // 기간 밖으로 이어지는 히스토리: 왼쪽으로 짧은 흐린 선.
@@ -456,6 +465,12 @@ export function createBranchGraph(opts = {}) {
       }
 
       if (hover > 0) drawHoverGlow(g, p, radius, ring, 1, hover, node === hovered);
+      // stash: 원 대신 점선 상자 안 받은편지함 그림(메인 그래프와 같은 그림을 확대에 맞춰).
+      if (node.commit.stash) {
+        const scale = Math.max(zoom, 0.35);
+        drawStashBox(g, p.x, p.y, css(ring), { half: radius, dot: STASH.dot * scale, step: STASH.step * scale, icon: STASH.icon * zoom, iconLine: STASH.iconLine * scale });
+        continue;
+      }
       // 많이 축소하면 그림자를 뺀다 — 커밋이 작아 번진 그림자가 얼룩처럼 보인다.
       // 병합된 가지의 커밋은 살짝 흐리게. 투명하게 칠하면 원 뒤를 지나는 선이 비치므로, 관 바탕색 쪽으로 섞은 색을 불투명하게 칠한다
       // (투명하게 칠한 것과 같은 색이 나오되 선은 가린다).
@@ -559,7 +574,7 @@ export function createBranchGraph(opts = {}) {
       const end = canvasX(lane.lastColumn) + radius;
       if (end < 0 || start > size.w) continue;
       // 이름 없는(병합된) 줄은 병합 메시지에서 딴 이름을 "master 에서 병합" 처럼 출처로 보인다 — 그냥 "master" 라고 쓰면 진짜 master 줄과 헷갈렸다.
-      const text = !lane.anonymous ? `/${lane.name}` : lane.name === MERGED_BRANCH ? lane.name : `${lane.name} 에서 병합`;
+      const text = lane.stash ? lane.name : !lane.anonymous ? `/${lane.name}` : lane.name === MERGED_BRANCH ? lane.name : `${lane.name} 에서 병합`;
       let left = Math.max(start, STICKY_MARGIN);
       let maxWidth = Infinity;
       const next = laneStartAfter(lane);
@@ -623,19 +638,21 @@ export function createBranchGraph(opts = {}) {
     for (const node of graph.nodes) {
       const p = nodePos(node);
       if (!isVisibleX(p.x, COLUMN_WIDTH)) continue;
-      const avatar = showAvatars ? opts.avatars?.get?.(node.commit.authorEmail, node.commit.hash) : null;
+      // stash 상자에는 사진·머리글자를 얹지 않는다.
+      const isStash = !!node.commit.stash;
+      const avatar = showAvatars && !isStash ? opts.avatars?.get?.(node.commit.authorEmail, node.commit.hash) : null;
       // 사진·머리글자는 불투명한 원 위에 놓이니 투명도로 흐리게 해도 뒤의 선이 비치지 않는다.
       const opacity = nodeOpacity(node);
       if (avatar) labels.placeImage('bx-avatar', avatar.src, p, radius).style.opacity = opacity < 1 ? String(opacity) : '';
       if (avatarsOnly) continue;
-      if (!avatar) {
+      if (!avatar && !isStash) {
         const label = labels.place('bx-initials', initials(node.commit.authorName), { x: p.x - radius, y: p.y - radius, w: radius * 2, h: radius * 2, fontSize: initialsSize });
         label.style.lineHeight = `${radius * 2}px`;
         if (opacity < 1) label.style.opacity = String(opacity);
       }
       // 폭은 글자에 맞추고(바탕 상자가 글자 둘레만 선을 가리게) 칸 폭을 넘으면 말줄임.
       // 메시지는 바탕 상자째 투명해지면 아래 선이 비치므로 글자 색만 흐리게 한다(.bx-subject--dim).
-      const subject = labels.place('bx-subject', node.commit.subject, { x: p.x, y: p.y + subjectOffset, fontSize: subjectSize, anchorX: 0.5, modifiers: opacity < 1 ? ['bx-subject--dim'] : [] });
+      const subject = labels.place('bx-subject', isStash ? stashLabel(node.commit.subject) : node.commit.subject, { x: p.x, y: p.y + subjectOffset, fontSize: subjectSize, anchorX: 0.5, modifiers: opacity < 1 ? ['bx-subject--dim'] : [] });
       subject.style.maxWidth = `${subjectWidth}px`;
       placePills(node, p, radius);
     }
@@ -709,7 +726,7 @@ export function createBranchGraph(opts = {}) {
     const branchIcon = icon('branch', 14, 'bx-tip-icon');
     branchIcon.style.color = css(hovered.lane.rgb);
     const head = span('bx-tip-head', branchIcon, span('bx-tip-lane', nfc(hovered.lane.name)));
-    const subject = span('bx-tip-subject', nfc(c.subject));
+    const subject = span('bx-tip-subject', nfc(c.stash ? stashLabel(c.subject) : c.subject));
     const meta = span('bx-tip-meta', span('bx-tip-hash', c.shortHash), ` · ${nfc(c.authorName)} · ${formatDate(c.time, true)}`);
     tooltip.replaceChildren(head, subject, div('bx-tip-rule'), meta);
     tooltip.hidden = false;

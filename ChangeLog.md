@@ -16,6 +16,13 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+### 고침
+- 브랜치 탐색기(세로·가로)가 stash 를 세 줄(`On …` · `index on …` · `untracked files on …`)과 `refs/stash` 이름표로 그리던 것을 메인 그래프처럼 점선 상자 한 줄로 그립니다. stash 줄을 우클릭하면 stash 메뉴가 열리고, stash 를 만들거나 지우면 탐색기가 바로 다시 읽습니다.
+
+### 변경
+- stash 메뉴의 항목 이름을 `Apply Stash` · `Pop Stash` · `Delete Stash…` 로 바꿨습니다.
+- stash 삭제 확인 창이 되돌릴 수 없는 작업임을 먼저 알리고, stash 메시지만(`stash@{n}` · `On 브랜치:` 없이) 보입니다.
+
 ## [1.5.3] - 2026-11-10
 
 ### 변경

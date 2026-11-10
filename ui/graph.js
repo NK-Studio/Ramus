@@ -26,13 +26,41 @@ const PUSHED_NODE_OPACITY = 0.45;
 // ── stash(점선 상자 안 받은편지함 그림, 만든 자리까지 점선) ──
 // 아바타를 보일 때 상자는 줄 띠(.band: 줄 높이 34 에서 위아래 3 씩 띄운 28)와 같은 높이다. 띠는 상자 오른쪽 끝에서 시작한다(paintBand).
 // step 은 변 하나의 점 수(점 사이 간격)가 반올림 경계에 걸리지 않게 잡는다(원본 C# 과 같은 수가 나오게).
-const STASH = { half: 14, dot: 2, step: 4.33, icon: 16, iconLine: 1.5 };
+export const STASH = { half: 14, dot: 2, step: 4.33, icon: 16, iconLine: 1.5 };
 const STASH_SMALL = { half: 7, dot: 1.5, step: 3, icon: 9, iconLine: 1.1 };
 const STASH_DASH = [2, 2];
 /** 받은편지함 그림(20 칸): 위가 좁은 상자와 가운데가 파인 받침. */
 const INBOX = typeof Path2D === 'function'
   ? new Path2D('M3 11L5.6 5Q6 4.2 6.8 4.2L13.2 4.2Q14 4.2 14.4 5L17 11L17 15Q17 16 16 16L4 16Q3 16 3 15Z M3 11L7 11L8.3 13L11.7 13L13 11L17 11')
   : null;
+/**
+ * stash 하나: 점선 상자 안에 받은편지함 그림(가로 탐색기도 쓴다). 크기는 STASH 꼴. 점은 네 모서리에 하나씩 오도록 변마다 고르게 놓는다.
+ * 안은 칠하지 않는다(줄 띠 색이 비쳐 보이게) — 선은 상자 밑에서 시작한다.
+ */
+export function drawStashBox(ctx, x, y, color, { half, dot, step, icon: size, iconLine }) {
+  const run = half * 2 - dot;
+  const count = Math.max(1, Math.round(run / step));
+  const gap = run / count;
+  const [left, top, right, bottom] = [x - half, y - half, x + half - dot, y + half - dot];
+  ctx.fillStyle = color;
+  for (let i = 0; i < count; i++) {
+    const d = i * gap;
+    ctx.fillRect(left + d, top, dot, dot);
+    ctx.fillRect(right, top + d, dot, dot);
+    ctx.fillRect(right - d, bottom, dot, dot);
+    ctx.fillRect(left, bottom - d, dot, dot);
+  }
+  if (!INBOX) return;
+  ctx.save();
+  ctx.translate(x - size / 2, y - size / 2);
+  ctx.scale(size / 20, size / 20);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = (iconLine * 20) / size;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke(INBOX);
+  ctx.restore();
+}
 /** stash 메시지 앞의 "WIP on main: "·"On main: " 를 뗀다(사이드바와 같은 글). */
 export const stashLabel = (message) => message.replace(/^(WIP on|On) [^:]+: /, '');
 
@@ -942,35 +970,7 @@ export function createGraph(opts) {
     ctx.lineCap = on ? 'butt' : 'round';
   }
 
-  /**
-   * stash 하나: 점선 상자 안에 받은편지함 그림. 점은 네 모서리에 하나씩 오도록 변마다 고르게 놓는다.
-   * 안은 칠하지 않는다(줄 띠 색이 비쳐 보이게) — 선은 상자 밑에서 시작한다.
-   */
-  function drawStash(ctx, x, y, color) {
-    const { half, dot, step, icon: size, iconLine } = stashSize();
-    const run = half * 2 - dot;
-    const count = Math.max(1, Math.round(run / step));
-    const gap = run / count;
-    const [left, top, right, bottom] = [x - half, y - half, x + half - dot, y + half - dot];
-    ctx.fillStyle = color;
-    for (let i = 0; i < count; i++) {
-      const d = i * gap;
-      ctx.fillRect(left + d, top, dot, dot);
-      ctx.fillRect(right, top + d, dot, dot);
-      ctx.fillRect(right - d, bottom, dot, dot);
-      ctx.fillRect(left, bottom - d, dot, dot);
-    }
-    if (!INBOX) return;
-    ctx.save();
-    ctx.translate(x - size / 2, y - size / 2);
-    ctx.scale(size / 20, size / 20);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = (iconLine * 20) / size;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.stroke(INBOX);
-    ctx.restore();
-  }
+  const drawStash = (ctx, x, y, color) => drawStashBox(ctx, x, y, color, stashSize());
 
   function nodeTopRadius(index) {
     if (showAvatars && commits[index].parents.length < 2) return AVATAR_RADIUS + (index === headRow ? 4 : 2);

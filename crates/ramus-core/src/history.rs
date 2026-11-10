@@ -460,13 +460,20 @@ impl Repository {
             args.push(format!("--since={}", q.since));
         }
         if q.all {
-            // 원본처럼 --all 그대로(refs/stash 도 든다).
+            // refs/stash 는 뺀다 — 그대로 두면 stash 의 index·새 파일 커밋까지 따라 들어온다. stash 는 밑에서 한 줄씩 끼운다(메인 그래프와 같게).
+            args.push("--exclude=refs/stash".into());
             args.push("--all".into());
         }
         args.push("HEAD".into());
         args.push("--".into());
         let out = self.git_run(&args)?;
-        let commits = log::parse_commits(&out, &refs.remotes);
+        let mut commits = log::parse_commits(&out, &refs.remotes);
+        let truncated = commits.len() >= max;
+        // 다음 쪽(skip)에는 다시 넣지 않고, 기간을 골랐으면 그 안에 만든 stash 만 넣는다.
+        if q.all && q.skip == 0 {
+            let stashes: Vec<crate::refs::Stash> = refs.stashes.iter().filter(|s| q.since <= 0 || s.time >= q.since).cloned().collect();
+            log::insert_stashes(&mut commits, self.stash_commits(&stashes), truncated || q.since > 0);
+        }
         let tips: Vec<crate::graph::BranchTip> = refs
             .local
             .iter()
@@ -475,7 +482,6 @@ impl Repository {
             .map(|b| crate::graph::BranchTip { name: b.name.clone(), hash: b.hash.clone(), remote: b.remote.is_some(), current: b.current, time: b.time })
             .collect();
         let graph = crate::graph::build(&commits, &tips, crate::graph::ANONYMOUS_LANE, crate::graph::Options { top_down: q.top_down, head_first: false });
-        let truncated = commits.len() >= max;
         Ok(crate::repo::History { commits, graph, head, truncated })
     }
 

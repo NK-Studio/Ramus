@@ -434,7 +434,7 @@ impl Repository {
     }
 
     /// stash 마다 (이름, 커밋). 새 stash 가 앞. 읽지 못하면 비운다(그래프에 stash 만 빠진다).
-    fn stash_commits(&self, stashes: &[crate::refs::Stash]) -> Vec<(String, log::Commit)> {
+    pub(crate) fn stash_commits(&self, stashes: &[crate::refs::Stash]) -> Vec<(String, log::Commit)> {
         if stashes.is_empty() {
             return Vec::new();
         }

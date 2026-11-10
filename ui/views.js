@@ -56,8 +56,12 @@ export function createViews(ctx) {
     const r = ctx.state.refs;
     if (!r) return '';
     const b = (x) => `${x.name}@${x.hash}${x.current ? '*' : ''}`;
-    return [ctx.state.history?.head ?? '', ...(r.local ?? []).map(b), ...(r.remote ?? []).map(b), ...(r.tags ?? []).map((t) => `${t.name}@${t.hash}`)].join('|');
+    // stash 도 넣는다 — 탐색기 그래프에 stash 줄이 있어, 만들거나 지우면 다시 읽어야 한다.
+    return [ctx.state.history?.head ?? '', ...(r.local ?? []).map(b), ...(r.remote ?? []).map(b), ...(r.tags ?? []).map((t) => `${t.name}@${t.hash}`), ...(r.stashes ?? []).map((t) => `${t.name}@${t.hash}`)].join('|');
   };
+
+  /** 그 커밋이 stash 줄이면 그 stash(메뉴에 넘길 것). */
+  const stashOf = (commit) => (commit?.stash ? ctx.state.refs?.stashes?.find((s) => s.hash === commit.hash) ?? null : null);
 
   const layout = () => ctx.prefs.get('layout') ?? 'gitkraken';
   const explorerStyle = () => (layout() === 'gitkraken' ? 'unity' : ctx.prefs.get('explorer') ?? 'fork');
@@ -545,6 +549,9 @@ export function createViews(ctx) {
       onSelect: (key) => detail.show(key),
       onContextMenu: (key, event, commit) => {
         if (!commit) return;
+        // stash 줄은 메인 그래프처럼 stash 메뉴.
+        const stash = stashOf(commit);
+        if (stash) return void ctx.refsUi.menus.stash(event, stash);
         const parent = commit.parents[0];
         const inList = parent && history?.commits.some((c) => c.hash === parent);
         ctx.refsUi.commitMenu(event, commit, { goToParent: inList ? () => selectCommit(parent) : null });
@@ -1118,6 +1125,8 @@ export function createViews(ctx) {
         if (c.parents.length) ctx.compare(`${c.hash}^`, c.hash, { title: `커밋 ${c.shortHash}` });
       },
       onContextMenu: (event, node) => {
+        const stash = stashOf(node.commit);
+        if (stash) return void ctx.refsUi?.menus?.stash?.(event, stash);
         const parent = parentNodeOf(node);
         ctx.refsUi?.commitMenu?.(event, node.commit, { goToParent: parent ? () => { select(parent); graph.focusNode(parent); } : null });
       },

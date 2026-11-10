@@ -203,3 +203,43 @@ fn history_shows_every_stash_on_its_base_without_helper_commits() {
     let lanes = &snap.history.graph.lanes;
     assert!(snap.history.graph.nodes[..2].iter().all(|n| lanes[n.lane].stash));
 }
+
+#[test]
+fn explorer_history_shows_stashes_as_single_rows() {
+    use ramus_core::history::ExplorerQuery;
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path();
+    init(work);
+    std::fs::write(work.join("a.txt"), "1\n").unwrap();
+    git(work, &["add", "."]);
+    git(work, &["commit", "-q", "-m", "첫 커밋"]);
+    std::fs::write(work.join("a.txt"), "2\n").unwrap();
+    git(work, &["stash", "push", "-q", "-m", "하나"]);
+    std::fs::write(work.join("a.txt"), "3\n").unwrap();
+    std::fs::write(work.join("new.txt"), "새 파일\n").unwrap();
+    git(work, &["stash", "push", "-q", "-u", "-m", "둘"]);
+
+    let repo = Repository::open(GitRunner::default(), work).unwrap();
+    // 세로(Fork 모양)·가로(Unity 모양) 모두: stash 둘 + 첫 커밋. index·새 파일 커밋과 refs/stash 이름표는 없다.
+    for top_down in [true, false] {
+        let h = repo.explorer_history(&ExplorerQuery { all: true, max_count: 100, top_down, ..Default::default() }).unwrap();
+        let head = h.head.clone().unwrap();
+        assert_eq!(h.commits.len(), 3, "{:?}", h.commits.iter().map(|c| &c.subject).collect::<Vec<_>>());
+        let stashes: Vec<_> = h.commits.iter().filter_map(|c| c.stash.as_deref()).collect();
+        assert_eq!(stashes, ["stash@{0}", "stash@{1}"]);
+        for (i, c) in h.commits.iter().enumerate().filter(|(_, c)| c.stash.is_some()) {
+            assert_eq!(c.parents, [head.clone()]);
+            assert!(c.refs.is_empty());
+            assert!(h.graph.lanes[h.graph.nodes[i].lane].stash);
+        }
+        assert!(h.commits.iter().all(|c| !c.subject.starts_with("index on") && !c.subject.starts_with("untracked files on")));
+    }
+    // 지금 브랜치만 볼 때와 다음 쪽에는 stash 를 넣지 않는다.
+    let own = repo.explorer_history(&ExplorerQuery { all: false, max_count: 100, top_down: true, ..Default::default() }).unwrap();
+    assert!(own.commits.iter().all(|c| c.stash.is_none()));
+    let next = repo.explorer_history(&ExplorerQuery { all: true, max_count: 100, top_down: true, skip: 1, ..Default::default() }).unwrap();
+    assert!(next.commits.is_empty());
+    // 기간 밖에 만든 stash 는 뺀다.
+    let later = repo.explorer_history(&ExplorerQuery { all: true, max_count: 100, top_down: true, since: 4_000_000_000, ..Default::default() }).unwrap();
+    assert!(later.commits.is_empty(), "{:?}", later.commits.iter().map(|c| &c.subject).collect::<Vec<_>>());
+}
