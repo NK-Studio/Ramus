@@ -225,7 +225,7 @@ export function createDiffView(container) {
     // 늦을 때만 내용 위에 "불러오는 중" 을 겹친다 — 본문을 갈아 끼워 깜빡이지 않게.
     slowTimer = setTimeout(() => container.querySelector('.diff-loading')?.removeAttribute('hidden'), LOADING_DELAY);
     try {
-      if (state.api.imageDiff && /\.(png|jpe?g|gif|bmp|webp|tga|psd)$/i.test(state.target.path) && !state.forceText) {
+      if (state.api.imageDiff && /\.(png|jpe?g|gif|bmp|webp|tga|psd|tiff?)$/i.test(state.target.path) && !state.forceText) {
         const handled = await state.api.imageDiff(state.target, container, state);
         if (handled && state === current) {
           clearTimeout(slowTimer);

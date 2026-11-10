@@ -1343,7 +1343,7 @@ const actions = {
    */
   prefetchCommitDiff(hash, file) {
     clearTimeout(prefetchTimer);
-    if (state.busy || /\.(png|jpe?g|gif|bmp|webp|tga|psd)$/i.test(file.path)) return;
+    if (state.busy || /\.(png|jpe?g|gif|bmp|webp|tga|psd|tiff?)$/i.test(file.path)) return;
     prefetchTimer = setTimeout(() => {
       const target = { kind: 'commit', hash, path: file.path, originalPath: file.originalPath ?? null };
       loadDiff(target, diffView.loadOptions(prefs, state.settings.diffLayout || 'inline')).catch(() => {});

@@ -912,7 +912,10 @@ impl AppState {
                 if bytes.len() > 64 * 1024 * 1024 {
                     return Err(GitError::new("파일이 너무 커서 열지 않습니다(64MB 넘음)."));
                 }
-                Ok(json!({ "base64": base64(&bytes), "mime": image_mime(&bytes), "size": bytes.len() }))
+                let size = bytes.len();
+                // TIFF 는 WebView 가 못 그린다(Windows WebView2 는 아예 모른다) — PNG 로 바꿔 넘긴다.
+                let bytes = tiff_to_png(&bytes).unwrap_or(bytes);
+                Ok(json!({ "base64": base64(&bytes), "mime": image_mime(&bytes), "size": size }))
             }
             "externalDiff" => {
                 let a = Args(&args);
@@ -1756,6 +1759,19 @@ fn image_mime(bytes: &[u8]) -> &'static str {
     }
 }
 
+/// TIFF 바이트면 PNG 로 다시 담는다. TIFF 가 아니거나 읽지 못하면 None.
+fn tiff_to_png(bytes: &[u8]) -> Option<Vec<u8>> {
+    if !(bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*")) {
+        return None;
+    }
+    let img = image::load_from_memory_with_format(bytes, image::ImageFormat::Tiff).ok()?;
+    // 16비트·부동소수 채널은 PNG 로 그대로 못 담는 것도 있다 — 화면에 보일 8비트 RGBA 로 맞춘다.
+    let img = image::DynamicImage::ImageRgba8(img.to_rgba8());
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, image::ImageFormat::Png).ok()?;
+    Some(out.into_inner())
+}
+
 /// 표준 base64(작은 그림을 data: 주소로 넘길 때만 쓴다).
 pub fn base64(bytes: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -1885,6 +1901,17 @@ mod tests {
     fn reads_remote_urls_from_git_config() {
         let config = "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = git@github.com:NK-Studio/ramus.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n\tremote = origin\n[remote \"upstream\"]\n\turl = https://github.com/o/r.git\n";
         assert_eq!(remote_urls(config), ["git@github.com:NK-Studio/ramus.git", "https://github.com/o/r.git"]);
+    }
+
+    #[test]
+    fn converts_tiff_to_png() {
+        let mut tiff = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(3, 2, image::Rgb([200, 10, 30]))).write_to(&mut tiff, image::ImageFormat::Tiff).unwrap();
+        let png = tiff_to_png(tiff.get_ref()).expect("TIFF 를 PNG 로");
+        assert_eq!(image_mime(&png), "image/png");
+        let back = image::load_from_memory(&png).unwrap();
+        assert_eq!((back.width(), back.height()), (3, 2));
+        assert!(tiff_to_png(&png).is_none());
     }
 
     #[test]

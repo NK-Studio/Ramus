@@ -16,6 +16,9 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+### 추가
+- TIFF 이미지(.tif·.tiff)도 변경·커밋·병합 화면에서 그림으로 미리 봅니다.
+
 ### 변경
 - macOS 판을 zip 대신 DMG 로 배포합니다. 열면 Ramus 를 Applications 폴더로 끌어다 놓으라는 안내 창이 뜹니다.
 

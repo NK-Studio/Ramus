@@ -386,7 +386,7 @@ export function createMergeView(container) {
       return;
     }
     if (!doc.file) {
-      if (/\.(png|jpe?g|gif|bmp|webp)$/i.test(state.path) && state.api.imageSide) {
+      if (/\.(png|jpe?g|gif|bmp|webp|tiff?)$/i.test(state.path) && state.api.imageSide) {
         if (!state.images && !state.loadingImages) {
           state.loadingImages = true;
           loadImages();
