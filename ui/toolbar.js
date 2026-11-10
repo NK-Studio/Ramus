@@ -4,7 +4,7 @@
 
 import { el, isComposing } from './util.js';
 import { icon } from './icons.js';
-import { onProgress, progressText } from './progress.js';
+import { onProgress } from './progress.js';
 
 /** 이 폭보다 좁으면 버튼 글자와 진행 상태 글자를 숨긴다(원본 CompactWidth). */
 const NARROW = 840;
@@ -71,7 +71,6 @@ export function createToolbar(container, ctx) {
   const terminal = action('act-terminal', 'terminal', '터미널', () => ctx.terminal(), { tip: '레포지토리 폴더에서 터미널을 엽니다.' });
   const refresh = action('act-refresh', 'reload', '새로고침', () => ctx.refresh(), { tip: '레포지토리 상태와 지금 보고 있는 탭을 다시 읽습니다.' });
   const more = el('button', { class: 'tb-more', id: 'act-more', 'data-tip': '메뉴', onclick: (e) => ctx.windowMenu(e.currentTarget) }, icon('moreVert', 18));
-  const status = el('div', { class: 'tb-status', id: 'tb-status' }, el('span', { class: 'spinner', hidden: true }), el('span', { class: 'tb-status-text' }));
   const group = (...children) => el('div', { class: 'tb-group' }, children);
   // 작업이 도는 동안 도구 막대 아래 가장자리에 흐르는 막대(진행률을 알면 그만큼 찬다).
   const bar = el('div', { class: 'tb-progress' }, el('div', { class: 'tb-progress-fill' }));
@@ -84,7 +83,6 @@ export function createToolbar(container, ctx) {
     group(branch),
     group(stash, pop),
     el('div', { class: 'tb-spacer' }),
-    el('div', { class: 'tb-side' }, status),
     group(terminal, refresh),
     more,
     bar);
@@ -118,29 +116,19 @@ export function createToolbar(container, ctx) {
     return null;
   }
 
-  // git 이 알리는 진행(받기 45% 등)은 작업이 도는 동안에만 보인다. 이름 붙은 작업(Fetch·Pull·Push)이면 그 job 의 것만.
+  // git 이 알리는 진행(받기 45% 등)은 아래 가장자리 막대에만 반영한다. 이름 붙은 작업(Fetch·Pull·Push)이면 그 job 의 것만.
+  // 진행 글(작업 이름·퍼센트·속도)은 도구 막대에 띄우지 않는다 — 작업 목록(opcard)이 보인다.
   onProgress((p) => {
     if (!busyText || (p?.job ?? null) !== busyJob) return;
     progress = p;
     renderStatus();
   }, '*');
 
-  const shortLabel = (text) => text.replace(/\s*\(.*\)\s*$/, '').replace(/\s*(하는\s*)?중…?$/, '').trim() || text;
-
   function renderStatus() {
-    const spinner = status.querySelector('.spinner');
-    const label = status.querySelector('.tb-status-text');
-    spinner.hidden = !busyText && !fetchState.fetching;
     const fill = bar.firstChild;
     bar.classList.toggle('known', progress?.percent != null);
     fill.style.width = progress?.percent != null ? `${progress.percent}%` : '';
-    status.dataset.tip = busyText ? [busyText, progressText(progress)].filter(Boolean).join('\n') : '';
-    // 진행률을 알면 작업 이름은 줄이고("풀 하는 중… (앞으로 감기만)" → "풀") 숫자를 앞에 보인다. 전체 글은 마우스를 올리면.
-    if (busyText) label.textContent = progress ? `${shortLabel(busyText)} — ${progressText(progress)}` : busyText;
-    else if (fetchState.fetching) label.textContent = '페치하는 중…';
-    // 쉬고 있을 때는 아무 글도 두지 않는다(마지막 Fetch 시각은 Fetch·Pull 버튼 설명에 있다).
     // 자동 Fetch 실패도 글로 띄우지 않는다(원본 AutoFetch: 콘솔에만 남기고, 계정 문제면 Fetch 버튼의 ! 배지).
-    else label.textContent = '';
     if (fetchState.error && fetchState.error !== warned) console.warn(`[Git] 자동 fetch 실패 — ${fetchState.error}`);
     warned = fetchState.error;
   }
