@@ -848,6 +848,8 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .dr { height: 18px; display: flex; min-width: 100%; border-left: 3px solid transparent; }
 .dr.picked, .dr-split:has(.picked) { border-left-color: var(--git-accent); }
 .diff-rows:not(.flow) > .dr { position: absolute; left: 0; right: 0; }
+/* 긴 줄도 바탕색이 끝까지 차게: diff.js 가 잰 가장 넓은 줄 폭을 최소 폭으로(머리 줄·Split 은 제외). */
+.diff-rows:not(.flow) > .dr:not(.dr-hunk):not(.dr-split) { min-width: max(100%, var(--row-w, 0px)); }
 .wrap .dr { height: auto; min-height: 18px; }
 .wrap .tx { white-space: pre-wrap; word-break: break-all; }
 .dr .ln { flex: none; width: var(--ln); padding-right: 6px; text-align: right; font-size: 11px; color: var(--git-diff-number); user-select: none; -webkit-user-select: none; background: var(--git-diff-gutter); }

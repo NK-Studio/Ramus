@@ -137,6 +137,7 @@ export function createDiffView(container) {
   let state = null;
   let body = null;
   let rowsHost = null;
+  let rowWidth = 0; // 지금까지 잰 가장 넓은 줄 폭(px). 그리기마다 새로 잰다.
   let rows = []; // 그릴 줄: {type:'hunk', index, hunk} | {type:'line', index, hunk} | {type:'split', left, right, hunk} | {type:'meta', index}
   let tops = [0]; // 행마다 위 끝(px). tops[r+1]-tops[r] = 행 높이(Hunk 보기의 머리 줄은 30px).
   let changeBlocks = []; // 바뀐 덩어리의 첫 행 번호
@@ -485,8 +486,44 @@ export function createDiffView(container) {
       if (!wrap) node.style.top = `${tops[r]}px`;
       fragment.append(node);
     }
+    const painted = [...fragment.children];
     rowsHost.replaceChildren(fragment);
+    if (!wrap) fitRowWidth(painted);
     placeActions();
+  }
+
+  /**
+   * 줄은 절대 위치(left:0·right:0)라 폭이 화면 폭에 묶이고, 긴 글자만 그 밖으로 넘쳐 바탕색이 중간에서 끊긴다.
+   * 그린 줄의 실제 폭을 재어 가장 넓은 값(--row-w)을 모든 줄의 최소 폭으로 삼는다(줄어들지는 않는다).
+   * Split 은 반쪽이 제 폭에서 잘리고, 머리 줄(@@)은 버튼이 화면 오른쪽에 있어야 하니 넓히지 않는다.
+   */
+  function fitRowWidth(nodes) {
+    let widest = rowWidth;
+    for (const node of nodes) {
+      if (node.classList.contains('dr-hunk') || node.classList.contains('dr-split')) continue;
+      widest = Math.max(widest, node.scrollWidth + node.offsetWidth - node.clientWidth);
+    }
+    if (widest <= rowWidth) return;
+    rowWidth = Math.ceil(widest);
+    rowsHost.style.setProperty('--row-w', `${rowWidth}px`);
+  }
+
+  /** 글자 수(탭은 4칸, 넓은 글자는 2칸)로 가장 긴 줄을 어림한다. 처음부터 가로 스크롤 끝이 맞도록 먼저 한 번 잰다. */
+  function longestRow() {
+    let best = -1;
+    let bestLen = 0;
+    rows.forEach((row, r) => {
+      if (row.type !== 'line' && row.type !== 'meta') return;
+      const text = state.doc.lines[row.index].text ?? '';
+      if (text.length * 4 <= bestLen) return; // 한 글자는 많아야 4칸(탭)
+      let len = 0;
+      for (const ch of text) len += ch === '\t' ? 4 : ch.codePointAt(0) >= 0x1100 ? 2 : 1;
+      if (len > bestLen) {
+        bestLen = len;
+        best = r;
+      }
+    });
+    return best;
   }
 
   /** Hunk 보기 머리 줄 오른쪽: [변경된 묶음 버리기](빨강, Unstaged 만) [변경된 묶음 Stage](초록, Staged 면 [변경된 묶음 Unstage] 빨강). */
@@ -1002,6 +1039,15 @@ export function createDiffView(container) {
       body.scrollTop = prevScroll;
       state.scrollTop = false;
       lastRange = '';
+      rowWidth = 0;
+      if (!isWrap()) {
+        const probe = longestRow();
+        if (probe >= 0) {
+          const node = rowElement(rows[probe], probe);
+          rowsHost.append(node);
+          fitRowWidth([node]);
+        }
+      }
       paint(true);
     } else {
       band.hidden = true;
