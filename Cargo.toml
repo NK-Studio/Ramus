@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/ramus-core", "crates/ramus-app"]
 
 [workspace.package]
-version = "1.5.3"
+version = "1.5.4"
 edition = "2024"
 license = "Unlicense"
 authors = ["NK Studio"]
