@@ -3,6 +3,9 @@
 Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.gitvcs) 를 Unity 밖에서 혼자 도는 앱으로 옮긴 Git 클라이언트입니다.
 앱에 넣어 둔 `git`(또는 설정에서 고른 git)을 실행하고, 화면은 웹뷰(wry)로 그립니다. 대상은 macOS(Apple Silicon)·Windows 입니다.
 
+<img width="2446" height="1594" alt="image" src="https://github.com/user-attachments/assets/37f379b5-5b33-42e5-ace4-d86fc7a18f98" />
+
+
 ## 내려받기
 
 [Releases](https://github.com/NK-Studio/gitvcs-desktop/releases/latest) 에서 받습니다.
