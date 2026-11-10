@@ -5,6 +5,7 @@ Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.
 
 <img width="2446" height="1594" alt="image" src="https://github.com/user-attachments/assets/37f379b5-5b33-42e5-ace4-d86fc7a18f98" />
 
+<img width="2382" height="1752" alt="image" src="https://github.com/user-attachments/assets/98861a80-2d56-4b87-801b-3cdbc377abc4" />
 
 ## 내려받기
 
