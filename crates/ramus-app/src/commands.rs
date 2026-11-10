@@ -358,7 +358,8 @@ impl AppState {
         self.repo.lock().unwrap().clone().ok_or_else(|| GitError::new("열린 레포지토리가 없습니다."))
     }
 
-    fn open_repo(self: &std::sync::Arc<Self>, path: &Path, effects: &mut Vec<SideEffect>) -> Result<Value> {
+    /// `beside`: 새 탭을 둘 자리 — 그 탭 바로 오른쪽(워크트리를 탭으로 열 때). 없으면 맨 끝.
+    fn open_repo(self: &std::sync::Arc<Self>, path: &Path, beside: Option<&str>, effects: &mut Vec<SideEffect>) -> Result<Value> {
         let started = Instant::now();
         let repo = Repository::open(self.runner.clone(), path)?;
         let root = repo.root().display().to_string();
@@ -366,7 +367,7 @@ impl AppState {
         {
             let mut settings = self.settings.lock().unwrap();
             settings.touch_recent(&root, &repo.name(), now());
-            settings.open_tab(&root);
+            settings.open_tab(&root, beside);
             self.save_settings(&settings);
         }
         trace("openRepo settings", t);
@@ -492,7 +493,7 @@ impl AppState {
             "init" => {
                 let last = self.settings.lock().unwrap().last_repo.clone();
                 // 마지막 레포지토리를 다시 연다. 지워졌으면 시작 화면.
-                let repo = last.and_then(|p| self.open_repo(Path::new(&p), effects).ok());
+                let repo = last.and_then(|p| self.open_repo(Path::new(&p), None, effects).ok());
                 Ok(json!({ "settings": self.settings_json(), "repo": repo, "platform": std::env::consts::OS, "version": env!("CARGO_PKG_VERSION") }))
             }
             // 정보창(ui/about.js): 앱 버전·빌드 표식(build.rs)·설치된 git·웹뷰 엔진·운영체제.
@@ -510,8 +511,9 @@ impl AppState {
                 }))
             }
             "openRepo" => {
+                let beside = args.get("beside").and_then(Value::as_str).map(str::to_string);
                 let a: PathArg = parse(args)?;
-                let mut info = self.open_repo(Path::new(&a.path), effects)?;
+                let mut info = self.open_repo(Path::new(&a.path), beside.as_deref(), effects)?;
                 // 탭 목록이 바뀌었다 — 화면이 따로 묻지 않게 함께 돌려준다.
                 info["settings"] = self.settings_json();
                 Ok(info)
@@ -540,7 +542,7 @@ impl AppState {
                     allow_existing: a.b("allowExisting"),
                 };
                 let outcome = newrepo::create_local(&self.runner, &path, &request)?;
-                let mut info = self.open_repo(&path, effects)?;
+                let mut info = self.open_repo(&path, None, effects)?;
                 info["warning"] = json!(outcome.warning);
                 Ok(info)
             }
@@ -588,7 +590,7 @@ impl AppState {
                     }
                     self.save_settings(&settings);
                 }
-                self.open_repo(repo.root(), effects)
+                self.open_repo(repo.root(), None, effects)
             }
             "getSettings" => Ok(self.settings_json()),
             "setUi" => {
@@ -679,7 +681,7 @@ impl AppState {
                 });
                 // open: false 면 받기만 하고 열지 않는다(뒤에서 받은 것 — 사용자가 다른 레포지토리를 보고 있을 수 있다). 화면이 나중에 연다.
                 let mut info = if args.get("open").and_then(Value::as_bool).unwrap_or(true) {
-                    self.open_repo(repo.root(), effects)?
+                    self.open_repo(repo.root(), None, effects)?
                 } else {
                     let path = repo.root().display().to_string();
                     let name = repo.root().file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());

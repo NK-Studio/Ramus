@@ -165,7 +165,7 @@ const refsUi = createRefs({
     if (layoutName() === 'gitkraken' && state.history?.commits.some((c) => c.hash === hash)) revealCommit(hash);
     else showCommitDetail(hash, title);
   },
-  openRepo: (path) => openRepo(path),
+  openRepo: (path, options) => openRepo(path, options),
   notify: (text) => toast(text, 'info'),
   showError,
   // 그래프 안 입력란은 GitKraken 그래프 탭이 있을 때만 쓴다(그 탭으로 옮긴 뒤 띄운다). 다른 배치는 브랜치 만들기 카드.
@@ -611,17 +611,25 @@ async function pickRepo() {
   if (path) await openRepo(path);
 }
 
-async function openRepo(path) {
+/** `beside`: 처음 여는 탭을 보던 탭 바로 오른쪽에 둔다(워크트리를 탭으로 열 때). 아니면 맨 끝에 생긴다. */
+async function openRepo(path, { beside = false } = {}) {
   // 다른 레포지토리로 가기 전에 도구 화면을 닫는다(편집 중이면 저장할지 묻고, 취소하면 머문다).
   if (toolOpen() && state.repo && state.repo.path !== path && (await closeTool()) === false) return;
   const previous = state.repo?.path ?? null;
+  // 옆에 여는 탭은 응답을 기다리지 않고 자리에 먼저 그려 둔다(응답의 탭 목록이 곧 덮어쓴다). 열지 못하면 아래 catch 가 뺀다.
+  const tabs = state.settings.openTabs ?? [];
+  const placed = beside && !!previous && previous !== path && !tabs.some((t) => t.path === path);
+  if (placed) {
+    const at = tabs.findIndex((t) => t.path === previous) + 1 || tabs.length;
+    state.settings.openTabs = [...tabs.slice(0, at), { path, name: path.split(/[\\/]/).filter(Boolean).pop() }, ...tabs.slice(at)];
+  }
   // 누르자마자 활성 탭을 옮긴다 — 여는 동안 아무 반응이 없어 보이지 않게. 실패하면 아래 catch 가 되돌린다.
   drawTabs(path);
   // 가운데 로딩 HUD: 탭에 보이는 이름 그대로(없으면 폴더 이름).
   const tabName = (state.settings.openTabs ?? []).find((t) => t.path === path)?.name ?? path.split(/[\\/]/).filter(Boolean).pop();
   const hud = switchHud.show(tabName);
   const entry = previous && previous !== path ? repoCache.get(path) : null;
-  const request = call('openRepo', { path });
+  const request = call('openRepo', beside && previous ? { path, beside: previous } : { path });
   // 응답이 올 때까지 레포지토리에 묶인 요청(diff·stage…)은 미룬다 — 백엔드는 아직 이전 레포지토리다.
   beginRepoSwitch(path, request);
   try {
@@ -643,6 +651,7 @@ async function openRepo(path) {
     switchHud.hide(hud);
   } catch (error) {
     switchHud.hide(hud, { immediate: true });
+    if (placed) state.settings.openTabs = (state.settings.openTabs ?? []).filter((t) => t.path !== path);
     if (error?.gone) {
       // 폴더가 사라진 탭을 눌렀다 — 캐시로 먼저 그렸으면 보던 레포지토리로 돌아간다.
       await repoGone(path, entry && previous ? previous : null);

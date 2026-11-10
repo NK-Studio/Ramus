@@ -277,7 +277,7 @@ export function createRefs(ctx) {
 
   /**
    * 이름표·사이드바 줄을 두 번 눌렀을 때: 로컬은 전환, 원격은 같은 이름 로컬로(없으면 추적 브랜치 만들기), 태그는 그 커밋으로(detached),
-   * stash 는 변경 보기, 워크트리는 열기, 서브모듈은 편집 드로어. 이미 지금 브랜치거나 진행 중인 작업이 있으면 전환하지 않는다.
+   * stash 는 변경 보기, 워크트리는 탭으로 열기, 서브모듈은 편집 드로어. 이미 지금 브랜치거나 진행 중인 작업이 있으면 전환하지 않는다.
    */
   function activate(target) {
     // 다른 작업이 도는 중이면 아무것도 하지 않는다(원본 RunDefault).
@@ -303,14 +303,26 @@ export function createRefs(ctx) {
         ctx.showCommit(target.stash.hash, `${target.stash.name}: ${target.stash.message}`);
         break;
       case 'worktree':
-        // 원본처럼 그 워크트리 폴더를 Finder·탐색기로 연다.
-        call('openFolder', { path: target.worktree.path }).catch(ctx.showError);
+        openWorktree(target.worktree);
         break;
       case 'submodule':
         editSubmodule(target.submodule);
         break;
       default:
     }
+  }
+
+  /**
+   * 워크트리를 탭으로 연다(원본은 Finder·탐색기로 폴더를 열었다 — 그것은 메뉴의 "폴더 열기" 에 남겼다).
+   * 보던 탭 바로 오른쪽에 새 탭이 생기고 그 작업 폴더 기준으로 다시 읽는다. 이미 열어 둔 워크트리면 그 탭으로 간다.
+   */
+  function openWorktree(w) {
+    if (w.current) return;
+    if (w.prunable) {
+      ctx.notify(`워크트리 폴더를 찾을 수 없습니다: ${w.path}`);
+      return;
+    }
+    ctx.openRepo(w.path, { beside: true });
   }
 
   /** 그래프 이름표를 두 번 눌렀을 때. */
@@ -787,6 +799,8 @@ export function createRefs(ctx) {
     ]),
     // 원본 PopulateWorktreeMenu: 지금 쓰고 있는 워크트리와 원본(bare) 레포지토리는 지울 수 없다.
     worktree: (event, w) => menuAt(event, [
+      { label: '탭으로 열기', disabled: w.current || w.prunable, action: () => openWorktree(w) },
+      '-',
       { label: '폴더 열기', action: () => call('openFolder', { path: w.path }).catch(ctx.showError) },
       { label: '터미널 열기', action: () => call('openTerminal', { path: w.path }).catch(ctx.showError) },
       { label: '경로 복사', action: () => copy(w.path) },

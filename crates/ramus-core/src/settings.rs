@@ -108,11 +108,13 @@ impl Settings {
         self.last_repo = Some(path.to_string());
     }
 
-    /// 탭을 연다(이미 있으면 그대로).
-    pub fn open_tab(&mut self, path: &str) {
-        if !self.open_tabs.iter().any(|t| same_path(t, path)) {
-            self.open_tabs.push(path.to_string());
+    /// 탭을 연다(이미 있으면 그 자리 그대로). `after` 를 주면 그 탭 바로 오른쪽에, 없거나 그 탭이 없으면 맨 끝에 둔다.
+    pub fn open_tab(&mut self, path: &str, after: Option<&str>) {
+        if self.open_tabs.iter().any(|t| same_path(t, path)) {
+            return;
         }
+        let at = after.and_then(|a| self.open_tabs.iter().position(|t| same_path(t, a))).map_or(self.open_tabs.len(), |i| i + 1);
+        self.open_tabs.insert(at, path.to_string());
     }
 
     pub fn close_tab(&mut self, path: &str) {
@@ -155,6 +157,19 @@ mod tests {
         s.remove_recent("/r/10");
         assert!(s.recent.iter().all(|r| r.name != "10"));
         assert_eq!(s.last_repo, None);
+    }
+
+    #[test]
+    fn tabs_open_at_the_end_or_beside_another() {
+        let mut s = Settings::default();
+        s.open_tab("/r/a", None);
+        s.open_tab("/r/b", None);
+        s.open_tab("/r/c", Some("/r/a/"));
+        assert_eq!(s.open_tabs, ["/r/a", "/r/c", "/r/b"]);
+        // 이미 열린 탭은 옮기지 않는다. 기준 탭이 없으면 맨 끝.
+        s.open_tab("/r/b", Some("/r/a"));
+        s.open_tab("/r/d", Some("/r/none"));
+        assert_eq!(s.open_tabs, ["/r/a", "/r/c", "/r/b", "/r/d"]);
     }
 
     #[test]
