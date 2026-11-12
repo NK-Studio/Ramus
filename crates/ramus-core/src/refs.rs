@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Repository, Result};
 
 const FIELD: char = '\x1f';
@@ -171,15 +172,15 @@ impl Repository {
     /// git 이 받는 브랜치 이름인가. 아니면 그 이유.
     pub fn check_branch_name(&self, name: &str) -> Result<()> {
         if name.trim().is_empty() {
-            return Err(GitError::new("이름을 적어 주세요."));
+            return Err(GitError::new(tr("이름을 적어 주세요.", "Enter a name.")));
         }
-        self.git_run(&["check-ref-format", "--branch", name]).map(|_| ()).map_err(|_| GitError::new(format!("브랜치 이름으로 쓸 수 없습니다: {name}")))
+        self.git_run(&["check-ref-format", "--branch", name]).map(|_| ()).map_err(|_| GitError::new(crate::trf!("브랜치 이름으로 쓸 수 없습니다: {name}", "Can't be used as a branch name: {name}")))
     }
 
     /// 체크아웃이 작업 중 변경 때문에 막혔으면 무엇을 하면 되는지 앞에 붙인다.
     fn explain_checkout(e: GitError) -> GitError {
         if e.message.contains("would be overwritten by checkout") || e.message.contains("would be overwritten by switch") {
-            GitError::new(format!("작업 중인 변경이 체크아웃할 쪽과 겹쳐 바꿀 수 없습니다. 먼저 커밋하거나 Stash 해 주세요.\n\n{}", e.message))
+            GitError::new(crate::trf!("작업 중인 변경이 체크아웃할 쪽과 겹쳐 바꿀 수 없습니다. 먼저 커밋하거나 Stash 해 주세요.\n\n{}", "Your changes overlap with the branch you're checking out, so it can't switch. Commit or Stash them first.\n\n{}", e.message))
         } else {
             e
         }
@@ -189,7 +190,7 @@ impl Repository {
     pub fn checkout(&self, name: &str, remote: bool) -> Result<()> {
         if remote {
             let refs = self.refs()?;
-            let branch = refs.remote.iter().find(|b| b.name == name).ok_or_else(|| GitError::new(format!("원격 브랜치가 없습니다: {name}")))?;
+            let branch = refs.remote.iter().find(|b| b.name == name).ok_or_else(|| GitError::new(crate::trf!("원격 브랜치가 없습니다: {name}", "No such remote branch: {name}")))?;
             let prefix = format!("{}/", branch.remote.clone().unwrap_or_default());
             let local = name.strip_prefix(&prefix).unwrap_or(name);
             if refs.local.iter().any(|b| b.name == local) {
@@ -223,7 +224,7 @@ impl Repository {
     pub fn delete_branch(&self, name: &str, force: bool) -> Result<()> {
         self.git_run(&["branch", if force { "-D" } else { "-d" }, "--", name]).map(|_| ()).map_err(|e| {
             if e.message.contains("not fully merged") {
-                GitError::new(format!("'{name}' 에는 아직 병합하지 않은 커밋이 있습니다. 그래도 지우려면 '강제로 지우기' 를 골라 주세요."))
+                GitError::new(crate::trf!("'{name}' 에는 아직 병합하지 않은 커밋이 있습니다. 그래도 지우려면 '강제로 지우기' 를 골라 주세요.", "'{name}' has unmerged commits. To delete it anyway, choose 'Force Delete'."))
             } else {
                 e
             }
@@ -237,8 +238,9 @@ impl Repository {
     /// 작업이 충돌로 멈췄으면 git 원문 대신 무엇을 하면 되는지 알린다.
     fn explain_conflict(&self, what: &str, result: Result<String>) -> Result<String> {
         result.map_err(|e| match self.status() {
-            Ok(st) if st.operation.is_some() && st.conflicted > 0 => GitError::new(format!(
+            Ok(st) if st.operation.is_some() && st.conflicted > 0 => GitError::new(crate::trf!(
                 "{what} 중 충돌이 났습니다. 충돌 파일 {}개를 변경 목록에서 눌러 풀고 '이어가기' 를 눌러 주세요. 그만두려면 '중단' 을 누르면 됩니다.",
+                "{what} stopped with conflicts. Click the {} conflicted files in the changes list to resolve them, then click 'Continue'. To give up, click 'Abort'.",
                 st.conflicted
             )),
             _ => e,
@@ -246,7 +248,7 @@ impl Repository {
     }
 
     pub fn merge(&self, revision: &str) -> Result<String> {
-        self.explain_conflict("병합", self.git_run(&["merge", "--no-edit", revision]))
+        self.explain_conflict(tr("병합", "Merge"), self.git_run(&["merge", "--no-edit", revision]))
     }
 
     pub fn rebase(&self, revision: &str) -> Result<String> {
@@ -258,8 +260,9 @@ impl Repository {
         let out = self.git_run(&["rebase", "--autostash", revision]);
         if out.is_err() && !stop_on_conflict && self.git_dir().join("rebase-merge").exists() {
             let _ = self.git_run(&["rebase", "--abort"]);
-            return Err(GitError::new(format!(
+            return Err(GitError::new(crate::trf!(
                 "Rebase 하다 충돌이 나서 시작하기 전으로 되돌렸습니다. 충돌을 직접 풀려면 설정 > 그래프 의 'Rebase 충돌 때 멈추기' 를 켜세요.\n\n{}",
+                "The Rebase hit a conflict, so it was rolled back to where it started. To resolve conflicts yourself, turn on 'Stop on Rebase Conflicts' in Settings > Graph.\n\n{}",
                 out.err().map(|e| e.message).unwrap_or_default()
             )));
         }
@@ -287,7 +290,7 @@ impl Repository {
 
     pub fn create_tag(&self, name: &str, hash: &str, message: &str) -> Result<()> {
         if self.git_run(&["check-ref-format", &format!("refs/tags/{name}")]).is_err() || name.trim().is_empty() {
-            return Err(GitError::new(format!("태그 이름으로 쓸 수 없습니다: {name}")));
+            return Err(GitError::new(crate::trf!("태그 이름으로 쓸 수 없습니다: {name}", "Can't be used as a tag name: {name}")));
         }
         if message.trim().is_empty() {
             self.git_run(&["tag", "--", name, hash]).map(|_| ())
@@ -312,7 +315,7 @@ impl Repository {
         }
         let out = self.git_run_with_env(&args, &[("GIT_LITERAL_PATHSPECS", "0")])?;
         if out.contains("No local changes to save") {
-            return Err(GitError::new("stash 할 변경이 없습니다."));
+            return Err(GitError::new(tr("stash 할 변경이 없습니다.", "There are no changes to stash.")));
         }
         Ok(())
     }

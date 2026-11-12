@@ -6,6 +6,10 @@
 import { el } from './util.js';
 import { icon } from './icons.js';
 import { onProgress, progressText } from './progress.js';
+import { scoped, isEn } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/opcard.js 를 먼저 본다). */
+const t = scoped('opcard');
 
 const SHOW_AFTER_MS = 900;
 
@@ -21,15 +25,15 @@ const DONE_LINGER_MS = 1400;
 
 /** 진행 글("풀 하는 중… (앞으로 감기만)")로 아이콘을 고른다. */
 function glyphOf(label) {
-  if (/^풀/.test(label)) return 'pull';
-  if (/^푸시/.test(label)) return 'push';
+  if (/^풀|^Pull/.test(label)) return 'pull';
+  if (/^푸시|^Push/.test(label)) return 'push';
   if (/페치|Fetch/.test(label)) return 'fetch';
   return 'refresh';
 }
 
 const seconds = (ms) => {
   const s = Math.floor(ms / 1000);
-  return s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`;
+  return s < 60 ? t('{sec}초', { sec: s }) : t('{min}분 {sec}초', { min: Math.floor(s / 60), sec: s % 60 });
 };
 
 /**
@@ -40,10 +44,12 @@ export function startOpCard(host, label, { showAfter = SHOW_AFTER_MS, owner = nu
   const started = performance.now();
   const title = label;
   // "풀 하는 중… (앞으로 감기만)" → "풀"(완료 제목용).
-  const short = label.replace(/\s*\(.*\)\s*$/, '').replace(/\s*(하는\s*)?중…?$/, '').trim() || label;
+  // 영어 진행 글("Pushing…")은 끝의 … 만 뗀다.
+  const stem = label.replace(/\s*\(.*\)\s*$/, '').replace(/\s*(하는\s*)?중…?$/, '');
+  const short = (isEn ? stem.replace(/…$/, '') : stem).trim() || label;
   const badge = el('span', { class: 'op-card-badge' }, icon(glyphOf(label), 18), el('span', { class: 'op-card-spin' }));
   const titleNode = el('span', { class: 'op-card-title', text: title });
-  const phase = el('div', { class: 'op-card-phase', text: '서버 응답을 기다리는 중…' });
+  const phase = el('div', { class: 'op-card-phase', text: t('서버 응답을 기다리는 중…') });
   const elapsed = el('span', { class: 'op-card-time', text: '' });
   const fill = el('div', { class: 'op-card-fill' });
   const bar = el('div', { class: 'op-card-bar' }, fill);
@@ -92,8 +98,8 @@ export function startOpCard(host, label, { showAfter = SHOW_AFTER_MS, owner = nu
     bar.classList.add('known');
     fill.style.width = '100%';
     badge.replaceChildren(icon('check', 18));
-    titleNode.textContent = `${short} 완료`;
-    phase.textContent = doneText ? `${doneText} · ${seconds(performance.now() - started)}` : `완료 · ${seconds(performance.now() - started)} 걸렸습니다`;
+    titleNode.textContent = t('{name} 완료', { name: short });
+    phase.textContent = doneText ? `${doneText} · ${seconds(performance.now() - started)}` : t('완료 · {time} 걸렸습니다', { time: seconds(performance.now() - started) });
     elapsed.textContent = '';
     setTimeout(() => {
       node.classList.add('leaving');

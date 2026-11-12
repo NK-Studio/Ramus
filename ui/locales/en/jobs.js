@@ -1,0 +1,26 @@
+// ui/jobs.js 의 영어. 키는 t() 에 넘기는 한국어 원문 그대로.
+// 작업 종류의 낱말(받기·페치·풀·푸시)은 progress.js·toolbar.js 표에 있다.
+export default {
+  '전환': 'Switch',
+  '작업 목록': 'Operations',
+  '연결 중': 'Connecting',
+  '기다리는 중': 'Waiting',
+  '취소': 'Cancel',
+  '취소하는 중…': 'Cancelling…',
+  '목록에서 지우기': 'Remove from list',
+  '완료': 'Done',
+  '열기': 'Open',
+  '실패했습니다.': 'Failed.',
+  '다시 시도': 'Try Again',
+  '자세히': 'Details',
+  'Clone 실패': 'Clone Failed',
+  '진행 중 {n}': '{n} running',
+  '완료 {n}': '{n} done',
+  '진행 중인 작업 없음': 'Nothing in progress',
+  '끝난 항목 지우기': 'Clear Finished',
+  '{name} 받기': 'Clone {name}',
+  '받았습니다': 'Cloned',
+  '{name} 를 받았습니다. 위쪽 작업 목록에서 열 수 있습니다.': 'Cloned {name}. You can open it from the operations list above.',
+  "'{name}' Clone 을 취소했습니다.": "Cancelled cloning '{name}'.",
+  "'{name}' 를 받지 못했습니다. 위쪽 작업 목록에서 자세히 볼 수 있습니다.": "Couldn't clone '{name}'. See the operations list above for details.",
+};

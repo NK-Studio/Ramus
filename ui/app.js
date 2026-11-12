@@ -22,8 +22,15 @@ import { createViews } from './views.js';
 import { createGitHub } from './github.js';
 import { newRepoDialog } from './newrepo.js';
 import { createJobs } from './jobs.js';
+import { scoped, isEn, lang, switchLanguage, translateStatic } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/app.js 를 먼저 본다). */
+const t = scoped('app');
 
 const $ = (id) => document.getElementById(id);
+
+/** 번역한 글의 {이름} 자리에 요소(굵은 이름 등)를 끼운다 — 말 차례가 언어마다 달라서. */
+const richText = (text, nodes) => text.split(/\{(\w+)\}/).map((part, i) => (i % 2 ? nodes[part] ?? `{${part}}` : part)).filter((part) => part !== '');
 
 const state = {
   settings: { theme: 'dark', recent: [], ui: {} },
@@ -90,7 +97,7 @@ function toast(message, kind = 'info') {
   const node = el('div', { class: `toast ${kind}`, role: kind === 'error' || kind === 'warning' ? 'alert' : 'status' },
     el('span', { class: 'toast-icon' }, glyph),
     el('div', { class: 'toast-text', text: message }),
-    el('button', { class: 'toast-close', 'data-tip': '닫기', 'aria-label': '닫기', onclick: leave }, icon('close', 12)));
+    el('button', { class: 'toast-close', 'data-tip': t('닫기'), 'aria-label': t('닫기'), onclick: leave }, icon('close', 12)));
   node.addEventListener('mouseenter', () => clearTimeout(timer));
   node.addEventListener('mouseleave', () => { if (!leaving) arm(); });
   $('toasts').append(node);
@@ -212,7 +219,7 @@ const toolbar = createToolbar($('toolbar'), {
   },
   pull: () => pull(),
   pullMenu: (button) => menuBelow(button, Object.entries(PULL_MODES).map(([mode, label]) => ({
-    label: `${label}${mode === 'ffOnly' ? ' (기본)' : ''}`,
+    label: mode === 'ffOnly' ? t('{label} (기본)', { label }) : label,
     checked: state.settings.pullMode === mode,
     action: async () => {
       state.settings = await call('setSettings', { pullMode: mode });
@@ -322,7 +329,7 @@ async function setTheme(theme) {
   await call('setSettings', { theme }).catch(showError);
 }
 
-const THEMES = { dark: '다크', light: '라이트', system: '시스템 따르기' };
+const THEMES = { dark: t('다크'), light: t('라이트'), system: t('시스템 따르기') };
 const LAYOUTS = { gitkraken: 'GitKraken', fork: 'Fork', unity: 'Unity VCS' };
 const EXPLORERS = { fork: 'Fork', unity: 'Unity VCS' };
 
@@ -441,7 +448,7 @@ async function repoGone(path, previous = null) {
     } else drawTabs();
     // 시작 화면·"다시 열기" 가 사라진 레포지토리를 캐시로 그리지 않게(newTab 이 보관해 둔 것도 함께).
     repoCache.delete(path);
-    toast(tab ? `'${name}' 폴더를 찾을 수 없어 탭을 닫았습니다.` : `'${name}' 폴더를 찾을 수 없습니다.`, 'info');
+    toast(tab ? t("'{name}' 폴더를 찾을 수 없어 탭을 닫았습니다.", { name }) : t("'{name}' 폴더를 찾을 수 없습니다.", { name }), 'info');
   } finally {
     goneHandling.delete(path);
   }
@@ -469,8 +476,8 @@ async function withLogin(work) {
       }
       if (!target.host) throw error;
       const reason = attempt === 0
-        ? `${target.host} 서버가 로그인을 요구합니다.`
-        : `${target.host} 서버가 로그인을 다시 거절했습니다. 비밀번호를 확인해 주세요.`;
+        ? t('{host} 서버가 로그인을 요구합니다.', { host: target.host })
+        : t('{host} 서버가 로그인을 다시 거절했습니다. 비밀번호를 확인해 주세요.', { host: target.host });
       if (!(await loginDialog({ call, target, reason }))) throw error;
     }
   }
@@ -481,7 +488,14 @@ async function openSettings(section) {
   const saved = await settingsDialog({ call, settings: state.settings, onTheme: applyTheme, showError, toast, section, prefs, graph, onPrefs: applyPrefs, githubLogin: github.login });
   if (saved) {
     state.settings = saved;
-    toast('설정을 저장했습니다.', 'success');
+    // 언어를 바꿨다: 설정 파일에 다 쓴 뒤 화면을 새 언어로 다시 읽는다(열린 탭은 그대로 다시 열린다).
+    const nextLanguage = saved.ui?.language ?? 'ko';
+    if (nextLanguage !== lang) {
+      await call('setUi', { key: 'language', value: nextLanguage }).catch(() => {});
+      switchLanguage(nextLanguage);
+      return;
+    }
+    toast(t('설정을 저장했습니다.'), 'success');
     if (state.repo) render();
   } else {
     applyTheme(before);
@@ -521,11 +535,11 @@ function showStart(notice) {
       showMenu(event.clientX, event.clientY, recentMenu(r), { alt: altModifier(event) });
     } },
     el('div', { class: 'recent-text' },
-      el('div', { class: 'recent-name' }, el('span', { text: r.name }), r.missing ? el('span', { class: 'recent-badge' }, icon('alert', 11), '레포지토리를 찾을 수 없음') : null),
+      el('div', { class: 'recent-name' }, el('span', { text: r.name }), r.missing ? el('span', { class: 'recent-badge' }, icon('alert', 11), t('레포지토리를 찾을 수 없음')) : null),
       el('div', { class: 'recent-path muted small', text: r.path })),
     el('div', { class: 'recent-time muted small', text: relativeTime(r.openedAt) }),
     el('button', {
-      class: 'recent-more', 'data-tip': '옵션', 'aria-label': '옵션',
+      class: 'recent-more', 'data-tip': t('옵션'), 'aria-label': t('옵션'),
       onclick: (event) => {
         event.stopPropagation();
         menuBelow(event.currentTarget, recentMenu(r), { alt: altModifier(event) });
@@ -538,30 +552,30 @@ function showStart(notice) {
  * Option(macOS)·Shift(Windows) 를 누르고 있으면 그 자리가 "휴지통으로 이동…" 으로 바뀐다 — 한 번 더 묻고 폴더를 휴지통으로 옮긴다.
  */
 function recentMenu(r) {
-  const fm = state.platform === 'windows' ? '탐색기' : 'Finder';
+  const fm = state.platform === 'windows' ? t('탐색기') : 'Finder';
   return [
-    { label: `${fm} 에서 열기`, disabled: r.missing, action: () => call('openFolder', { path: r.path }).catch(showError) },
+    { label: t('{fm} 에서 열기', { fm }), disabled: r.missing, action: () => call('openFolder', { path: r.path }).catch(showError) },
     '-',
     {
-      label: '목록에서 제거',
+      label: t('목록에서 제거'),
       action: async () => {
         state.settings = await call('removeRecent', { path: r.path });
         showStart();
       },
-      alt: { label: '휴지통으로 이동…', danger: true, disabled: r.missing, action: () => trashRepo(r) },
+      alt: { label: t('휴지통으로 이동…'), danger: true, disabled: r.missing, action: () => trashRepo(r) },
     },
   ];
 }
 
 /** 레포지토리 폴더를 휴지통으로 옮긴다. 되돌리기 어려우니 한 번 더 묻는다(빨간 확인). */
 async function trashRepo(r) {
-  const body = el('div', { class: 'modal-message missing-repo' }, el('p', {}, el('b', { text: r.name }), ' 폴더를 휴지통으로 옮깁니다.'));
-  const ok = await confirmDialog({ title: '레포지토리 폴더 삭제', ok: '휴지통으로 이동', cancel: '취소', danger: true, glyph: 'trash', tone: 'danger', extra: body });
+  const body = el('div', { class: 'modal-message missing-repo' }, el('p', {}, ...richText(t('{name} 폴더를 휴지통으로 옮깁니다.'), { name: el('b', { text: r.name }) })));
+  const ok = await confirmDialog({ title: t('레포지토리 폴더 삭제'), ok: t('휴지통으로 이동'), cancel: t('취소'), danger: true, glyph: 'trash', tone: 'danger', extra: body });
   if (!ok) return;
   try {
     state.settings = await call('trashRepo', { path: r.path });
     repoCache.delete(r.path);
-    toast(`'${r.name}' 폴더를 휴지통으로 옮겼습니다.`, 'success');
+    toast(t("'{name}' 폴더를 휴지통으로 옮겼습니다.", { name: r.name }), 'success');
   } catch (error) {
     showError(error);
   }
@@ -571,9 +585,9 @@ async function trashRepo(r) {
 /** 최근 목록에서 폴더가 없는 레포지토리를 눌렀다: 어디서 못 찾았는지 알리고 목록에서 뺄지 묻는다. 폴더는 건드리지 않는다. */
 async function missingRepoDialog(r) {
   const body = el('div', { class: 'modal-message missing-repo' },
-    el('p', {}, '지정된 위치 ', el('b', { text: r.path }), ' 에서 ', el('b', { text: r.name }), ' 레포지토리를 찾을 수 없습니다.'),
-    el('p', {}, '레포지토리 폴더가 이동되었거나, 이름이 변경되었거나, 삭제되었을 수 있습니다.'));
-  const remove = await confirmDialog({ title: '레포지토리를 찾을 수 없음', ok: '목록에서 레포지토리 제거', cancel: '닫기', glyph: 'alert', tone: 'warning', className: 'missing-repo-card', extra: body });
+    el('p', {}, ...richText(t('지정된 위치 {path} 에서 {name} 레포지토리를 찾을 수 없습니다.'), { path: el('b', { text: r.path }), name: el('b', { text: r.name }) })),
+    el('p', {}, t('레포지토리 폴더가 이동되었거나, 이름이 변경되었거나, 삭제되었을 수 있습니다.')));
+  const remove = await confirmDialog({ title: t('레포지토리를 찾을 수 없음'), ok: t('목록에서 레포지토리 제거'), cancel: t('닫기'), glyph: 'alert', tone: 'warning', className: 'missing-repo-card', extra: body });
   if (!remove) return;
   state.settings = await call('removeRecent', { path: r.path });
   showStart();
@@ -582,15 +596,15 @@ async function missingRepoDialog(r) {
 /** 고른 폴더가 레포지토리가 아니거나 git 을 못 찾았을 때의 안내 띠. */
 function openFailure(error, path) {
   const message = error?.message ?? '';
-  if (message.startsWith('Git 레포지토리가 아닙니다')) {
+  if (message.startsWith('Git 레포지토리가 아닙니다') || message.startsWith('Not a Git repository')) { // i18n-ignore — Rust 오류 글과 맞춘다
     return el('div', { class: 'notice-row' }, icon('info', 16),
-      el('span', { text: `${path} 는 git 레포지토리가 아닙니다. 여기서 새 레포지토리를 만들 수 있습니다.` }),
+      el('span', { text: t('{path} 는 git 레포지토리가 아닙니다. 여기서 새 레포지토리를 만들 수 있습니다.', { path }) }),
       el('button', { class: 'btn small primary', text: 'git init…', onclick: () => initRepo(path) }));
   }
-  if (message.includes('git 을 실행하지 못했습니다')) {
+  if (message.includes('git 을 실행하지 못했습니다') || message.includes("Couldn't run git")) { // i18n-ignore — Rust 오류 글과 맞춘다
     return el('div', { class: 'notice-row' }, icon('warning', 16),
-      el('span', { text: 'git 을 찾지 못했습니다. git 을 설치하거나 설정에서 git 실행 파일을 지정해 주세요.' }),
-      el('button', { class: 'btn small primary', text: '설정 열기', onclick: () => openSettings() }));
+      el('span', { text: t('git 을 찾지 못했습니다. git 을 설치하거나 설정에서 git 실행 파일을 지정해 주세요.') }),
+      el('button', { class: 'btn small primary', text: t('설정 열기'), onclick: () => openSettings() }));
   }
   return null;
 }
@@ -607,7 +621,7 @@ async function createRepo(preset) {
 }
 
 async function pickRepo() {
-  const path = await call('pick', { kind: 'folder', title: 'Git 레포지토리 폴더 열기' }).catch(() => null);
+  const path = await call('pick', { kind: 'folder', title: t('Git 레포지토리 폴더 열기') }).catch(() => null);
   if (path) await openRepo(path);
 }
 
@@ -1026,9 +1040,9 @@ async function act(label, work, { success, done, onError, remote } = {}) {
 function failedTitle(label) {
   const text = String(label ?? '').trim();
   if (!text) return undefined;
-  const m = /^(.+?)\s*(?:하는\s*)?중…?\s*(.*)$/.exec(text);
-  const head = (m ? `${m[1].trim()} ${m[2].trim()}` : text.replace(/…$/, '')).trim();
-  return `${head} 실패`;
+  const m = isEn ? null : /^(.+?)\s*(?:하는\s*)?중…?\s*(.*)$/.exec(text);
+  const head = (m ? `${m[1].trim()} ${m[2].trim()}` : isEn ? text.replace(/…/g, '').replace(/\s+/g, ' ') : text.replace(/…$/, '')).trim();
+  return t('{head} 실패', { head });
 }
 
 /** 레포지토리 경로 → 그 탭에서 도는 작업 {label, job}(시작한 차례). job: 원격 작업의 이름(없으면 null). */
@@ -1085,12 +1099,12 @@ async function withStash(label, work) {
   } catch (error) {
     const kind = error?.advice?.kind;
     if (kind !== 'localChanges' && kind !== 'untrackedFiles') throw error;
-    const op = String(label ?? '').replace(/(하는)? 중…$/, '').trim() || '작업';
-    if (!(await overwriteDialog({ title: failedTitle(label) ?? '작업 실패', op, files: error.advice.files ?? [], untracked: kind === 'untrackedFiles' }))) throw { cancelled: true };
+    const op = (isEn ? String(label ?? '').replace(/…/g, '').replace(/\s+/g, ' ') : String(label ?? '').replace(/(하는)? 중…$/, '')).trim() || t('작업');
+    if (!(await overwriteDialog({ title: failedTitle(label) ?? t('작업 실패'), op, files: error.advice.files ?? [], untracked: kind === 'untrackedFiles' }))) throw { cancelled: true };
     try {
       await call('stashPush', { message: '', includeUntracked: false });
     } catch (stashError) {
-      showError(stashError, 'Stash 실패');
+      showError(stashError, t('Stash 실패'));
       throw { cancelled: true };
     }
     return work();
@@ -1100,7 +1114,8 @@ async function withStash(label, work) {
 async function undoRedo(which) {
   const title = state.undo?.[which];
   if (!title) return;
-  await act(which === 'undo' ? `실행 취소: ${title}` : `다시 실행: ${title}`, () => call(which), { success: (t) => `${which === 'undo' ? '실행 취소' : '다시 실행'}: ${t}` });
+  const undoText = (text) => (which === 'undo' ? t('실행 취소: {title}', { title: text }) : t('다시 실행: {title}', { title: text }));
+  await act(undoText(title), () => call(which), { success: (done) => undoText(done) });
 }
 
 // ── diff ─────────────────────────────────────────────
@@ -1145,17 +1160,17 @@ const diffApi = {
     if (state.busy) return false;
     // 원본 GitDiffPanel.DiscardLinesAsync: 되돌릴 수 없어 한 번 묻는다. Stage 는 충돌 표시가 남았으면 묻는다(목록의 Stage 와 같은 규칙).
     if (action === 'discard' && !(await confirmDialog({
-      title: '변경된 묶음 버리기',
-      message: `${target.path} 의 이 변경된 묶음을 작업 사본에서 되돌립니다.\n툴바의 Undo 로도 되살릴 수 없습니다.`,
-      ok: '버리기', danger: true, glyph: 'undo',
+      title: t('변경된 묶음 버리기'),
+      message: t('{path} 의 이 변경된 묶음을 작업 사본에서 되돌립니다.\n툴바의 Undo 로도 되살릴 수 없습니다.', { path: target.path }),
+      ok: t('버리기'), danger: true, glyph: 'undo',
     }))) return false;
     if (action === 'stage') {
       const warn = await call('stageWarnings', { paths: [target.path] }).catch(() => ({ conflictMarkers: [] }));
-      if (warn.conflictMarkers?.length && !(await confirmDialog({ title: '충돌 표시가 남아 있습니다', glyph: 'branch', danger: true, message: `아래 파일에 충돌 표시(<<<<<<< ======= >>>>>>>)가 남아 있습니다.\n올리면 git 은 충돌이 해결된 것으로 봅니다.\n\n${target.path}`, ok: '그대로 Stage' }))) return false;
+      if (warn.conflictMarkers?.length && !(await confirmDialog({ title: t('충돌 표시가 남아 있습니다'), glyph: 'branch', danger: true, message: t('아래 파일에 충돌 표시(<<<<<<< ======= >>>>>>>)가 남아 있습니다.\n올리면 git 은 충돌이 해결된 것으로 봅니다.\n\n{files}', { files: target.path }), ok: t('그대로 Stage') }))) return false;
     }
     if (state.busy) return false;
-    const label = { stage: 'Stage', unstage: 'Unstage', discard: '되돌리기' }[action];
-    const ok = await act(`${label} 하는 중…`, () => call('applyLines', { action, path: target.path, untracked: !!target.untracked, fingerprint, lines, context }).then(() => true));
+    const label = { stage: t('Stage 하는 중…'), unstage: t('Unstage 하는 중…'), discard: t('되돌리기 하는 중…') }[action];
+    const ok = await act(label, () => call('applyLines', { action, path: target.path, untracked: !!target.untracked, fingerprint, lines, context }).then(() => true));
     // 실패(그 사이 파일이 바뀜 등)해도 diff 를 다시 읽는다.
     diffView.reload();
     return ok === true;
@@ -1171,7 +1186,7 @@ const diffApi = {
   /** LFS 원본 받기. 실패하면 그 글을 돌려준다(diff 가 안내 아래에 덧붙이고, 계정 문제면 [계정 고르기] 를 보인다). */
   async lfsPull(target) {
     let failure = null;
-    await act('LFS 원본을 받는 중…', () => call('lfsPull', { path: target.path }), {
+    await act(t('LFS 원본을 받는 중…'), () => call('lfsPull', { path: target.path }), {
       onError: (error) => {
         failure = error?.message ?? String(error);
         return true;
@@ -1225,7 +1240,9 @@ function closeDiff() {
 
 // ── 병합 충돌 ─────────────────────────────────────────
 
-const OP_NAME = { merge: '병합', rebase: 'Rebase', cherryPick: 'Cherry-pick', revert: 'Revert' };
+const OP_NAME = { merge: t('병합'), rebase: 'Rebase', cherryPick: 'Cherry-pick', revert: 'Revert' };
+/** 작업 이름 + 목적격 조사("병합을"). 영어에서는 이름만. */
+const objectOf = (word) => josa(word, '을', '를'); // i18n-ignore — 조사 인자
 
 const mergeApi = {
   prefs,
@@ -1253,14 +1270,14 @@ const mergeApi = {
   },
   /** force 면 충돌 표시가 남아도 쓴다(직접 고치기에서 한 번 더 확인한 뒤). */
   async save(path, text, force = false) {
-    return (await act('해결을 저장하는 중…', () => call('saveResolution', { path, text, force }).then(() => true), { success: () => `${path} 의 충돌을 풀었습니다.` })) === true;
+    return (await act(t('해결을 저장하는 중…'), () => call('saveResolution', { path, text, force }).then(() => true), { success: () => t('{path} 의 충돌을 풀었습니다.', { path }) })) === true;
   },
   /** 한쪽으로 해결. ask 면 먼저 묻는다(파일 메뉴). 병합 편집기의 버튼은 원본처럼 바로 한다. */
   async resolve(path, side, ask = true) {
-    const names = { merge: ['현재 브랜치', '병합해 오는'], cherryPick: ['현재 브랜치', '가져오는 커밋'], revert: ['현재 브랜치', '되돌리는 변경'], rebase: ['바탕 브랜치', '다시 쌓는 내 커밋'] }[state.status?.operation] ?? ['현재', '상대'];
+    const names = { merge: [t('현재 브랜치'), t('병합해 오는')], cherryPick: [t('현재 브랜치'), t('가져오는 커밋')], revert: [t('현재 브랜치'), t('되돌리는 변경')], rebase: [t('바탕 브랜치'), t('다시 쌓는 내 커밋')] }[state.status?.operation] ?? [t('현재'), t('상대')];
     const label = side === 'ours' ? `A(${names[0]})` : `B(${names[1]})`;
-    if (ask && !(await confirmDialog({ title: '한쪽으로 풀기', message: `${path} 를 ${label} 쪽 내용으로 통째로 바꾸고 해결로 표시합니다.`, ok: '바꾸기' }))) return;
-    if ((await act('충돌을 푸는 중…', () => call('resolve', { path, side }).then(() => true))) === true) closeMerge();
+    if (ask && !(await confirmDialog({ title: t('한쪽으로 풀기'), message: t('{path} 를 {label} 쪽 내용으로 통째로 바꾸고 해결로 표시합니다.', { path, label }), ok: t('바꾸기') }))) return;
+    if ((await act(t('충돌을 푸는 중…'), () => call('resolve', { path, side }).then(() => true))) === true) closeMerge();
   },
   close: () => closeMerge(),
   error: (e) => showError(e),
@@ -1299,28 +1316,28 @@ function renderBanner() {
   const conflicts = state.status.conflicted;
   banner.replaceChildren(...[
     icon('warning', 16),
-    el('span', { class: 'op-text' }, el('strong', { text: `${OP_NAME[op]} 진행 중` }),
-      conflicts ? ` — 충돌 파일 ${conflicts}개가 남았습니다. 오른쪽 목록에서 파일을 눌러 풀어 주세요.` : ' — 충돌을 모두 풀었습니다. 이어가면 끝납니다.'),
-    el('button', { class: 'btn small primary', disabled: conflicts > 0, text: op === 'rebase' ? '이어가기' : '커밋하고 마치기', onclick: () => actions.continueOperation() }),
-    op === 'rebase' ? el('button', { class: 'btn small', text: '이 커밋 건너뛰기', onclick: () => actions.skipOperation() }) : null,
-    el('button', { class: 'btn small danger', text: '중단', onclick: () => actions.abortOperation() }),
+    el('span', { class: 'op-text' }, el('strong', { text: t('{op} 진행 중', { op: OP_NAME[op] }) }),
+      conflicts ? t(' — 충돌 파일 {n}개가 남았습니다. 오른쪽 목록에서 파일을 눌러 풀어 주세요.', { n: conflicts }) : t(' — 충돌을 모두 풀었습니다. 이어가면 끝납니다.')),
+    el('button', { class: 'btn small primary', disabled: conflicts > 0, text: op === 'rebase' ? t('이어가기') : t('커밋하고 마치기'), onclick: () => actions.continueOperation() }),
+    op === 'rebase' ? el('button', { class: 'btn small', text: t('이 커밋 건너뛰기'), onclick: () => actions.skipOperation() }) : null,
+    el('button', { class: 'btn small danger', text: t('중단'), onclick: () => actions.abortOperation() }),
   ].filter(Boolean));
 }
 
 const actions = {
   async continueOperation(message) {
     const op = state.status?.operation;
-    await act(`${OP_NAME[op] ?? ''} 이어가는 중…`, () => call('continueOperation', { message }), { success: () => `${josa(OP_NAME[op] ?? '작업', '을', '를')} 이어갔습니다.` });
+    await act(t('{op} 이어가는 중…', { op: OP_NAME[op] ?? '' }), () => call('continueOperation', { message }), { success: () => t('{op} 이어갔습니다.', { op: objectOf(OP_NAME[op] ?? t('작업')) }) });
   },
   async skipOperation() {
-    if (!(await confirmDialog({ title: '커밋 건너뛰기', message: 'Rebase 에서 지금 멈춘 커밋을 빼고 다음으로 갑니다. 그 커밋의 변경은 사라집니다.', ok: '건너뛰기', danger: true }))) return;
-    await act('건너뛰는 중…', () => call('skipOperation'));
+    if (!(await confirmDialog({ title: t('커밋 건너뛰기'), message: t('Rebase 에서 지금 멈춘 커밋을 빼고 다음으로 갑니다. 그 커밋의 변경은 사라집니다.'), ok: t('건너뛰기'), danger: true }))) return;
+    await act(t('건너뛰는 중…'), () => call('skipOperation'));
   },
   async abortOperation() {
     const op = state.status?.operation;
-    if (!(await confirmDialog({ title: `${OP_NAME[op]} 중단`, message: `${josa(OP_NAME[op], '을', '를')} 취소하고 시작하기 전 상태로 되돌립니다. 지금까지 푼 충돌도 사라집니다.`, ok: '중단', danger: true }))) return;
+    if (!(await confirmDialog({ title: t('{op} 중단', { op: OP_NAME[op] }), message: t('{op} 취소하고 시작하기 전 상태로 되돌립니다. 지금까지 푼 충돌도 사라집니다.', { op: objectOf(OP_NAME[op]) }), ok: t('중단'), danger: true }))) return;
     closeMerge();
-    await act('중단하는 중…', () => call('abortOperation'), { success: () => `${josa(OP_NAME[op], '을', '를')} 중단했습니다.` });
+    await act(t('중단하는 중…'), () => call('abortOperation'), { success: () => t('{op} 중단했습니다.', { op: objectOf(OP_NAME[op]) }) });
   },
   openDiff(entry, mode, { toggle = false } = {}) {
     if (toggle && toggleOffDiff(diffKey(mode, entry.path))) return;
@@ -1359,8 +1376,8 @@ const actions = {
   repoPath: () => state.repo?.path ?? '',
   /** 숨기기 묶음(메뉴). eye: {hidden, toggle(), solo()} — 변경 목록(Unstaged)이 준다. 보기에서만 감추는 것이라 "무시"(.gitignore)와 다르다. */
   eyeItems: (eye) => (eye ? [
-    { label: eye.hidden ? '다시 보이기' : '숨기기', hint: 'H', action: () => eye.toggle() },
-    { label: '이것만 보기', action: () => eye.solo() },
+    { label: eye.hidden ? t('다시 보이기') : t('숨기기'), hint: 'H', action: () => eye.toggle() },
+    { label: t('이것만 보기'), action: () => eye.solo() },
   ] : []),
   /**
    * 파일 우클릭(여럿 골랐으면 고른 것 모두에). 원본 StagingLists.Populate*Menu + FileActionMenu 순서:
@@ -1376,19 +1393,19 @@ const actions = {
     if (mode === 'unstaged') {
       if (many) {
         // 여럿: 고른 것 전부를 옮기거나 버린다. 버리기는 새 파일을 뺀다(하나일 때와 같다).
-        items.push({ label: `파일 ${entries.length}개 Stage`, disabled: busy, action: () => actions.stage(entries.map((e) => e.path)) });
+        items.push({ label: t('파일 {n}개 Stage', { n: entries.length }), disabled: busy, action: () => actions.stage(entries.map((e) => e.path)) });
         const discardable = entries.filter((e) => e.state !== 'untracked');
-        if (discardable.length) items.push({ label: `파일 ${discardable.length}개 변경 버리기`, disabled: busy, action: () => actions.discardMany(discardable, 'unstaged') });
+        if (discardable.length) items.push({ label: t('파일 {n}개 변경 버리기', { n: discardable.length }), disabled: busy, action: () => actions.discardMany(discardable, 'unstaged') });
         if (eye) items.push('-', ...actions.eyeItems(eye));
         items.push('-', ...actions.commonFileItems(entry, false));
         showMenu(event.clientX, event.clientY, items);
         return;
       }
       items.push({ label: 'Stage', disabled: busy, action: () => actions.stage([entry.path]) });
-      if (entry.state !== 'untracked') items.push({ label: '변경 버리기', disabled: busy, action: () => actions.discardMany([entry], 'unstaged') });
+      if (entry.state !== 'untracked') items.push({ label: t('변경 버리기'), disabled: busy, action: () => actions.discardMany([entry], 'unstaged') });
       if (eye) items.push('-', ...actions.eyeItems(eye), '-');
     } else if (mode === 'staged') {
-      items.push({ label: many ? `파일 ${entries.length}개 Unstage` : 'Unstage', disabled: busy, action: () => actions.unstage(entries.map((e) => e.path)) }, '-');
+      items.push({ label: many ? t('파일 {n}개 Unstage', { n: entries.length }) : 'Unstage', disabled: busy, action: () => actions.unstage(entries.map((e) => e.path)) }, '-');
     }
     if (mode !== 'staged') items.push(...actions.workingFileItems(entry));
     items.push(...actions.commonFileItems(entry, mode === 'staged'));
@@ -1400,27 +1417,27 @@ const actions = {
     const items = [];
     if (entry.state === 'conflicted') {
       // 쪽 이름은 작업마다 다르다 — rebase 에서는 ours 가 바탕 브랜치, theirs 가 다시 쌓는 내 커밋이다(git 과 같다).
-      const SIDES = { merge: ['현재 브랜치', '병합해 오는'], cherryPick: ['현재 브랜치', '가져오는 커밋'], revert: ['현재 브랜치', '되돌리는 변경'], rebase: ['바탕 브랜치', '다시 쌓는 내 커밋'] };
-      const [ours, theirs] = SIDES[state.status?.operation] ?? ['현재', '상대'];
+      const SIDES = { merge: [t('현재 브랜치'), t('병합해 오는')], cherryPick: [t('현재 브랜치'), t('가져오는 커밋')], revert: [t('현재 브랜치'), t('되돌리는 변경')], rebase: [t('바탕 브랜치'), t('다시 쌓는 내 커밋')] };
+      const [ours, theirs] = SIDES[state.status?.operation] ?? [t('현재'), t('상대')];
       items.push(
-        { label: '충돌 해결됨으로 표시', disabled: busy, action: () => actions.markResolved([entry.path]) },
-        { label: `${ours} 쪽으로 해결 (ours)`, disabled: busy, action: () => mergeApi.resolve(entry.path, 'ours') },
-        { label: `${theirs} 쪽으로 해결 (theirs)`, disabled: busy, action: () => mergeApi.resolve(entry.path, 'theirs') }, '-');
+        { label: t('충돌 해결됨으로 표시'), disabled: busy, action: () => actions.markResolved([entry.path]) },
+        { label: t('{side} 쪽으로 해결 (ours)', { side: ours }), disabled: busy, action: () => mergeApi.resolve(entry.path, 'ours') },
+        { label: t('{side} 쪽으로 해결 (theirs)', { side: theirs }), disabled: busy, action: () => mergeApi.resolve(entry.path, 'theirs') }, '-');
     }
     const name = entry.path.split('/').pop();
     const ext = /\.([^./]+)$/.exec(name)?.[1];
     const folder = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : '';
     items.push(
-      { label: '무시', submenu: [
-        { label: `'${name}' 무시`, disabled: busy, action: () => actions.ignore(entry.path, 'file') },
-        ext ? { label: `모든 '*.${ext}' 파일 무시`, disabled: busy, action: () => actions.ignore(entry.path, 'extension') } : null,
-        folder ? { label: `'${folder}/' 안의 모든 파일 무시`, disabled: busy, action: () => actions.ignore(folder, 'folder') } : null,
+      { label: t('무시'), submenu: [
+        { label: t("'{name}' 무시", { name }), disabled: busy, action: () => actions.ignore(entry.path, 'file') },
+        ext ? { label: t("모든 '*.{ext}' 파일 무시", { ext }), disabled: busy, action: () => actions.ignore(entry.path, 'extension') } : null,
+        folder ? { label: t("'{folder}/' 안의 모든 파일 무시", { folder }), disabled: busy, action: () => actions.ignore(folder, 'folder') } : null,
       ].filter(Boolean) },
       { label: 'LFS', submenu: [
-        { label: `'${name}' 를 LFS 로 추적`, disabled: busy, action: () => actions.lfsTrack(entry.path, 'file') },
-        ext ? { label: `모든 '*.${ext}' 를 LFS 로 추적`, disabled: busy, action: () => actions.lfsTrack(entry.path, 'extension') } : null,
+        { label: t("'{name}' 를 LFS 로 추적", { name }), disabled: busy, action: () => actions.lfsTrack(entry.path, 'file') },
+        ext ? { label: t("모든 '*.{ext}' 를 LFS 로 추적", { ext }), disabled: busy, action: () => actions.lfsTrack(entry.path, 'extension') } : null,
       ].filter(Boolean) },
-      { label: '파일 Stash', disabled: busy, action: () => actions.stashPaths([entry.path]) },
+      { label: t('파일 Stash'), disabled: busy, action: () => actions.stashPaths([entry.path]) },
       '-');
     return items;
   },
@@ -1428,20 +1445,20 @@ const actions = {
   commonFileItems(entry, staged) {
     const exists = entry.state !== 'deleted';
     const hasHistory = entry.state !== 'untracked' && entry.state !== 'added';
-    const fm = state.platform === 'windows' ? '파일 탐색기' : state.platform === 'linux' ? '파일 관리자' : 'Finder';
+    const fm = state.platform === 'windows' ? t('파일 탐색기') : state.platform === 'linux' ? t('파일 관리자') : 'Finder';
     return [
-      { label: '파일 히스토리', disabled: !hasHistory || !tools.fileHistory, action: () => tools.fileHistory?.(entry.path) },
-      { label: '파일 Blame', disabled: !hasHistory || !exists || !tools.blame, action: () => tools.blame?.(entry.path) },
+      { label: t('파일 히스토리'), disabled: !hasHistory || !tools.fileHistory, action: () => tools.fileHistory?.(entry.path) },
+      { label: t('파일 Blame'), disabled: !hasHistory || !exists || !tools.blame, action: () => tools.blame?.(entry.path) },
       '-',
-      { label: '외부 편집기로 열기', disabled: !exists, action: () => call('openInEditor', { path: entry.path, line: 1, editor: prefs.get('editor') ?? '' }).catch(showError) },
-      { label: '기본 프로그램으로 열기', disabled: !exists, action: () => call('openDefault', { path: entry.path }).catch(showError) },
-      { label: `${fm} 에서 보기`, disabled: !exists, action: () => call('reveal', { path: entry.path }).catch(showError) },
+      { label: t('외부 편집기로 열기'), disabled: !exists, action: () => call('openInEditor', { path: entry.path, line: 1, editor: prefs.get('editor') ?? '' }).catch(showError) },
+      { label: t('기본 프로그램으로 열기'), disabled: !exists, action: () => call('openDefault', { path: entry.path }).catch(showError) },
+      { label: t('{fm} 에서 보기', { fm }), disabled: !exists, action: () => call('reveal', { path: entry.path }).catch(showError) },
       '-',
-      { label: '파일 경로 복사', action: () => navigator.clipboard?.writeText(entry.path) },
-      { label: '파일 변경으로 패치 만들기', action: () => actions.createPatch([entry.path], staged) },
+      { label: t('파일 경로 복사'), action: () => navigator.clipboard?.writeText(entry.path) },
+      { label: t('파일 변경으로 패치 만들기'), action: () => actions.createPatch([entry.path], staged) },
       '-',
-      { label: '파일 편집', disabled: !exists || !tools.editFile, action: () => tools.editFile?.(entry.path) },
-      { label: '파일 삭제', disabled: !exists || !!state.busy, action: () => actions.deleteFiles([entry.path]) },
+      { label: t('파일 편집'), disabled: !exists || !tools.editFile, action: () => tools.editFile?.(entry.path) },
+      { label: t('파일 삭제'), disabled: !exists || !!state.busy, action: () => actions.deleteFiles([entry.path]) },
     ];
   },
   /**
@@ -1452,51 +1469,51 @@ const actions = {
     const busy = !!state.busy;
     const paths = entries.map((e) => e.path);
     const name = `${folder.path.replace(/\/$/, '')}/`;
-    const fm = state.platform === 'windows' ? '파일 탐색기' : state.platform === 'linux' ? '파일 관리자' : 'Finder';
+    const fm = state.platform === 'windows' ? t('파일 탐색기') : state.platform === 'linux' ? t('파일 관리자') : 'Finder';
     const staged = mode === 'staged';
     showMenu(event.clientX, event.clientY, [
-      staged ? { label: '폴더 Unstage', disabled: busy, action: () => actions.unstage(paths) } : { label: '폴더 Stage', disabled: busy, action: () => actions.stage(paths) },
-      staged ? null : { label: '폴더의 모든 변경 버리기', disabled: busy, action: () => actions.discardMany(entries, 'unstaged') },
-      staged ? null : { label: `'${name}' 안의 모든 파일 무시`, disabled: busy, action: () => actions.ignore(folder.path, 'folder') },
-      staged ? null : { label: '폴더 Stash', disabled: busy, action: () => actions.stashPaths([folder.path]) },
-      { label: '폴더 변경으로 패치 만들기', action: () => actions.createPatch(paths, staged) },
+      staged ? { label: t('폴더 Unstage'), disabled: busy, action: () => actions.unstage(paths) } : { label: t('폴더 Stage'), disabled: busy, action: () => actions.stage(paths) },
+      staged ? null : { label: t('폴더의 모든 변경 버리기'), disabled: busy, action: () => actions.discardMany(entries, 'unstaged') },
+      staged ? null : { label: t("'{name}' 안의 모든 파일 무시", { name }), disabled: busy, action: () => actions.ignore(folder.path, 'folder') },
+      staged ? null : { label: t('폴더 Stash'), disabled: busy, action: () => actions.stashPaths([folder.path]) },
+      { label: t('폴더 변경으로 패치 만들기'), action: () => actions.createPatch(paths, staged) },
       '-',
-      { label: `${fm} 에서 열기`, action: () => call('openFolder', { path: `${state.repo.path}/${folder.path}` }).catch(showError) },
-      { label: '이 폴더에 파일 만들기', disabled: !tools.newFile, action: () => tools.newFile?.(folder.path) },
+      { label: t('{fm} 에서 열기', { fm }), action: () => call('openFolder', { path: `${state.repo.path}/${folder.path}` }).catch(showError) },
+      { label: t('이 폴더에 파일 만들기'), disabled: !tools.newFile, action: () => tools.newFile?.(folder.path) },
       '-',
       ...(staged || !view.eye ? [] : [...actions.eyeItems(view.eye), '-']),
-      { label: '모두 펼치기', action: () => view.expandAll?.() },
-      { label: '모두 접기', action: () => view.collapseAll?.() },
-      { label: '경로 복사', action: () => navigator.clipboard?.writeText(folder.path) },
+      { label: t('모두 펼치기'), action: () => view.expandAll?.() },
+      { label: t('모두 접기'), action: () => view.collapseAll?.() },
+      { label: t('경로 복사'), action: () => navigator.clipboard?.writeText(folder.path) },
     ].filter(Boolean));
   },
   /** 커밋 상세 파일 우클릭. 원본 CommitFileMenu. extra.showInTree(path): 그 화면의 File Tree 로 가는 함수(Fork 탐색기). */
   commitFileMenu(event, detail, files, extra = null) {
     const file = files[0];
     const parent = detail.parents[0];
-    const fm = state.platform === 'windows' ? '탐색기' : 'Finder';
+    const fm = state.platform === 'windows' ? t('탐색기') : 'Finder';
     showMenu(event.clientX, event.clientY, [
-      { label: '열기', disabled: file.state === 'deleted', action: () => call('openDefault', { path: file.path }).catch(showError) },
-      { label: '외부 diff 도구로 보기', disabled: !parent, action: () => call('externalDiff', { from: parent, to: detail.hash, path: file.path, tool: prefs.get('difftool') || undefined }).catch(showError) },
-      { label: `${fm} 에서 보기`, action: () => call('reveal', { path: file.path }).catch(showError) },
+      { label: t('열기'), disabled: file.state === 'deleted', action: () => call('openDefault', { path: file.path }).catch(showError) },
+      { label: t('외부 diff 도구로 보기'), disabled: !parent, action: () => call('externalDiff', { from: parent, to: detail.hash, path: file.path, tool: prefs.get('difftool') || undefined }).catch(showError) },
+      { label: t('{fm} 에서 보기', { fm }), action: () => call('reveal', { path: file.path }).catch(showError) },
       '-',
-      { label: '이 시점으로 되돌리기…', action: () => actions.restoreFile(detail.hash, file.path, `${detail.hash.slice(0, 7)} 시점`) },
-      { label: '이 커밋 전으로 되돌리기…', disabled: !parent, action: () => actions.restoreFile(parent, file.path, `${detail.hash.slice(0, 7)} 의 부모 시점`) },
+      { label: t('이 시점으로 되돌리기…'), action: () => actions.restoreFile(detail.hash, file.path, t('{hash} 시점', { hash: detail.hash.slice(0, 7) })) },
+      { label: t('이 커밋 전으로 되돌리기…'), disabled: !parent, action: () => actions.restoreFile(parent, file.path, t('{hash} 의 부모 시점', { hash: detail.hash.slice(0, 7) })) },
       '-',
       { label: 'Blame', disabled: !tools.blame || file.state === 'deleted', action: () => tools.blame?.(file.path, detail.hash) },
-      { label: '히스토리', disabled: !tools.fileHistory, action: () => tools.fileHistory?.(file.path) },
-      { label: '이 버전 저장…', disabled: file.state === 'deleted', action: () => actions.saveVersion(detail.hash, file.path) },
+      { label: t('히스토리'), disabled: !tools.fileHistory, action: () => tools.fileHistory?.(file.path) },
+      { label: t('이 버전 저장…'), disabled: file.state === 'deleted', action: () => actions.saveVersion(detail.hash, file.path) },
       extra?.showInTree
-        ? { label: 'File Tree 에서 보기', disabled: file.state === 'deleted', action: () => extra.showInTree(file.path) }
-        : { label: 'File Tree 에서 보기', disabled: !tools.showInTree, action: () => tools.showInTree?.(detail.hash, file.path) },
-      { label: '경로 복사', action: () => navigator.clipboard?.writeText(files.map((f) => f.path).join('\n')) },
+        ? { label: t('File Tree 에서 보기'), disabled: file.state === 'deleted', action: () => extra.showInTree(file.path) }
+        : { label: t('File Tree 에서 보기'), disabled: !tools.showInTree, action: () => tools.showInTree?.(detail.hash, file.path) },
+      { label: t('경로 복사'), action: () => navigator.clipboard?.writeText(files.map((f) => f.path).join('\n')) },
     ]);
   },
   async markResolved(paths) {
     if (state.busy || !paths.length) return;
     const warn = await call('stageWarnings', { paths }).catch(() => ({ conflictMarkers: [] }));
-    if (warn.conflictMarkers.length && !(await confirmDialog({ title: '모두 해결됨으로 표시', glyph: 'warning', danger: true, message: `다음 파일에는 아직 충돌 표시(<<<<<<< … >>>>>>>)가 남아 있습니다. 그대로 해결됨으로 표시할까요?\n\n${warn.conflictMarkers.join('\n')}`, ok: '모두 해결됨으로 표시' }))) return;
-    await act('충돌 해결됨으로 표시하는 중…', () => call('stage', { paths }), { success: () => `${paths.length}개를 해결됨으로 표시했습니다.` });
+    if (warn.conflictMarkers.length && !(await confirmDialog({ title: t('모두 해결됨으로 표시'), glyph: 'warning', danger: true, message: t('다음 파일에는 아직 충돌 표시(<<<<<<< … >>>>>>>)가 남아 있습니다. 그대로 해결됨으로 표시할까요?\n\n{files}', { files: warn.conflictMarkers.join('\n') }), ok: t('모두 해결됨으로 표시') }))) return;
+    await act(t('충돌 해결됨으로 표시하는 중…'), () => call('stage', { paths }), { success: () => t('{n}개를 해결됨으로 표시했습니다.', { n: paths.length }) });
   },
   /**
    * 변경 버리기. 되돌릴 수 없어 한 번 더 묻는다(원본 StagingLists.Discard).
@@ -1505,18 +1522,18 @@ const actions = {
    */
   async discardMany(entries, side = 'all') {
     if (state.busy || !entries.length) return false;
-    const list = entries.slice(0, 10).map((e) => e.path).join('\n') + (entries.length > 10 ? `\n… 외 ${entries.length - 10}개` : '');
+    const list = entries.slice(0, 10).map((e) => e.path).join('\n') + (entries.length > 10 ? t('\n… 외 {n}개', { n: entries.length - 10 }) : '');
     const fork = document.body.dataset.layout === 'fork';
     const dialog = fork
-      ? { title: '선택한 파일의 변경을 모두 버릴까요?', message: side === 'unstaged' ? '커밋하지 않은 변경이 모두 사라집니다. 툴바의 Undo 로도 되살릴 수 없습니다.' : 'Stage 한 것을 포함해 커밋하지 않은 변경이 모두 사라집니다.', ok: '버리기' }
+      ? { title: t('선택한 파일의 변경을 모두 버릴까요?'), message: side === 'unstaged' ? t('커밋하지 않은 변경이 모두 사라집니다. 툴바의 Undo 로도 되살릴 수 없습니다.') : t('Stage 한 것을 포함해 커밋하지 않은 변경이 모두 사라집니다.'), ok: t('버리기') }
       : {
-        title: entries.length > 1 ? `파일 ${entries.length}개 변경 버리기` : '변경 버리기',
-        message: side === 'unstaged' ? `Stage 하지 않은 변경을 버립니다. 새 파일은 지웁니다.\n툴바의 Undo 로도 되살릴 수 없습니다.\n\n${list}` : `Stage 한 변경까지 마지막 커밋 상태로 되돌립니다(되돌릴 수 없음). 새 파일은 지웁니다.\n\n${list}`,
-        ok: '되돌리기',
+        title: entries.length > 1 ? t('파일 {n}개 변경 버리기', { n: entries.length }) : t('변경 버리기'),
+        message: side === 'unstaged' ? t('Stage 하지 않은 변경을 버립니다. 새 파일은 지웁니다.\n툴바의 Undo 로도 되살릴 수 없습니다.\n\n{list}', { list }) : t('Stage 한 변경까지 마지막 커밋 상태로 되돌립니다(되돌릴 수 없음). 새 파일은 지웁니다.\n\n{list}', { list }),
+        ok: t('되돌리기'),
       };
     if (!(await confirmDialog({ ...dialog, glyph: 'undo', danger: true, alert: fork })) || state.busy) return false;
     if (entries.some((e) => state.diffKey?.endsWith(`:${e.path}`))) closeDiff();
-    return (await act('되돌리는 중…', () => call('discard', { paths: entries.map((e) => e.path), worktreeOnly: side === 'unstaged' }).then(() => true))) === true;
+    return (await act(t('되돌리는 중…'), () => call('discard', { paths: entries.map((e) => e.path), worktreeOnly: side === 'unstaged' }).then(() => true))) === true;
   },
   /** 모든 변경 버리기. keep: 그대로 둘 경로(변경 목록에서 숨긴 파일) — 버리지 않고, 확인 창에 몇 개를 남기는지 적는다. */
   async discardAll(keep = []) {
@@ -1524,46 +1541,46 @@ const actions = {
     const kept = new Set(keep);
     const all = [...new Map([...state.status.unstaged, ...state.status.staged].map((e) => [e.path, e])).values()].filter((e) => !kept.has(e.path));
     if (!all.length) return;
-    const left = kept.size ? `\n\n숨긴 파일 ${kept.size}개는 버리지 않고 그대로 둡니다.` : '';
-    if (!(await confirmDialog({ title: '모든 변경 버리기', glyph: 'trash', danger: true, message: `${state.status.branch.name} 의 변경 ${all.length}개를 모두 버립니다. Stage 한 것도 마지막 커밋 상태로 되돌리고 새 파일은 지웁니다. 실행 취소로도 되살릴 수 없습니다.${left}`, ok: '모두 버리기' }))) return;
+    const left = kept.size ? t('\n\n숨긴 파일 {n}개는 버리지 않고 그대로 둡니다.', { n: kept.size }) : '';
+    if (!(await confirmDialog({ title: t('모든 변경 버리기'), glyph: 'trash', danger: true, message: t('{branch} 의 변경 {n}개를 모두 버립니다. Stage 한 것도 마지막 커밋 상태로 되돌리고 새 파일은 지웁니다. 실행 취소로도 되살릴 수 없습니다.{left}', { branch: state.status.branch.name, n: all.length, left }), ok: t('모두 버리기') }))) return;
     closeDiff();
-    await act('모두 버리는 중…', () => call('discard', { paths: all.map((e) => e.path) }), { success: () => '모든 변경을 버렸습니다.' });
+    await act(t('모두 버리는 중…'), () => call('discard', { paths: all.map((e) => e.path) }), { success: () => t('모든 변경을 버렸습니다.') });
   },
   async ignore(path, kind) {
-    await act('.gitignore 에 넣는 중…', () => call('ignore', { path, kind }), { success: (p) => `.gitignore 에 '${p}' 를 넣었습니다.` });
+    await act(t('.gitignore 에 넣는 중…'), () => call('ignore', { path, kind }), { success: (p) => t(".gitignore 에 '{p}' 를 넣었습니다.", { p }) });
   },
   async lfsTrack(path, kind) {
-    await act('LFS 로 추적하는 중…', () => call('lfsTrack', { path, kind }), { success: (p) => `LFS 로 '${p}' 를 추적합니다(.gitattributes).` });
+    await act(t('LFS 로 추적하는 중…'), () => call('lfsTrack', { path, kind }), { success: (p) => t("LFS 로 '{p}' 를 추적합니다(.gitattributes).", { p }) });
   },
   async stashPaths(paths) {
-    const values = await formDialog({ title: '고른 파일만 Stash', glyph: 'stash', message: `${paths.length}개 파일의 변경을 치워 둡니다.`, fields: [{ name: 'message', label: '메모 (선택)' }], ok: 'Stash' });
-    if (values) await act('Stash 하는 중…', () => call('stashPaths', { paths, message: values.message }), { success: () => 'Stash 했습니다.' });
+    const values = await formDialog({ title: t('고른 파일만 Stash'), glyph: 'stash', message: t('{n}개 파일의 변경을 치워 둡니다.', { n: paths.length }), fields: [{ name: 'message', label: t('메모 (선택)') }], ok: 'Stash' });
+    if (values) await act(t('Stash 하는 중…'), () => call('stashPaths', { paths, message: values.message }), { success: () => t('Stash 했습니다.') });
   },
   async createPatch(paths, staged) {
-    const dest = await call('pick', { kind: 'save', name: paths.length === 1 ? `${paths[0].split('/').pop()}.patch` : 'changes.patch', title: '패치 저장', filters: [{ name: '패치', ext: ['patch', 'diff'] }] });
-    if (dest) await act('패치를 쓰는 중…', () => call('createPatch', { paths, staged, dest }), { success: () => `패치를 저장했습니다: ${dest}` });
+    const dest = await call('pick', { kind: 'save', name: paths.length === 1 ? `${paths[0].split('/').pop()}.patch` : 'changes.patch', title: t('패치 저장'), filters: [{ name: t('패치'), ext: ['patch', 'diff'] }] });
+    if (dest) await act(t('패치를 쓰는 중…'), () => call('createPatch', { paths, staged, dest }), { success: () => t('패치를 저장했습니다: {dest}', { dest }) });
   },
   async deleteFiles(paths) {
-    if (!(await confirmDialog({ title: '파일 삭제', danger: true, glyph: 'trash', message: `${paths.join('\n')}\n\n작업 폴더에서 지웁니다(휴지통에 가지 않습니다). 커밋한 적이 있는 파일은 변경 목록에 '삭제' 로 남습니다.`, ok: '삭제' }))) return;
-    for (const path of paths) await act('지우는 중…', () => call('deletePath', { path }));
+    if (!(await confirmDialog({ title: t('파일 삭제'), danger: true, glyph: 'trash', message: t("{paths}\n\n작업 폴더에서 지웁니다(휴지통에 가지 않습니다). 커밋한 적이 있는 파일은 변경 목록에 '삭제' 로 남습니다.", { paths: paths.join('\n') }), ok: t('삭제') }))) return;
+    for (const path of paths) await act(t('지우는 중…'), () => call('deletePath', { path }));
   },
   async restoreFile(revision, path, label) {
-    if (!(await confirmDialog({ title: '파일 되돌리기', danger: true, glyph: 'undo', message: `${path}\n\n${label}의 내용으로 작업 폴더와 Stage 를 바꿉니다. 지금 이 파일의 변경은 사라집니다.`, ok: '되돌리기' }))) return;
-    await act('되돌리는 중…', () => call('restoreFile', { revision, path }), { success: () => `${path} 를 되돌렸습니다.` });
+    if (!(await confirmDialog({ title: t('파일 되돌리기'), danger: true, glyph: 'undo', message: t('{path}\n\n{label}의 내용으로 작업 폴더와 Stage 를 바꿉니다. 지금 이 파일의 변경은 사라집니다.', { path, label }), ok: t('되돌리기') }))) return;
+    await act(t('되돌리는 중…'), () => call('restoreFile', { revision, path }), { success: () => t('{path} 를 되돌렸습니다.', { path }) });
   },
   async saveVersion(revision, path) {
     const name = path.split('/').pop();
     const dot = name.lastIndexOf('.');
     const suggested = dot > 0 ? `${name.slice(0, dot)}@${revision.slice(0, 7)}${name.slice(dot)}` : `${name}@${revision.slice(0, 7)}`;
-    const dest = await call('pick', { kind: 'save', name: suggested, title: '이 버전 저장' });
-    if (dest) await act('저장하는 중…', () => call('saveFileVersion', { revision, path, dest }), { success: () => `저장했습니다: ${dest}` });
+    const dest = await call('pick', { kind: 'save', name: suggested, title: t('이 버전 저장') });
+    if (dest) await act(t('저장하는 중…'), () => call('saveFileVersion', { revision, path, dest }), { success: () => t('저장했습니다: {dest}', { dest }) });
   },
   /** Stage 전 확인: 충돌 표시가 남은 파일·안에 git 레포지토리가 있는 폴더(원본 StagingLists.Stage). 올려도 되면 true. */
   async confirmStage(paths) {
     const warn = await call('stageWarnings', { paths }).catch(() => ({ conflictMarkers: [], nestedRepos: [] }));
     const list = (xs) => xs.slice(0, 10).join('\n');
-    if (warn.nestedRepos?.length && !(await confirmDialog({ title: '별도 git 레포지토리가 있는 폴더', glyph: 'warning', tone: 'warning', message: `다음 폴더는 안에 별도 git 레포지토리가 있습니다. 그대로 Stage 하면 파일이 아니라 그 레포지토리의 커밋을 가리키는 링크(gitlink)만 올라갑니다.\n\n${list(warn.nestedRepos)}`, ok: 'gitlink 로 같이 Stage' }))) return false;
-    if (warn.conflictMarkers?.length && !(await confirmDialog({ title: '충돌 표시가 남아 있습니다', glyph: 'warning', danger: true, message: `아래 파일에 충돌 표시(<<<<<<< ======= >>>>>>>)가 남아 있습니다.\n올리면 git 은 충돌이 해결된 것으로 봅니다.\n\n${list(warn.conflictMarkers)}`, ok: '그대로 Stage' }))) return false;
+    if (warn.nestedRepos?.length && !(await confirmDialog({ title: t('별도 git 레포지토리가 있는 폴더'), glyph: 'warning', tone: 'warning', message: t('다음 폴더는 안에 별도 git 레포지토리가 있습니다. 그대로 Stage 하면 파일이 아니라 그 레포지토리의 커밋을 가리키는 링크(gitlink)만 올라갑니다.\n\n{folders}', { folders: list(warn.nestedRepos) }), ok: t('gitlink 로 같이 Stage') }))) return false;
+    if (warn.conflictMarkers?.length && !(await confirmDialog({ title: t('충돌 표시가 남아 있습니다'), glyph: 'warning', danger: true, message: t('아래 파일에 충돌 표시(<<<<<<< ======= >>>>>>>)가 남아 있습니다.\n올리면 git 은 충돌이 해결된 것으로 봅니다.\n\n{files}', { files: list(warn.conflictMarkers) }), ok: t('그대로 Stage') }))) return false;
     return !state.busy;
   },
   /** Stage. 바쁜 동안 누른 파일 하나는 무시한다 — 목록이 밀려 커서 밑에 온 다른 파일을 두 번째 클릭으로 올리지 않게. */
@@ -1571,12 +1588,12 @@ const actions = {
     if (state.busy || !paths.length) return;
     if (!(await actions.confirmStage(paths))) return;
     optimistic(paths, 'unstaged', 'staged');
-    return act('Stage 하는 중…', () => call('stage', { paths }));
+    return act(t('Stage 하는 중…'), () => call('stage', { paths }));
   },
   unstage(paths) {
     if (state.busy || !paths.length) return undefined;
     optimistic(paths, 'staged', 'unstaged');
-    return act('Unstage 하는 중…', () => call('unstage', { paths }));
+    return act(t('Unstage 하는 중…'), () => call('unstage', { paths }));
   },
   /** 모두 Stage: 전부를 같은 확인을 거쳐 올리고, 누르자마자 목록을 옮겨 보인다. */
   async stageAll() {
@@ -1584,12 +1601,12 @@ const actions = {
     const paths = (state.status?.unstaged ?? []).map((e) => e.path);
     if (paths.length && !(await actions.confirmStage(paths))) return;
     optimistic(null, 'unstaged', 'staged');
-    return act('모두 Stage 하는 중…', () => call('stageAll'));
+    return act(t('모두 Stage 하는 중…'), () => call('stageAll'));
   },
   unstageAll() {
     if (state.busy) return undefined;
     optimistic(null, 'staged', 'unstaged');
-    return act('모두 Unstage 하는 중…', () => call('unstageAll'));
+    return act(t('모두 Unstage 하는 중…'), () => call('unstageAll'));
   },
   lastMessage: () => call('lastMessage').catch(() => ''),
   identity: () => state.repo?.identity ?? { name: '', email: '' },
@@ -1604,13 +1621,13 @@ const actions = {
   /** MERGE_MSG 의 "# Conflicts:" 경로(앱을 다시 열어도 "해결한 파일"·"변경 없음" 을 남긴다). */
   mergeConflicts: () => state.mergeConflicts ?? [],
   async commit(message, amend, pushAfter) {
-    const hash = await act(amend ? 'Amend 하는 중…' : '커밋하는 중…', () => call('commit', { message, amend }), {
+    const hash = await act(amend ? t('Amend 하는 중…') : t('커밋하는 중…'), () => call('commit', { message, amend }), {
       // 다시 그리기 전에 입력란을 비운다.
       done: () => {
         state.draft = { summary: '', description: '', amend: false };
         graph.setWipSubject('');
       },
-      success: (h) => `커밋했습니다: ${String(h).slice(0, 7)}`,
+      success: (h) => t('커밋했습니다: {hash}', { hash: String(h).slice(0, 7) }),
     });
     if (hash === undefined) return;
     if (pushAfter) await push();
@@ -1644,7 +1661,7 @@ function optimistic(paths, from, to) {
 /** 제목·작성자·SHA 앞부분·참조·가지 이름으로 찾고, Enter·[다음] 으로 다음 일치를 고른다. */
 const graphSearch = (() => {
   const box = $('graph-search');
-  const input = el('input', { class: 'field', placeholder: '커밋 찾기 — 제목·작성자·SHA·브랜치·태그', spellcheck: 'false' });
+  const input = el('input', { class: 'field', placeholder: t('커밋 찾기 — 제목·작성자·SHA·브랜치·태그'), spellcheck: 'false' });
   const count = el('span', { class: 'muted small search-count' });
   let matches = [];
   let at = -1;
@@ -1661,7 +1678,7 @@ const graphSearch = (() => {
       });
     }
     at = -1;
-    count.textContent = q ? (matches.length ? `${matches.length}개` : '찾는 커밋이 없습니다') : '';
+    count.textContent = q ? (matches.length ? t('{matches}개', { matches: matches.length }) : t('찾는 커밋이 없습니다')) : '';
     count.classList.toggle('warning-text', !!q && !matches.length);
     graph.setSearchMatches(q && prefs.get('explorer.dim') ? new Set(matches) : null);
   };
@@ -1691,9 +1708,9 @@ const graphSearch = (() => {
     $('graph-scroll').focus();
   };
   box.replaceChildren(icon('search', 14), input, count,
-    el('button', { class: 'icon-btn', 'data-tip': '이전 (Shift+Enter)', onclick: () => next(-1) }, icon('arrowUp', 14)),
-    el('button', { class: 'icon-btn', 'data-tip': '다음 (Enter)', onclick: () => next(1) }, icon('arrowDown', 14)),
-    el('button', { class: 'icon-btn', 'data-tip': '닫기 (Esc)', onclick: close }, icon('close', 12)));
+    el('button', { class: 'icon-btn', 'data-tip': t('이전 (Shift+Enter)'), onclick: () => next(-1) }, icon('arrowUp', 14)),
+    el('button', { class: 'icon-btn', 'data-tip': t('다음 (Enter)'), onclick: () => next(1) }, icon('arrowDown', 14)),
+    el('button', { class: 'icon-btn', 'data-tip': t('닫기 (Esc)'), onclick: close }, icon('close', 12)));
   return {
     open() {
       closeDiff();
@@ -1709,7 +1726,7 @@ const graphSearch = (() => {
 
 // ── 동기화(원본 Views/SyncFlows) ───────────────────────
 
-const PULL_MODES = { ffOnly: '앞으로 감기만', merge: '병합', rebase: 'Rebase' };
+const PULL_MODES = { ffOnly: t('앞으로 감기만'), merge: t('병합'), rebase: 'Rebase' };
 
 /**
  * 푸시. 원격이 없으면 원격 추가 드로어, 원격이 여럿이고 upstream 이 없으면 고르기 카드, 거절(원격이 앞섬)이면 Pull 을 권한다.
@@ -1718,31 +1735,31 @@ async function push() {
   const remotes = state.refs?.remotes ?? [];
   const branch = state.status.branch;
   if (!remotes.length) {
-    toast('원격이 없습니다. 원격을 추가한 뒤 다시 푸시하세요.', 'warning');
+    toast(t('원격이 없습니다. 원격을 추가한 뒤 다시 푸시하세요.'), 'warning');
     refsUi.addRemote();
     return;
   }
   let remote;
   if (!branch.upstream && remotes.length > 1) {
-    remote = await pickDialog({ title: '올릴 원격', glyph: 'push', message: `'${branch.name}' 를 어느 원격에 올릴까요?`, options: remotes.map((r) => ({ value: r, label: r })), value: prefs.get('push.remote') ?? 'origin' });
+    remote = await pickDialog({ title: t('올릴 원격'), glyph: 'push', message: t("'{name}' 를 어느 원격에 올릴까요?", { name: branch.name }), options: remotes.map((r) => ({ value: r, label: r })), value: prefs.get('push.remote') ?? 'origin' });
     if (!remote) return;
     prefs.set('push.remote', remote);
   }
   const firstPush = !branch.upstream;
   let rejected = null;
-  const result = await act('푸시하는 중…', (job) => call('push', { remote, job }), {
+  const result = await act(t('푸시하는 중…'), (job) => call('push', { remote, job }), {
     remote: 'push',
-    success: () => (firstPush ? `'${branch.name}' 를 처음 올렸습니다.` : '푸시했습니다.'),
+    success: () => (firstPush ? t("'{name}' 를 처음 올렸습니다.", { name: branch.name }) : t('푸시했습니다.')),
     onError: (error) => {
       if (error?.advice?.kind !== 'remoteAhead') return false;
       rejected = error;
       return true;
     },
   });
-  if (rejected && await confirmDialog({ title: '원격에 새 커밋이 있습니다', glyph: 'pull', message: `${rejected.advice.cause}\n\n먼저 Pull 해서 합친 뒤 다시 Push 할까요?`, ok: 'Pull 하고 Push' })) {
+  if (rejected && await confirmDialog({ title: t('원격에 새 커밋이 있습니다'), glyph: 'pull', message: t('{cause}\n\n먼저 Pull 해서 합친 뒤 다시 Push 할까요?', { cause: rejected.advice.cause }), ok: t('Pull 하고 Push') })) {
     if (await pull()) await push();
   } else if (result !== undefined && firstPush && state.refs?.remotes && isGithub()) {
-    toast(`새 브랜치를 올렸습니다. GitHub 에서 Pull Request 를 만들 수 있습니다.`, 'info');
+    toast(t('새 브랜치를 올렸습니다. GitHub 에서 Pull Request 를 만들 수 있습니다.'), 'info');
   }
 }
 
@@ -1754,7 +1771,7 @@ let lastFetchError = null;
 async function fetchNow() {
   toolbar.setFetch({ fetching: true });
   try {
-    const ok = await act('페치하는 중…', (job) => call('fetch', { job }).then(() => true), { success: () => '페치했습니다.', remote: 'fetch' });
+    const ok = await act(t('페치하는 중…'), (job) => call('fetch', { job }).then(() => true), { success: () => t('페치했습니다.'), remote: 'fetch' });
     if (ok) {
       toolbar.setFetch({ error: null, auth: false });
       lastFetchError = null;
@@ -1769,9 +1786,9 @@ async function fetchNow() {
 /** 풀. 앞으로 감기만으로 안 되면(갈라짐) 병합·Rebase 중에서 다시 묻는다. 성공하면 true. */
 async function pull(mode) {
   let diverged = false;
-  const result = await act(`풀 하는 중… (${PULL_MODES[mode ?? state.settings.pullMode]})`, (job) => call('pull', mode ? { mode, job } : { job }).then(() => true), {
+  const result = await act(t('풀 하는 중… ({mode})', { mode: PULL_MODES[mode ?? state.settings.pullMode] }), (job) => call('pull', mode ? { mode, job } : { job }).then(() => true), {
     remote: 'pull',
-    success: () => '풀 했습니다.',
+    success: () => t('풀 했습니다.'),
     onError: (error) => {
       const text = error?.message ?? '';
       if (!/fast-forward|갈라져|Diverging/i.test(text)) return false;
@@ -1782,9 +1799,9 @@ async function pull(mode) {
   updateFetchInfo();
   if (!diverged) return result === true;
   const choice = await choiceDialog({
-    title: '로컬과 원격이 갈라졌습니다', glyph: 'pull',
-    message: '앞으로 감기만으로는 받을 수 없습니다. 원격의 커밋을 어떻게 합칠까요?\n\n병합: 병합 커밋을 만듭니다.\nRebase: 내 커밋을 원격 위로 옮깁니다(이미 푸시한 커밋이 없을 때 권장).',
-    ok: '병합', alt: 'Rebase',
+    title: t('로컬과 원격이 갈라졌습니다'), glyph: 'pull',
+    message: t('앞으로 감기만으로는 받을 수 없습니다. 원격의 커밋을 어떻게 합칠까요?\n\n병합: 병합 커밋을 만듭니다.\nRebase: 내 커밋을 원격 위로 옮깁니다(이미 푸시한 커밋이 없을 때 권장).'),
+    ok: t('병합'), alt: 'Rebase',
   });
   if (!choice) return false;
   return pull(choice === 'ok' ? 'merge' : 'rebase');
@@ -1823,13 +1840,13 @@ on('quitRequested', async () => {
   const pulling = list.some((j) => j.kind === 'pull' || j.kind === 'checkout');
   const cloning = list.some((j) => j.kind === 'clone');
   const ok = await confirmDialog({
-    title: '진행 중인 작업이 있습니다',
-    message: `${names || '원격 작업'}\n\n${[cloning ? '끄면 받던 Clone 은 멈추고 받다 만 폴더를 지웁니다.' : '끄면 진행 중인 작업을 멈춥니다.', pulling ? 'Pull·브랜치 전환은 작업 트리를 지키려고 끝난 뒤에 끕니다.' : ''].filter(Boolean).join(' ')}`,
-    ok: '끄기', cancel: '계속하기', danger: true,
+    title: t('진행 중인 작업이 있습니다'),
+    message: `${names || t('원격 작업')}\n\n${[cloning ? t('끄면 받던 Clone 은 멈추고 받다 만 폴더를 지웁니다.') : t('끄면 진행 중인 작업을 멈춥니다.'), pulling ? t('Pull·브랜치 전환은 작업 트리를 지키려고 끝난 뒤에 끕니다.') : ''].filter(Boolean).join(' ')}`,
+    ok: t('끄기'), cancel: t('계속하기'), danger: true,
   });
   quitAsking = false;
   await call('quit', { cancel: ok }).catch(() => {});
-  if (ok && pulling) jobs.waitForQuit('작업이 끝나면 앱을 끕니다.');
+  if (ok && pulling) jobs.waitForQuit(t('작업이 끝나면 앱을 끕니다.'));
 });
 on('fetched', (result) => {
   const error = result.ok ? null : result.error;
@@ -1847,18 +1864,18 @@ function windowMenu(button) {
   const explorer = prefs.get('explorer') ?? 'fork';
   const scale = Math.round(uiScale() * 100);
   menuBelow(button, [
-    { label: '배치', submenu: Object.entries(LAYOUTS).map(([key, label]) => ({ label, checked: layout === key, action: () => setLayout(key) })) },
-    { label: '탐색기 모양', disabled: layout === 'gitkraken', hint: layout === 'gitkraken' ? 'GitKraken 은 가로 그래프' : '', submenu: Object.entries(EXPLORERS).map(([key, label]) => ({ label, checked: explorer === key, action: () => { prefs.set('explorer', key); views?.relayout(); } })) },
-    { label: '테마', submenu: Object.entries(THEMES).map(([key, label]) => ({ label, checked: (state.settings.theme ?? 'dark') === key, action: () => setTheme(key) })) },
-    { label: 'UI 크기', submenu: scaleItems(scale) },
+    { label: t('배치'), submenu: Object.entries(LAYOUTS).map(([key, label]) => ({ label, checked: layout === key, action: () => setLayout(key) })) },
+    { label: t('탐색기 모양'), disabled: layout === 'gitkraken', hint: layout === 'gitkraken' ? t('GitKraken 은 가로 그래프') : '', submenu: Object.entries(EXPLORERS).map(([key, label]) => ({ label, checked: explorer === key, action: () => { prefs.set('explorer', key); views?.relayout(); } })) },
+    { label: t('테마'), submenu: Object.entries(THEMES).map(([key, label]) => ({ label, checked: (state.settings.theme ?? 'dark') === key, action: () => setTheme(key) })) },
+    { label: t('UI 크기'), submenu: scaleItems(scale) },
     '-',
-    { label: `레포지토리 폴더 — ${state.platform === 'windows' ? '탐색기' : 'Finder'}`, disabled: !state.repo, action: () => call('openFolder', { path: state.repo.path }).catch(showError) },
-    { label: '레포지토리 폴더에서 터미널 열기', disabled: !state.repo, action: () => call('openTerminal').catch(showError) },
+    { label: t('레포지토리 폴더 — {fm}', { fm: state.platform === 'windows' ? t('탐색기') : 'Finder' }), disabled: !state.repo, action: () => call('openFolder', { path: state.repo.path }).catch(showError) },
+    { label: t('레포지토리 폴더에서 터미널 열기'), disabled: !state.repo, action: () => call('openTerminal').catch(showError) },
     '-',
     // 로그인하지 않고 쓰는 중이면 연결 화면으로 돌아가 로그인할 수 있게.
-    github.signedIn === false ? { label: 'GitHub 로그인…', action: () => showConnect() } : null,
-    state.repo ? { label: '이 레포지토리의 GitHub 계정…', action: () => github.chooseAccount() } : null,
-    { label: '설정…', hint: '⌘ ,', action: () => openSettings() },
+    github.signedIn === false ? { label: t('GitHub 로그인…'), action: () => showConnect() } : null,
+    state.repo ? { label: t('이 레포지토리의 GitHub 계정…'), action: () => github.chooseAccount() } : null,
+    { label: t('설정…'), hint: '⌘ ,', action: () => openSettings() },
   ].filter(Boolean));
 }
 
@@ -1882,7 +1899,7 @@ function setLayout(key) {
     return;
   }
   // 먼저 "다시 그리는 중" 을 덮어 보이고 다음 틀에 바꾼다(원본 GitWindow.Rebuild).
-  const cover = el('div', { class: 'rebuilding', text: '다시 그리는 중…' });
+  const cover = el('div', { class: 'rebuilding', text: t('다시 그리는 중…') });
   document.body.append(cover);
   requestAnimationFrame(() => requestAnimationFrame(() => {
     document.body.dataset.layout = key;
@@ -1898,9 +1915,9 @@ function setLayout(key) {
 /** UI 배율 메뉴(창 ⋮ 메뉴와 아래쪽 상태 줄이 같이 쓴다). */
 function scaleItems(scale) {
   return [
-    { label: '크게', hint: '⌘ =', action: () => setScale(uiScale() + 0.1) },
-    { label: '작게', hint: '⌘ -', action: () => setScale(uiScale() - 0.1) },
-    { label: `원래대로 — 지금 ${scale}%`, hint: '⌘ 0', action: () => setScale(1) },
+    { label: t('크게'), hint: '⌘ =', action: () => setScale(uiScale() + 0.1) },
+    { label: t('작게'), hint: '⌘ -', action: () => setScale(uiScale() - 0.1) },
+    { label: t('원래대로 — 지금 {scale}%', { scale }), hint: '⌘ 0', action: () => setScale(1) },
   ];
 }
 
@@ -1923,23 +1940,23 @@ function renderFooter() {
     }, icon('pullRequest', 14, 'footer-icon'), el('span', { class: 'footer-text', text: pulls.text })),
     el('span', { class: 'spacer' }),
     el('button', {
-      class: 'footer-btn', 'data-tip': 'UI 크기',
+      class: 'footer-btn', 'data-tip': t('UI 크기'),
       onclick: (e) => {
         const r = e.currentTarget.getBoundingClientRect();
         showMenu(r.left, r.top - 4 - 30 * 3, scaleItems(scale));
       },
     }, icon('zoomIn', 14, 'footer-icon'), el('span', { class: 'footer-text', text: `${scale}%` })),
-    el('button', { class: 'footer-btn', 'data-tip': '이 레포지토리의 GitHub 계정…', onclick: () => github.chooseAccount() },
+    el('button', { class: 'footer-btn', 'data-tip': t('이 레포지토리의 GitHub 계정…'), onclick: () => github.chooseAccount() },
       icon('github', 14, 'footer-icon'), el('span', { class: 'footer-text', text: github.account ?? 'GitHub' })),
     el('span', { class: 'footer-version', 'data-tip': 'Ramus', text: state.version }));
 }
 
 /** 원본 RefTreeBuilder.Sections 순서. 레일 아이콘도 이 순서다. */
 const RAIL_SECTIONS = [
-  ['local', 'laptop', '로컬'], ['remote', 'cloud', '리모트'], ['worktrees', 'worktree', '워크트리'], ['stash', 'stash', '스태시'],
-  ['prs', 'pullRequest', '풀 리퀘스트'], ['submodules', 'submodule', '서브모듈'], ['tags', 'tag', '태그'],
+  ['local', 'laptop', t('로컬')], ['remote', 'cloud', t('리모트')], ['worktrees', 'worktree', t('워크트리')], ['stash', 'stash', t('스태시')],
+  ['prs', 'pullRequest', t('풀 리퀘스트')], ['submodules', 'submodule', t('서브모듈')], ['tags', 'tag', t('태그')],
 ];
-const MAIN_TAB = { gitkraken: ['hierarchy', '그래프'], fork: ['pencil', '로컬 변경'], unity: ['pencil', '대기 중인 변경사항'] };
+const MAIN_TAB = { gitkraken: ['hierarchy', t('그래프')], fork: ['pencil', t('로컬 변경')], unity: ['pencil', t('대기 중인 변경사항')] };
 
 /**
  * diff·병합 편집기·도구 화면을 열면 사이드바가 아이콘 레일로 접힌다(원본 SidebarRail):
@@ -1962,14 +1979,14 @@ function renderRail() {
     icon(glyph, 18, 'rail-icon'), badge ? el('span', { class: 'rail-badge', text: badge > 99 ? '99+' : String(badge) }) : null);
   const changes = new Set([...(state.status?.staged ?? []), ...(state.status?.unstaged ?? [])].map((e) => e.path)).size;
   const [mainGlyph, mainLabel] = MAIN_TAB[layoutName()] ?? MAIN_TAB.gitkraken;
-  const tabs = [['main', mainGlyph, mainLabel, changes], ['explorer', 'branch', '브랜치 탐색기', 0], ['workspace', 'folder', '워크스페이스', 0]];
+  const tabs = [['main', mainGlyph, mainLabel, changes], ['explorer', 'branch', t('브랜치 탐색기'), 0], ['workspace', 'folder', t('워크스페이스'), 0]];
   const counts = {
     local: refs.local.length, remote: refs.remote.length, worktrees: state.worktrees?.filter((w) => !w.bare).length ?? 0, stash: refs.stashes.length,
     prs: github.count, submodules: state.submodules?.length ?? 0, tags: refs.tags.length,
   };
   const hasGithub = (state.remotes ?? []).some((r) => /github\.com/i.test(r.fetchUrl ?? ''));
   $('rail').replaceChildren(
-    item('expand', '왼쪽 패널 펼치기', 0, restore),
+    item('expand', t('왼쪽 패널 펼치기'), 0, restore),
     el('div', { class: 'rail-group' }, tabs.map(([key, glyph, label, badge]) => item(glyph, label, badge, async () => { if (await restore()) views?.select(key); }, (views?.tab ?? 'main') === key))),
     el('div', { class: 'rail-group' }, RAIL_SECTIONS.filter(([id]) => id !== 'prs' || hasGithub).map(([id, glyph, label]) => item(glyph, label, counts[id], async () => {
       if (await restore()) sidebar.revealSection(id);
@@ -2081,37 +2098,37 @@ const toolbarOn = (id) => { const button = $(id); return !!button && !button.dis
 const clickToolbar = (id) => () => $(id)?.click();
 
 const MENU = {
-  settings: { label: '설정', keys: 'mod+Comma', run: () => openSettings() },
-  newTab: { label: '새 탭', keys: 'mod+KeyT', on: () => !!state.repo, run: () => newTab() },
-  closeTab: { label: '탭 닫기', keys: 'mod+KeyW', on: () => !!state.repo, run: () => closeTab(state.repo.path) },
-  reopenTab: { label: '닫은 탭 다시 열기', keys: 'mod+shift+KeyT', on: () => closedTabs.length > 0, run: () => reopenTab() },
-  clone: { label: '레포지토리 복제', keys: 'mod+KeyN', run: () => startClone() },
-  initRepo: { label: '레포지토리 만들기', keys: 'mod+KeyI', run: () => createRepo() },
-  openRepo: { label: '레포지토리 열기', keys: 'mod+KeyO', run: () => pickRepo() },
-  terminal: { label: '터미널에서 열기', keys: 'alt+KeyT', on: () => !!state.repo, run: () => call('openTerminal').catch(showError) },
-  reveal: { label: () => (state.platform === 'windows' ? '탐색기에서 보기' : 'Finder 에서 보기'), keys: 'alt+KeyO', on: () => !!state.repo, run: () => call('openFolder', { path: state.repo.path }).catch(showError) },
-  githubLogout: { label: 'GitHub 로그아웃', on: () => github.signedIn === true, run: () => githubLogout() },
-  undo: { label: '실행 취소 (글 칸 밖에서는 git 작업)', keys: 'mod+KeyZ', always: true, run: () => editOrGit('undo') },
-  redo: { label: '다시 실행', keys: 'mod+shift+KeyZ', always: true, run: () => editOrGit('redo') },
-  find: { label: '찾기', keys: 'mod+KeyF', on: () => !!state.repo, run: () => find() },
-  zoomIn: { label: '확대', keys: ['mod+Equal', 'mod+shift+Equal', 'mod+NumpadAdd'], always: true, run: () => setScale(uiScale() + 0.1) },
-  zoomOut: { label: '축소', keys: ['mod+Minus', 'mod+NumpadSubtract'], always: true, run: () => setScale(uiScale() - 0.1) },
-  zoomReset: { label: '실제 크기', keys: ['mod+Digit0', 'mod+Numpad0'], always: true, run: () => setScale(1) },
-  refresh: { label: '새로 고침', keys: 'mod+KeyR', on: () => !!state.repo, run: () => refresh() },
+  settings: { label: t('설정'), keys: 'mod+Comma', run: () => openSettings() },
+  newTab: { label: t('새 탭'), keys: 'mod+KeyT', on: () => !!state.repo, run: () => newTab() },
+  closeTab: { label: t('탭 닫기'), keys: 'mod+KeyW', on: () => !!state.repo, run: () => closeTab(state.repo.path) },
+  reopenTab: { label: t('닫은 탭 다시 열기'), keys: 'mod+shift+KeyT', on: () => closedTabs.length > 0, run: () => reopenTab() },
+  clone: { label: t('레포지토리 복제'), keys: 'mod+KeyN', run: () => startClone() },
+  initRepo: { label: t('레포지토리 만들기'), keys: 'mod+KeyI', run: () => createRepo() },
+  openRepo: { label: t('레포지토리 열기'), keys: 'mod+KeyO', run: () => pickRepo() },
+  terminal: { label: t('터미널에서 열기'), keys: 'alt+KeyT', on: () => !!state.repo, run: () => call('openTerminal').catch(showError) },
+  reveal: { label: () => (state.platform === 'windows' ? t('탐색기에서 보기') : t('Finder 에서 보기')), keys: 'alt+KeyO', on: () => !!state.repo, run: () => call('openFolder', { path: state.repo.path }).catch(showError) },
+  githubLogout: { label: t('GitHub 로그아웃'), on: () => github.signedIn === true, run: () => githubLogout() },
+  undo: { label: t('실행 취소 (글 칸 밖에서는 git 작업)'), keys: 'mod+KeyZ', always: true, run: () => editOrGit('undo') },
+  redo: { label: t('다시 실행'), keys: 'mod+shift+KeyZ', always: true, run: () => editOrGit('redo') },
+  find: { label: t('찾기'), keys: 'mod+KeyF', on: () => !!state.repo, run: () => find() },
+  zoomIn: { label: t('확대'), keys: ['mod+Equal', 'mod+shift+Equal', 'mod+NumpadAdd'], always: true, run: () => setScale(uiScale() + 0.1) },
+  zoomOut: { label: t('축소'), keys: ['mod+Minus', 'mod+NumpadSubtract'], always: true, run: () => setScale(uiScale() - 0.1) },
+  zoomReset: { label: t('실제 크기'), keys: ['mod+Digit0', 'mod+Numpad0'], always: true, run: () => setScale(1) },
+  refresh: { label: t('새로 고침'), keys: 'mod+KeyR', on: () => !!state.repo, run: () => refresh() },
   // macOS 는 운영체제 기본 항목(⌃⌘F)이 처리하고, Windows 메뉴 항목은 Rust 가 바로 처리한다. 여기는 Windows·리눅스의 F11 키.
-  fullscreen: { label: '전체 화면', keys: 'F11', macKeys: 'ctrl+mod+KeyF', always: true, run: () => call('toggleFullscreen').catch(() => {}) },
-  commit: { label: '커밋 (커밋 칸으로, 칸에 있으면 커밋)', keys: 'mod+shift+KeyC', repo: true, run: () => commitFromMenu() },
+  fullscreen: { label: t('전체 화면'), keys: 'F11', macKeys: 'ctrl+mod+KeyF', always: true, run: () => call('toggleFullscreen').catch(() => {}) },
+  commit: { label: t('커밋 (커밋 칸으로, 칸에 있으면 커밋)'), keys: 'mod+shift+KeyC', repo: true, run: () => commitFromMenu() },
   fetch: { label: 'Fetch', keys: 'mod+shift+KeyF', repo: true, on: () => toolbarOn('act-fetch'), run: clickToolbar('act-fetch') },
   pull: { label: 'Pull', keys: 'mod+shift+KeyL', repo: true, on: () => toolbarOn('act-pull'), run: clickToolbar('act-pull') },
   push: { label: 'Push', keys: 'mod+shift+KeyP', repo: true, on: () => toolbarOn('act-push'), run: clickToolbar('act-push') },
-  stash: { label: 'Stash 저장', keys: 'mod+shift+KeyH', repo: true, on: () => toolbarOn('act-stash'), run: clickToolbar('act-stash') },
-  pop: { label: 'Stash 꺼내기 (Pop)', repo: true, on: () => toolbarOn('act-pop'), run: clickToolbar('act-pop') },
-  switchBranch: { label: '브랜치 전환', keys: 'mod+KeyB', repo: true, on: () => !!state.status, run: () => toolbar.openBranchPicker() },
-  newBranch: { label: '새 브랜치', keys: 'mod+shift+KeyB', repo: true, on: () => toolbarOn('act-branch'), run: clickToolbar('act-branch') },
-  newTag: { label: '새 태그', keys: 'mod+shift+KeyG', repo: true, on: () => !!state.history?.head, run: () => refsUi.createTag(state.history.head, 'HEAD') },
-  newWorktree: { label: '새 워크트리', repo: true, run: () => refsUi.addWorktree() },
-  shortcuts: { label: '키보드 단축키 보기', run: () => showShortcuts() },
-  about: { label: 'Ramus 정보', run: () => showAbout() },
+  stash: { label: t('Stash 저장'), keys: 'mod+shift+KeyH', repo: true, on: () => toolbarOn('act-stash'), run: clickToolbar('act-stash') },
+  pop: { label: t('Stash 꺼내기 (Pop)'), repo: true, on: () => toolbarOn('act-pop'), run: clickToolbar('act-pop') },
+  switchBranch: { label: t('브랜치 전환'), keys: 'mod+KeyB', repo: true, on: () => !!state.status, run: () => toolbar.openBranchPicker() },
+  newBranch: { label: t('새 브랜치'), keys: 'mod+shift+KeyB', repo: true, on: () => toolbarOn('act-branch'), run: clickToolbar('act-branch') },
+  newTag: { label: t('새 태그'), keys: 'mod+shift+KeyG', repo: true, on: () => !!state.history?.head, run: () => refsUi.createTag(state.history.head, 'HEAD') },
+  newWorktree: { label: t('새 워크트리'), repo: true, run: () => refsUi.addWorktree() },
+  shortcuts: { label: t('키보드 단축키 보기'), run: () => showShortcuts() },
+  about: { label: t('Ramus 정보'), run: () => showAbout() },
 };
 
 /** 메뉴 항목 하나를 실행한다. 카드가 떠 있거나 연결 화면이면 크기·편집 말고는 무시한다(카드 뒤 화면을 바꾸지 않게). */
@@ -2221,9 +2238,9 @@ async function commitFromMenu() {
 
 async function githubLogout() {
   const ok = await confirmDialog({
-    title: 'GitHub 로그아웃', glyph: 'github',
-    message: '이 앱에 로그인한 GitHub 계정에서 로그아웃합니다. 저장해 둔 토큰을 지웁니다.\n다른 곳(gh·자격 증명 저장소)에 있는 계정은 그대로 둡니다.',
-    ok: '로그아웃',
+    title: t('GitHub 로그아웃'), glyph: 'github',
+    message: t('이 앱에 로그인한 GitHub 계정에서 로그아웃합니다. 저장해 둔 토큰을 지웁니다.\n다른 곳(gh·자격 증명 저장소)에 있는 계정은 그대로 둡니다.'),
+    ok: t('로그아웃'),
   });
   if (!ok) return;
   try {
@@ -2237,7 +2254,7 @@ async function githubLogout() {
   if (state.repo) github.load(true);
   renderFooter();
   syncMenu();
-  toast('GitHub 에서 로그아웃했습니다.', 'success');
+  toast(t('GitHub 에서 로그아웃했습니다.'), 'success');
 }
 
 // ── 단축키 ──
@@ -2272,10 +2289,10 @@ function keyText(spec) {
 }
 
 const SHORTCUT_GROUPS = [
-  ['파일', ['newTab', 'closeTab', 'reopenTab', 'clone', 'initRepo', 'openRepo', 'terminal', 'reveal', 'settings']],
-  ['편집', ['undo', 'redo', 'find']],
-  ['보기', ['zoomIn', 'zoomOut', 'zoomReset', 'refresh', 'fullscreen']],
-  ['레포지토리', ['commit', 'fetch', 'pull', 'push', 'stash', 'switchBranch', 'newBranch', 'newTag']],
+  [t('파일'), ['newTab', 'closeTab', 'reopenTab', 'clone', 'initRepo', 'openRepo', 'terminal', 'reveal', 'settings']],
+  [t('편집'), ['undo', 'redo', 'find']],
+  [t('보기'), ['zoomIn', 'zoomOut', 'zoomReset', 'refresh', 'fullscreen']],
+  [t('레포지토리'), ['commit', 'fetch', 'pull', 'push', 'stash', 'switchBranch', 'newBranch', 'newTag']],
 ];
 
 /** 도움말 > 키보드 단축키: 메뉴 단축키와 화면 안의 키를 한 카드에. */
@@ -2290,13 +2307,13 @@ function showShortcuts() {
     })));
   const mod = isMac() ? '⌘' : 'Ctrl+';
   groups.push(el('div', { class: 'shortcut-group' },
-    el('div', { class: 'shortcut-title', text: '화면 안' }),
-    row('새로 고침', 'F5'),
-    row('커밋 (커밋 칸에서)', `${mod}Enter`),
-    row('diff·병합·도구 화면 닫기', 'Esc'),
-    row('UI 크기', `${mod}휠`),
-    isMac() ? row('최소화', '⌘M') : null));
-  formDialog({ title: '키보드 단축키', glyph: 'info', fields: [], ok: '닫기', cancel: null, className: 'shortcuts-card', extra: el('div', { class: 'shortcut-list' }, groups) });
+    el('div', { class: 'shortcut-title', text: t('화면 안') }),
+    row(t('새로 고침'), 'F5'),
+    row(t('커밋 (커밋 칸에서)'), `${mod}Enter`),
+    row(t('diff·병합·도구 화면 닫기'), 'Esc'),
+    row(t('UI 크기'), t('{mod}휠', { mod })),
+    isMac() ? row(t('최소화'), '⌘M') : null));
+  formDialog({ title: t('키보드 단축키'), glyph: 'info', fields: [], ok: t('닫기'), cancel: null, className: 'shortcuts-card', extra: el('div', { class: 'shortcut-list' }, groups) });
 }
 
 window.addEventListener('keydown', (event) => {
@@ -2393,6 +2410,8 @@ function createViewsOnce() {
 // ── 시작 ─────────────────────────────────────────────
 
 (async () => {
+  // index.html 에 그대로 쓴 글(시작 화면 등)을 지금 언어로.
+  translateStatic(document.body);
   try {
     // 글꼴(IBM Plex Sans KR)을 첫 화면 전에 다 읽어 둔다 — 그래프는 캔버스로 글자 폭을 재므로, 읽기 전에 재면 시스템 글꼴 폭으로 어긋난다.
     const fontsReady = Promise.all([400, 500, 600, 700].map((w) => document.fonts?.load(`${w} 13px "IBM Plex Sans KR"`))).catch(() => {});

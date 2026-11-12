@@ -2,10 +2,14 @@
 // 원본 Elements/StagingLists·CommitBox·OperationActions·GraphCommitDetail 과 Views/GraphWorkspaceView 의 작업 패널 머리 줄을 옮겼다.
 
 import { el, formatDate, initials, isComposing, autoHorizontalScroll } from './util.js';
+import { scoped, isEn } from './i18n.js';
 import { icon } from './icons.js';
 import { fileList, viewSwitch, selectedEntries, selectionPaths, stateIcon, CHANGE_STATE } from './files.js';
 import { hiddenKey, isHidden, isAllHidden, hidePaths, showPath, soloRules } from './hidden.js';
 import { authorRgb } from './graph.js';
+
+/** 이 모듈의 글(locales/en/changes.js 를 먼저 본다). */
+const t = scoped('changes');
 
 /** diff 를 연 파일을 알아보는 키. */
 export const diffKey = (mode, path) => `${mode}:${path}`;
@@ -90,7 +94,7 @@ function headerButton(kind, { fork, picked, total, onAll, onSome }) {
     }, el('span', { class: 'lbl-normal', text: verb }), el('span', { class: 'lbl-shift', text: `${verb} All` }));
   }
   // GitKraken 배치: 고른 게 없으면 "모두 …", 하나면 "…", 여럿이면 "파일 n개 …".
-  const label = picked === 0 ? `모두 ${verb}` : picked === 1 ? verb : `파일 ${picked}개 ${verb}`;
+  const label = picked === 0 ? t('모두 {verb}', { verb }) : picked === 1 ? verb : t('파일 {n}개 {verb}', { n: picked, verb });
   return el('button', { class: cls, disabled: total === 0, text: label, onclick: () => (picked ? onSome() : onAll()) });
 }
 
@@ -194,7 +198,7 @@ export function renderStaging(container, status, draft, api) {
   const unstaged = conflictMode ? [...conflicts, ...unstagedAll.filter(matches)] : ui.showHidden ? unstagedAll.filter(matches) : stageable;
   // 이번에 풀었지만 바뀐 것이 없는 파일은 "해결한 파일" 에 "변경 없음" 으로 남긴다(푼 파일이 사라진 것처럼 보이지 않게).
   const known = new Set([...status.unstaged, ...status.staged].map((e) => e.path));
-  const unchanged = conflictMode ? [...ui.conflictSeen].filter((p) => !known.has(p)).sort().map((path) => ({ path, state: 'modified', note: '변경 없음', unchanged: true })) : [];
+  const unchanged = conflictMode ? [...ui.conflictSeen].filter((p) => !known.has(p)).sort().map((path) => ({ path, state: 'modified', note: t('변경 없음'), unchanged: true })) : [];
   const staged = [...status.staged, ...unchanged].filter(matches);
 
   const common = (mode, st) => ({
@@ -219,12 +223,12 @@ export function renderStaging(container, status, draft, api) {
   const unstagedList = fileList({
     ...common('unstaged', ui.unstaged),
     entries: unstaged,
-    empty: filtering ? '찾는 파일이 없습니다.' : conflictMode ? '남은 충돌이 없습니다.' : hiddenAll.length ? '보이는 파일이 없습니다. 위의 "숨김" 을 누르면 숨긴 파일이 보입니다.' : '바뀐 파일이 없습니다.',
+    empty: filtering ? t('찾는 파일이 없습니다.') : conflictMode ? t('남은 충돌이 없습니다.') : hiddenAll.length ? t('보이는 파일이 없습니다. 위의 "숨김" 을 누르면 숨긴 파일이 보입니다.') : t('바뀐 파일이 없습니다.'),
     // GitKraken 배치만: 줄에 마우스를 올리면 그 파일 하나만 옮기는 버튼. 충돌 파일은 "해결됨으로 표시".
     rowAction: fork ? null : {
       labelOf: (e) => (e.state === 'conflicted'
-        ? { label: '해결됨으로 표시', kind: 'resolve', run: (x) => api.markResolved([x.path]) }
-        : { label: '파일 Stage', kind: 'stage', run: (x) => api.stage([x.path]) }),
+        ? { label: t('해결됨으로 표시'), kind: 'resolve', run: (x) => api.markResolved([x.path]) }
+        : { label: t('파일 Stage'), kind: 'stage', run: (x) => api.stage([x.path]) }),
     },
     // 더블클릭·Enter = Stage. 충돌 파일은 병합 편집기에서 푼다.
     onActivate: (entries) => stageEntries(entries),
@@ -241,8 +245,8 @@ export function renderStaging(container, status, draft, api) {
   const stagedList = fileList({
     ...common('staged', ui.staged),
     entries: staged,
-    empty: filtering ? '찾는 파일이 없습니다.' : conflictMode ? '아직 푼 파일이 없습니다.' : 'Stage 한 파일이 없습니다.',
-    rowAction: fork ? null : { labelOf: (e) => (e.unchanged ? null : { label: '파일 Unstage', kind: 'unstage', run: (x) => api.unstage([x.path]) }) },
+    empty: filtering ? t('찾는 파일이 없습니다.') : conflictMode ? t('아직 푼 파일이 없습니다.') : t('Stage 한 파일이 없습니다.'),
+    rowAction: fork ? null : { labelOf: (e) => (e.unchanged ? null : { label: t('파일 Unstage'), kind: 'unstage', run: (x) => api.unstage([x.path]) }) },
     onActivate: (entries) => api.unstage(realStaged(entries).map((e) => e.path)),
     onMenu: (event, entries, clicked) => api.fileMenu(event, entries, 'staged', clicked),
     onFolderMenu: (event, folder, entries, viewOps) => api.folderMenu(event, folder, entries, 'staged', viewOps),
@@ -269,7 +273,7 @@ export function renderStaging(container, status, draft, api) {
     const pickU = selectedEntries(ui.unstaged, unstaged).filter((e) => e.state !== 'conflicted');
     const pickS = realStaged(selectedEntries(ui.staged, staged));
     unstagedButton.replaceChildren(conflictMode
-      ? el('button', { class: 'staging-btn resolve', disabled: !conflicts.length, 'data-tip': '충돌 파일을 모두 지금 내용 그대로 해결됨으로 표시합니다(git add).', text: '모두 해결됨으로 표시', onclick: () => api.markResolved(conflicts.map((e) => e.path)) })
+      ? el('button', { class: 'staging-btn resolve', disabled: !conflicts.length, 'data-tip': t('충돌 파일을 모두 지금 내용 그대로 해결됨으로 표시합니다(git add).'), text: t('모두 해결됨으로 표시'), onclick: () => api.markResolved(conflicts.map((e) => e.path)) })
       : headerButton('stage', { fork, picked: pickU.length, total: stageable.length, onAll: stageAll, onSome: () => api.stage(pickU.map((e) => e.path)) }));
     stagedButton.replaceChildren(headerButton('unstage', { fork, picked: pickS.length, total: realStaged(staged).length, onAll: unstageAll, onSome: () => api.unstage(pickS.map((e) => e.path)) }));
   }
@@ -278,7 +282,7 @@ export function renderStaging(container, status, draft, api) {
   const section = (cls, title, host, button, extra = null) => el('div', { class: `stage-section ${cls}` },
     el('div', { class: 'stage-header' }, el('span', { class: 'stage-title', text: title }), extra, button),
     host);
-  const unstagedTitle = conflictMode ? `충돌 파일 (${unstaged.length})` : `Unstaged (${visibleAll.length})`;
+  const unstagedTitle = conflictMode ? t('충돌 파일 ({n})', { n: unstaged.length }) : `Unstaged (${visibleAll.length})`;
   // 숨긴 파일이 있으면 머리 줄에 "숨김 n". 누르면 숨긴 줄을 제자리에 흐리게 보이고(다시 누르면 감춘다), 그 줄의 눈을 눌러 되살린다.
   const toggleShowHidden = () => {
     ui.showHidden = !ui.showHidden;
@@ -286,15 +290,15 @@ export function renderStaging(container, status, draft, api) {
   };
   const hiddenChip = hiddenAll.length ? el('button', {
     class: `hidden-chip${ui.showHidden ? ' on' : ''}`,
-    'data-tip': ui.showHidden ? '숨긴 파일을 다시 감춥니다.' : '숨긴 파일을 흐리게 보입니다. 숨긴 파일은 "모두 Stage"·"모든 변경 버리기" 에서 빠집니다.',
+    'data-tip': ui.showHidden ? t('숨긴 파일을 다시 감춥니다.') : t('숨긴 파일을 흐리게 보입니다. 숨긴 파일은 "모두 Stage"·"모든 변경 버리기" 에서 빠집니다.'),
     onclick: toggleShowHidden,
-  }, icon('eyeOff', 13), el('span', { text: `숨김 ${hiddenAll.length}` })) : null;
+  }, icon('eyeOff', 13), el('span', { text: t('숨김 {n}', { n: hiddenAll.length }) })) : null;
   if (ui.showHidden) {
     unstagedHost.prepend(el('div', { class: 'hidden-banner' },
-      el('span', { class: 'hidden-banner-text', text: `숨긴 파일 ${hiddenAll.length}개를 흐리게 보이는 중` }),
-      el('button', { class: 'expand-toggle', 'data-tip': '이 레포지토리에서 숨긴 것을 모두 다시 보입니다.', text: '모두 보이기', onclick: () => setRules([]) })));
+      el('span', { class: 'hidden-banner-text', text: t('숨긴 파일 {n}개를 흐리게 보이는 중', { n: hiddenAll.length }) }),
+      el('button', { class: 'expand-toggle', 'data-tip': t('이 레포지토리에서 숨긴 것을 모두 다시 보입니다.'), text: t('모두 보이기'), onclick: () => setRules([]) })));
   }
-  const stagedTitle = conflictMode ? `해결한 파일 (${status.staged.length + unchanged.length})` : `Staged (${status.staged.length})`;
+  const stagedTitle = conflictMode ? t('해결한 파일 ({n})', { n: status.staged.length + unchanged.length }) : `Staged (${status.staged.length})`;
   const stagedSection = section('staged', stagedTitle, stagedHost, stagedButton);
   stagedSection.style.height = `${api.prefs.get('staging.stagedHeight') ?? 200}px`;
   const lists = el('div', { class: 'staging-lists' });
@@ -317,13 +321,13 @@ export function renderStaging(container, status, draft, api) {
     input?.select();
   };
   const toolbar = el('div', { class: 'staging-toolbar' },
-    fork ? el('button', { class: `staging-filter-btn${ui.filterOpen ? ' on' : ''}`, 'data-tip': '파일 찾기 (Ctrl+F). Unstaged·Staged 를 경로로 거릅니다. Esc 로 지우고 닫습니다.', onclick: toggleFilter }, icon('search', 16)) : null,
+    fork ? el('button', { class: `staging-filter-btn${ui.filterOpen ? ' on' : ''}`, 'data-tip': t('파일 찾기 (Ctrl+F). Unstaged·Staged 를 경로로 거릅니다. Esc 로 지우고 닫습니다.'), onclick: toggleFilter }, icon('search', 16)) : null,
     viewSwitch(view, (v) => { api.prefs.set('staging.view', v); rerender(); }, true));
   container.stagingOpenFilter = fork ? openFilter : null;
 
   let filterRow = null;
   if (fork && ui.filterOpen) {
-    const input = el('input', { class: 'filter-input', placeholder: '필터', spellcheck: 'false' });
+    const input = el('input', { class: 'filter-input', placeholder: t('필터'), spellcheck: 'false' });
     input.value = ui.filter;
     const apply = () => {
       ui.filter = input.value;
@@ -363,12 +367,12 @@ export function renderStaging(container, status, draft, api) {
     const incoming = merging ? (api.mergeMessage?.() ?? '').match(/Merge (?:remote-tracking )?branch '([^']+)'/)?.[1] ?? 'MERGE_HEAD' : null;
     head = [
       el('div', { class: `wip-header${merging ? ' merging' : ''}` },
-        el('button', { class: 'wip-discard', 'data-tip': keep.length ? `모든 변경 버리기 (숨긴 파일 ${keep.length}개는 그대로 둡니다)` : '모든 변경 버리기', disabled: total <= keep.length, onclick: () => api.discardAll(keep) }, icon('trash', 16)),
+        el('button', { class: 'wip-discard', 'data-tip': keep.length ? t('모든 변경 버리기 (숨긴 파일 {n}개는 그대로 둡니다)', { n: keep.length }) : t('모든 변경 버리기'), disabled: total <= keep.length, onclick: () => api.discardAll(keep) }, icon('trash', 16)),
         merging ? el('span', { class: 'wip-warning' }, icon('warning', 15)) : null,
-        el('span', { class: 'wip-title', text: merging ? '병합 충돌' : `${branch} 의 변경 ${total}개` })),
+        el('span', { class: 'wip-title', text: merging ? t('병합 충돌') : t('{branch} 의 변경 {n}개', { branch, n: total }) })),
       merging ? el('div', { class: 'wip-merge-info' },
         el('span', { class: 'merge-ref incoming', text: incoming }), el('span', { class: 'merge-text', text: '→' }),
-        el('span', { class: 'merge-ref target', text: branch }), el('span', { class: 'merge-text', text: '병합 중' })) : null,
+        el('span', { class: 'merge-ref target', text: branch }), el('span', { class: 'merge-text', text: t('병합 중') })) : null,
     ];
   }
 
@@ -402,7 +406,9 @@ export function openStagingFilter(container) {
 
 // ── 커밋 상자(원본 CommitBox·OperationActions) ───────────
 
-const OP_NAME = { merge: '병합', rebase: 'rebase', cherryPick: '체리픽', revert: 'revert' };
+const OP_NAME = isEn ? { merge: 'merge', rebase: 'rebase', cherryPick: 'cherry-pick', revert: 'revert' } : { merge: '병합', rebase: 'rebase', cherryPick: '체리픽', revert: 'revert' }; // i18n-ignore
+/** 버튼 글에 쓰는 이름(영어는 첫 글자를 대문자로). */
+const opTitle = (op) => (isEn ? OP_NAME[op][0].toUpperCase() + OP_NAME[op].slice(1) : OP_NAME[op]);
 /** 병합·cherry-pick·revert 는 커밋 하나로 끝난다(입력란 메시지로 커밋). rebase 는 git 이 준비한 메시지로 이어간다. */
 const requiresFullCommit = (op) => op === 'merge' || op === 'cherryPick' || op === 'revert';
 
@@ -410,11 +416,11 @@ const requiresFullCommit = (op) => op === 'merge' || op === 'cherryPick' || op =
 function continueBlocker(status) {
   const op = status.operation;
   const conflicts = status.unstaged.filter((e) => e.state === 'conflicted').length;
-  if (conflicts) return `충돌 파일 ${conflicts}개를 먼저 해결해 Stage 하세요.`;
-  if (op === 'rebase' && status.unstaged.some((e) => e.state !== 'untracked')) return 'Stage 하지 않은 변경이 있으면 rebase 를 이어갈 수 없습니다. Stage 하거나 되돌리세요.';
+  if (conflicts) return t('충돌 파일 {n}개를 먼저 해결해 Stage 하세요.', { n: conflicts });
+  if (op === 'rebase' && status.unstaged.some((e) => e.state !== 'untracked')) return t('Stage 하지 않은 변경이 있으면 rebase 를 이어갈 수 없습니다. Stage 하거나 되돌리세요.');
   if (op === 'merge') {
-    if (status.unstaged.length) return `Stage 하지 않은 변경 ${status.unstaged.length}개가 있습니다. 모두 Stage 하거나 버려야 병합을 마칠 수 있습니다.`;
-    if (!status.staged.length) return 'Stage 한 변경이 없습니다. 해결한 파일을 Stage 하세요.';
+    if (status.unstaged.length) return t('Stage 하지 않은 변경 {n}개가 있습니다. 모두 Stage 하거나 버려야 병합을 마칠 수 있습니다.', { n: status.unstaged.length });
+    if (!status.staged.length) return t('Stage 한 변경이 없습니다. 해결한 파일을 Stage 하세요.');
   }
   return null;
 }
@@ -446,15 +452,15 @@ function commitBox(status, draft, api) {
   }
   if (!op && template && !draft.summary && !draft.description && !draft.amend) fill(tplSubject, tplDescription);
 
-  const summary = el('input', { class: 'field', id: 'commit-summary', placeholder: '커밋 제목', maxlength: 200 });
+  const summary = el('input', { class: 'field', id: 'commit-summary', placeholder: t('커밋 제목'), maxlength: 200 });
   summary.value = draft.summary;
-  const description = el('textarea', { class: 'field', id: 'commit-description', placeholder: '설명', rows: 3 });
+  const description = el('textarea', { class: 'field', id: 'commit-description', placeholder: t('설명'), rows: 3 });
   autoHorizontalScroll(description);
   description.value = draft.description;
   const amend = el('input', { type: 'checkbox', id: 'commit-amend' });
   amend.checked = !!draft.amend && !op;
   const commitButton = el('button', { class: 'commit-btn', id: 'commit-button' });
-  const pushButton = el('button', { class: 'commit-push', id: 'commit-push', text: '커밋 후 푸시' });
+  const pushButton = el('button', { class: 'commit-push', id: 'commit-push', text: t('커밋 후 푸시') });
   const identity = api.identity();
   const hasAuthor = !!(identity.name && identity.email);
 
@@ -470,21 +476,21 @@ function commitBox(status, draft, api) {
     draft.amend = amend.checked;
     if (op) {
       const blocker = continueBlocker(status);
-      commitButton.textContent = op === 'merge' ? (status.staged.length ? '커밋하고 병합' : '병합할 변경 없음') : requiresFullCommit(op) ? `${OP_NAME[op]} 마치기` : `${OP_NAME[op]} 이어가기`;
+      commitButton.textContent = op === 'merge' ? (status.staged.length ? t('커밋하고 병합') : t('병합할 변경 없음')) : requiresFullCommit(op) ? t('{op} 마치기', { op: opTitle(op) }) : t('{op} 이어가기', { op: opTitle(op) });
       commitButton.disabled = !hasAuthor || !!blocker || (requiresFullCommit(op) && !hasSubject());
-      commitButton.dataset.tip = blocker ?? (requiresFullCommit(op) ? `적은 메시지로 커밋해 ${OP_NAME[op]}을(를) 마칩니다.` : `해결한 결과로 ${OP_NAME[op]}을(를) 이어갑니다(git ${op} --continue). 커밋 메시지는 git 이 준비한 것을 씁니다.`);
+      commitButton.dataset.tip = blocker ?? (requiresFullCommit(op) ? t('적은 메시지로 커밋해 {op}을(를) 마칩니다.', { op: OP_NAME[op] }) : t('해결한 결과로 {op}을(를) 이어갑니다(git {cmd} --continue). 커밋 메시지는 git 이 준비한 것을 씁니다.', { op: OP_NAME[op], cmd: op }));
       return;
     }
     // 고쳐 쓰기는 Stage 한 것이 없어도(메시지만 고칠 때) 할 수 있다. 새 커밋은 제목과 Stage 한 파일이 있어야 한다.
     const can = hasAuthor && (amend.checked || (status.staged.length > 0 && hasSubject()));
     commitButton.disabled = !can;
-    commitButton.textContent = amend.checked ? '고쳐 쓰기' : `커밋 (${status.staged.length})`;
+    commitButton.textContent = amend.checked ? t('고쳐 쓰기') : t('커밋 ({n})', { n: status.staged.length });
     delete commitButton.dataset.tip;
     // 원격이 없으면 커밋만 되고 푸시는 실패한다 — 누르기 전에 막고 까닭을 보인다.
     const hasRemote = api.hasRemote();
     pushButton.disabled = !can || !!status.branch?.detached || !hasRemote;
     if (hasRemote) delete pushButton.dataset.tip;
-    else pushButton.dataset.tip = '등록된 원격이 없어 푸시할 수 없습니다. 사이드바 REMOTE 의 + 로 원격을 추가하거나 새 GitHub 레포지토리를 만드세요.';
+    else pushButton.dataset.tip = t('등록된 원격이 없어 푸시할 수 없습니다. 사이드바 REMOTE 의 + 로 원격을 추가하거나 새 GitHub 레포지토리를 만드세요.');
   };
   summary.addEventListener('input', () => {
     update();
@@ -535,15 +541,15 @@ function commitBox(status, draft, api) {
   }
   update();
 
-  const abortLabel = op ? `${OP_NAME[op]} 중단` : '';
+  const abortLabel = op ? t('{op} 중단', { op: opTitle(op) }) : '';
   return el('div', { class: 'commit-box' },
     summary,
     description,
-    hasAuthor ? null : el('div', { class: 'author-notice' }, el('span', { text: 'user.name / user.email 이 설정되지 않아 커밋할 수 없습니다.' })),
+    hasAuthor ? null : el('div', { class: 'author-notice' }, el('span', { text: t('user.name / user.email 이 설정되지 않아 커밋할 수 없습니다.') })),
     el('div', { class: 'commit-footer' },
-      op ? null : el('label', { class: 'commit-amend', 'data-tip': '마지막 커밋을 고쳐 씁니다. 켜면 비어 있는 입력란에 마지막 메시지를 채웁니다.' }, amend, el('span', { text: '마지막 커밋 고치기 (Amend)' })),
-      op ? el('button', { class: 'commit-link danger', text: abortLabel, 'data-tip': `${OP_NAME[op]}을(를) 중단하고 시작 전 상태로 돌립니다(git ${op === 'cherryPick' ? 'cherry-pick' : op} --abort).`, onclick: () => api.abortOperation() }) : null,
-      op === 'rebase' ? el('button', { class: 'commit-link', text: '건너뛰기', 'data-tip': '지금 멈춘 커밋을 빼고 다음 커밋으로 넘어갑니다(git rebase --skip).', onclick: () => api.skipOperation() }) : null,
+      op ? null : el('label', { class: 'commit-amend', 'data-tip': t('마지막 커밋을 고쳐 씁니다. 켜면 비어 있는 입력란에 마지막 메시지를 채웁니다.') }, amend, el('span', { text: t('마지막 커밋 고치기 (Amend)') })),
+      op ? el('button', { class: 'commit-link danger', text: abortLabel, 'data-tip': t('{op}을(를) 중단하고 시작 전 상태로 돌립니다(git {cmd} --abort).', { op: OP_NAME[op], cmd: op === 'cherryPick' ? 'cherry-pick' : op }), onclick: () => api.abortOperation() }) : null,
+      op === 'rebase' ? el('button', { class: 'commit-link', text: t('건너뛰기'), 'data-tip': t('지금 멈춘 커밋을 빼고 다음 커밋으로 넘어갑니다(git rebase --skip).'), onclick: () => api.skipOperation() }) : null,
       el('span', { class: 'spacer' }),
       op ? null : pushButton,
       commitButton));
@@ -600,24 +606,24 @@ function fileSummary(files) {
   const count = (s) => states.filter((x) => x === s).length;
   const other = states.filter((x) => !['modified', 'added', 'deleted', 'renamed'].includes(x)).length;
   const parts = [
-    ['modified', '✎', count('modified'), '수정'],
-    ['added', '+', count('added'), '추가'],
-    ['deleted', '−', count('deleted'), '삭제'],
-    ['renamed', '→', count('renamed'), '이름 변경'],
-    ['other', '•', other, '기타'],
+    ['modified', '✎', count('modified'), (n) => t('{n} 수정', { n })],
+    ['added', '+', count('added'), (n) => t('{n} 추가', { n })],
+    ['deleted', '−', count('deleted'), (n) => t('{n} 삭제', { n })],
+    ['renamed', '→', count('renamed'), (n) => t('{n} 이름 변경', { n })],
+    ['other', '•', other, (n) => t('{n} 기타', { n })],
   ].filter((p) => p[2]);
   return el('div', { class: 'cd-summary' }, parts.map(([kind, sign, n, label]) => el('span', { class: `cd-count cd-count-${kind}` },
     kind === 'other' ? el('span', { class: 'cd-count-sign', text: sign }) : stateIcon(kind),
-    el('span', { text: `${n} ${label}` }))));
+    el('span', { text: label(n) }))));
 }
 
 /** "commit: 해시" 머리 줄. 해시를 누르면 전체 해시를 복사한다. */
 function commitHeader(hash) {
   const button = el('button', {
-    class: 'cd-hash', 'data-tip': '누르면 전체 해시를 복사합니다.', text: hash.slice(0, 7),
+    class: 'cd-hash', 'data-tip': t('누르면 전체 해시를 복사합니다.'), text: hash.slice(0, 7),
     onclick: () => {
       navigator.clipboard?.writeText(hash);
-      button.dataset.tip = '복사했습니다';
+      button.dataset.tip = t('복사했습니다');
     },
   });
   return el('div', { class: 'cd-header' }, el('span', { class: 'cd-label', text: 'commit:' }), button);
@@ -634,7 +640,7 @@ function messageGrip(card, api) {
     if (save) api.prefs?.set?.(MESSAGE_HEIGHT.key, messageHeight);
   };
   return el('div', {
-    class: 'cd-grip', role: 'separator', 'aria-orientation': 'horizontal', 'data-tip': '끌어서 높이 바꾸기 · 두 번 누르면 기본 높이',
+    class: 'cd-grip', role: 'separator', 'aria-orientation': 'horizontal', 'data-tip': t('끌어서 높이 바꾸기 · 두 번 누르면 기본 높이'),
     ondblclick: () => set(MESSAGE_HEIGHT.initial, true),
     onpointerdown: (event) => {
       if (event.button !== 0) return;
@@ -680,9 +686,9 @@ function commitTop(commit, api, message) {
       avatar(api, commit.authorName, commit.authorEmail, commit.hash, 'cd-avatar'),
       el('div', { class: 'cd-author-block' },
         el('div', { class: 'cd-author', text: commit.authorName, 'data-tip': commit.authorEmail }),
-        el('div', { class: 'cd-authored', text: commit.time ? `${formatDate(commit.time, true)} 작성` : '' })),
-      parents.length ? el('div', { class: 'cd-parents' }, el('span', { class: 'cd-parent-label', text: '부모:' }),
-        parents.map((p) => el('button', { class: 'cd-parent', 'data-tip': '그래프에서 이 커밋 보기', text: p.slice(0, 7), onclick: () => api.revealCommit?.(p) }))) : null),
+        el('div', { class: 'cd-authored', text: commit.time ? t('{date} 작성', { date: formatDate(commit.time, true) }) : '' })),
+      parents.length ? el('div', { class: 'cd-parents' }, el('span', { class: 'cd-parent-label', text: t('부모:', { n: parents.length }) }),
+        parents.map((p) => el('button', { class: 'cd-parent', 'data-tip': t('그래프에서 이 커밋 보기'), text: p.slice(0, 7), onclick: () => api.revealCommit?.(p) }))) : null),
   ];
 }
 
@@ -717,7 +723,7 @@ export function renderCommit(container, detail, api) {
     onOpen: (f, how) => api.openCommitDiff(detail.hash, f, how),
     onHover: api.prefetchCommitDiff && ((f) => api.prefetchCommitDiff(detail.hash, f)),
     onMenu: (event, files) => api.commitFileMenu(event, detail, files),
-    empty: '바뀐 파일이 없습니다.',
+    empty: t('바뀐 파일이 없습니다.'),
   });
   // 같은 커밋을 다시 그릴 때만 목록 스크롤을 남긴다(다른 커밋은 맨 위부터).
   const sameCommit = container.commitHash === detail.hash;
@@ -729,7 +735,7 @@ export function renderCommit(container, detail, api) {
         detail.title ? el('div', { class: 'cd-title muted small', text: detail.title }) : null,
         // Co-Authored-By 줄은 아래 "공동 작성자" 에 따로 보이므로 본문에서는 뺀다(모델·버전 같은 꼬리표가 본문에 남지 않게).
         ...commitTop(detail, api, detail.message.replace(COAUTHOR, '').replace(/\n{3,}/g, '\n\n')),
-        coauthors.length ? el('div', { class: 'cd-coauthors' }, el('span', { class: 'cd-coauthors-label', text: '공동 작성자:' }),
+        coauthors.length ? el('div', { class: 'cd-coauthors' }, el('span', { class: 'cd-coauthors-label', text: t('공동 작성자:') }),
           coauthors.map((c) => el('span', { class: 'cd-coauthor', 'data-tip': `${c.name} <${c.email}>` }, avatar(api, c.name, c.email, null, 'cd-coauthor-avatar'), el('span', { class: 'cd-coauthor-name', text: c.name })))) : null,
         // 파일 칸 머리는 늘 두 줄: [바뀜 요약] / [보기 전환]. 요약이 길어도 전환이 밑으로 밀리거나 칸 높이가 바뀌지 않는다.
         el('div', { class: 'cd-files-head' },

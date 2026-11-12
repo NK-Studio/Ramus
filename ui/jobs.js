@@ -9,6 +9,10 @@
 import { el } from './util.js';
 import { icon } from './icons.js';
 import { onProgress, phaseLabel, cloneOverall, touchesFiles } from './progress.js';
+import { scoped, isEn } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/jobs.js 를 먼저 본다). */
+const t = scoped('jobs');
 
 const SHOW_AFTER_MS = 900;
 const DONE_LINGER_MS = 4000;
@@ -17,18 +21,19 @@ const RING_C = 2 * Math.PI * RING_R;
 const NS = 'http://www.w3.org/2000/svg';
 
 const KIND = {
-  clone: { glyph: 'clone', verb: '받기' },
-  fetch: { glyph: 'fetch', verb: '페치' },
-  pull: { glyph: 'pull', verb: '풀' },
-  push: { glyph: 'push', verb: '푸시' },
+  clone: { glyph: 'clone', verb: t('받기') },
+  fetch: { glyph: 'fetch', verb: t('페치') },
+  pull: { glyph: 'pull', verb: t('풀') },
+  push: { glyph: 'push', verb: t('푸시') },
   // 브랜치 전환: LFS 파일을 서버에서 받느라 오래 걸릴 수 있다. 파일을 고치는 일이라 처음부터 취소를 숨긴다.
-  checkout: { glyph: 'branch', verb: '전환' },
+  checkout: { glyph: 'branch', verb: t('전환') },
 };
 
 const newJobId = (kind) => `${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-/** "풀 하는 중… (앞으로 감기만)" → "풀 (앞으로 감기만)". */
+/** "풀 하는 중… (앞으로 감기만)" → "풀 (앞으로 감기만)". 영어 진행 글("Pulling… (fast-forward only)")은 … 만 뗀다. */
 const shortLabel = (label) => {
+  if (isEn && !/중…/.test(String(label ?? ''))) return String(label ?? '').replace(/\s*…/, '').trim();
   const m = /^(.+?)\s*(?:하는\s*)?중…?\s*(.*)$/.exec(String(label ?? '').trim());
   return m ? `${m[1].trim()}${m[2] ? ` ${m[2].trim()}` : ''}` : label;
 };
@@ -58,7 +63,7 @@ export function createJobs(ctx) {
   const dot = el('span', { class: 'tab-jobs-dot', hidden: true });
   // 버튼은 늘 보인다(작업이 없으면 빈 목록). 도는 것이 있으면 배지·고리가 붙는다.
   const button = el('button', {
-    class: 'tab-jobs', 'data-tip': '작업 목록', 'aria-label': '작업 목록',
+    class: 'tab-jobs', 'data-tip': t('작업 목록'), 'aria-label': t('작업 목록'),
     onclick: (event) => { event.stopPropagation(); pop ? closePop() : openPop(); },
   }, ring, icon('inbox', 15), badge, dot);
 
@@ -91,16 +96,16 @@ export function createJobs(ctx) {
     const n = j.nodes;
     n.badge = el('span', { class: 'jobs-row-icon' }, icon(meta.glyph, 15));
     n.title = el('div', { class: 'jobs-row-title', text: j.title, 'data-tip': j.where });
-    n.phase = el('div', { class: 'jobs-row-phase', text: j.kind === 'clone' ? '연결 중' : '기다리는 중' });
+    n.phase = el('div', { class: 'jobs-row-phase', text: j.kind === 'clone' ? t('연결 중') : t('기다리는 중') });
     n.fill = el('div', { class: 'jobs-row-fill' });
     n.bar = el('div', { class: 'jobs-row-bar' }, n.fill);
     n.actions = el('div', { class: 'jobs-row-actions' });
     n.cancel = el('button', {
-      class: 'jobs-row-x', 'data-tip': '취소', 'aria-label': '취소',
+      class: 'jobs-row-x', 'data-tip': t('취소'), 'aria-label': t('취소'),
       onclick: (event) => {
         event.stopPropagation();
         n.cancel.disabled = true;
-        n.phase.textContent = '취소하는 중…';
+        n.phase.textContent = t('취소하는 중…');
         ctx.call('cancelJob', { job: j.job }).catch(() => {});
       },
     }, icon('close', 10));
@@ -179,20 +184,20 @@ export function createJobs(ctx) {
     if (!n) return;
     n.cancel.hidden = true;
     n.actions.replaceChildren();
-    const remove = el('button', { class: 'jobs-row-x', 'data-tip': '목록에서 지우기', 'aria-label': '목록에서 지우기', onclick: (event) => { event.stopPropagation(); drop(j); } }, icon('close', 10));
+    const remove = el('button', { class: 'jobs-row-x', 'data-tip': t('목록에서 지우기'), 'aria-label': t('목록에서 지우기'), onclick: (event) => { event.stopPropagation(); drop(j); } }, icon('close', 10));
     if (j.status === 'done') {
       n.badge.replaceChildren(icon('check', 15));
-      n.phase.textContent = j.doneText ?? '완료';
+      n.phase.textContent = j.doneText ?? t('완료');
       if (j.repo) {
-        n.actions.append(el('button', { class: 'btn small primary', text: '열기', onclick: (event) => { event.stopPropagation(); drop(j); closePop(); ctx.openRepo(j.repo.path); } }));
+        n.actions.append(el('button', { class: 'btn small primary', text: t('열기'), onclick: (event) => { event.stopPropagation(); drop(j); closePop(); ctx.openRepo(j.repo.path); } }));
         n.row.append(remove);
       }
     } else if (j.kind === 'clone') {
       n.badge.replaceChildren(icon('warning', 15));
-      n.phase.textContent = String(j.error?.message ?? j.error ?? '실패했습니다.').split('\n')[0];
+      n.phase.textContent = String(j.error?.message ?? j.error ?? t('실패했습니다.')).split('\n')[0];
       n.actions.append(
-        el('button', { class: 'btn small', text: '다시 시도', onclick: (event) => { event.stopPropagation(); drop(j); startClone(j.request); } }),
-        el('button', { class: 'btn small', text: '자세히', onclick: (event) => { event.stopPropagation(); ctx.showError(j.error, 'Clone 실패'); } }));
+        el('button', { class: 'btn small', text: t('다시 시도'), onclick: (event) => { event.stopPropagation(); drop(j); startClone(j.request); } }),
+        el('button', { class: 'btn small', text: t('자세히'), onclick: (event) => { event.stopPropagation(); ctx.showError(j.error, t('Clone 실패')); } }));
       n.row.append(remove);
     }
     n.actions.hidden = !n.actions.childElementCount;
@@ -219,20 +224,21 @@ export function createJobs(ctx) {
     const now = list.filter((j) => j.status === 'running').length;
     const doneCount = list.length - now;
     // replaceChildren 은 null 을 "null" 글자로 넣으므로 빈 것은 걸러 낸다. 작업이 없으면 개수 글도 뺀다(아래 안내가 말한다).
-    const count = [now ? `진행 중 ${now}` : '', doneCount ? `완료 ${doneCount}` : ''].filter(Boolean).join(' · ');
+    const count = [now ? t('진행 중 {n}', { n: now }) : '', doneCount ? t('완료 {n}', { n: doneCount }) : ''].filter(Boolean).join(' · ');
     popHead.replaceChildren(...[
-      el('span', { class: 'jobs-pop-title', text: '작업' }),
+      // '작업' 은 다른 화면에서 한 건(Operation)을 뜻해 영어 표를 같이 쓰지 않는다.
+      el('span', { class: 'jobs-pop-title', text: isEn ? 'Operations' : '작업' }), // i18n-ignore
       count ? el('span', { class: 'jobs-pop-count', text: count }) : null,
       quitNote ? el('span', { class: 'jobs-pop-note', text: quitNote }) : null,
     ].filter(Boolean));
-    if (!list.length) popList.replaceChildren(el('div', { class: 'jobs-pop-empty', text: '진행 중인 작업 없음' }));
+    if (!list.length) popList.replaceChildren(el('div', { class: 'jobs-pop-empty', text: t('진행 중인 작업 없음') }));
     else popList.querySelector('.jobs-pop-empty')?.remove();
     // 진행 중인 것을 위로, 그다음 끝난 것(최근 것 위).
     const order = [...list].sort((a, b) => (a.status === 'running') === (b.status === 'running') ? b.started - a.started : a.status === 'running' ? -1 : 1);
     order.forEach((j) => popList.append(j.nodes.row));
     const finished = list.filter((j) => j.status !== 'running');
     popFoot.hidden = !finished.length;
-    popFoot.replaceChildren(el('button', { class: 'link', text: '끝난 항목 지우기', onclick: (event) => { event.stopPropagation(); finished.forEach(drop); } }));
+    popFoot.replaceChildren(el('button', { class: 'link', text: t('끝난 항목 지우기'), onclick: (event) => { event.stopPropagation(); finished.forEach(drop); } }));
   }
 
   function place() {
@@ -245,7 +251,7 @@ export function createJobs(ctx) {
   function openPop() {
     if (pop) return;
     unseen = false;
-    const node = el('div', { class: 'jobs-pop', role: 'dialog', 'aria-label': '작업 목록' }, popHead, popList, popFoot);
+    const node = el('div', { class: 'jobs-pop', role: 'dialog', 'aria-label': t('작업 목록') }, popHead, popList, popFoot);
     const onDown = (event) => { if (!node.contains(event.target) && !button.contains(event.target)) closePop(); };
     const onKey = (event) => { if (event.key === 'Escape') { event.stopPropagation(); closePop(); } };
     document.addEventListener('pointerdown', onDown, true);
@@ -344,7 +350,7 @@ export function createJobs(ctx) {
   /** Clone 하나를 뒤에서 받는다. req: { url, dest, name, account, upstream } */
   function startClone(req) {
     const job = newJobId('clone');
-    const j = { job, kind: 'clone', title: `${req.name} 받기`, where: req.dest, request: req, dest: req.dest };
+    const j = { job, kind: 'clone', title: t('{name} 받기', { name: req.name }), where: req.dest, request: req, dest: req.dest };
     add(j, 0);
     // 진행이 어디로 갔는지 보이게 한 번 연다.
     openPop();
@@ -356,21 +362,21 @@ export function createJobs(ctx) {
           drop(j);
           return;
         }
-        settle(j, 'done', { repo, doneText: '받았습니다' });
+        settle(j, 'done', { repo, doneText: t('받았습니다') });
         unseen = !pop;
         drawButton();
-        ctx.toast(`${repo.name} 를 받았습니다. 위쪽 작업 목록에서 열 수 있습니다.`, 'success');
+        ctx.toast(t('{name} 를 받았습니다. 위쪽 작업 목록에서 열 수 있습니다.', { name: repo.name }), 'success');
       }, (error) => {
         if (error?.cancelled) {
           settle(j, 'failed', { error });
           drop(j);
-          ctx.toast(`'${req.name}' Clone 을 취소했습니다.`, 'info');
+          ctx.toast(t("'{name}' Clone 을 취소했습니다.", { name: req.name }), 'info');
           return;
         }
         settle(j, 'failed', { error });
         unseen = !pop;
         drawButton();
-        ctx.toast(`'${req.name}' 를 받지 못했습니다. 위쪽 작업 목록에서 자세히 볼 수 있습니다.`, 'error');
+        ctx.toast(t("'{name}' 를 받지 못했습니다. 위쪽 작업 목록에서 자세히 볼 수 있습니다.", { name: req.name }), 'error');
       });
   }
 

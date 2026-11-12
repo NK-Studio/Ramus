@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use crate::github;
 use crate::remote::gitignore_template;
+use crate::i18n::tr;
 use crate::repo::{GitError, Result};
 use crate::runner::GitRunner;
 
@@ -103,7 +104,7 @@ pub fn gitignore_body(name: &str, token: Option<&str>) -> Result<String> {
     }
     let builtin = gitignore_template(&name.to_lowercase());
     if builtin.is_empty() {
-        return Err(GitError::new(format!(".gitignore 틀 '{name}' 을 받지 못했습니다. 인터넷 연결을 확인해 주세요.")));
+        return Err(GitError::new(crate::trf!(".gitignore 틀 '{name}' 을 받지 못했습니다. 인터넷 연결을 확인해 주세요.", "Couldn't download the .gitignore template '{name}'. Check your internet connection.")));
     }
     Ok(builtin.to_string())
 }
@@ -114,8 +115,8 @@ pub fn license_body(key: &str, year: i32, holder: &str, token: Option<&str>) -> 
         return Ok(fill_license("Copyright (C) [year] [fullname]\n", year, holder));
     }
     let value = cached_get(&format!("/licenses/{}", encode_segment(key)), token)
-        .map_err(|e| GitError::new(format!("라이선스 본문을 받지 못했습니다: {}", e.message)))?;
-    let body = value.get("body").and_then(Value::as_str).ok_or_else(|| GitError::new("라이선스 본문을 읽지 못했습니다."))?;
+        .map_err(|e| GitError::new(crate::trf!("라이선스 본문을 받지 못했습니다: {}", "Couldn't download the license text: {}", e.message)))?;
+    let body = value.get("body").and_then(Value::as_str).ok_or_else(|| GitError::new(tr("라이선스 본문을 읽지 못했습니다.", "Couldn't read the license text.")))?;
     Ok(fill_license(body, year, holder))
 }
 
@@ -175,7 +176,7 @@ pub fn lfs_available(git: &GitRunner) -> bool {
 }
 
 pub fn lfs_missing() -> GitError {
-    GitError::new("Git LFS 가 설치되어 있지 않습니다. https://git-lfs.com 에서 설치한 뒤 다시 시도해 주세요(macOS: brew install git-lfs).")
+    GitError::new(tr("Git LFS 가 설치되어 있지 않습니다. https://git-lfs.com 에서 설치한 뒤 다시 시도해 주세요(macOS: brew install git-lfs).", "Git LFS isn't installed. Install it from https://git-lfs.com and try again (macOS: brew install git-lfs)."))
 }
 
 /// 기본 브랜치 이름: 비면 main, 아니면 git 이 받아 주는 이름인지 본다.
@@ -186,7 +187,7 @@ pub fn branch_name(git: &GitRunner, name: &str) -> Result<String> {
     }
     let out = git.run(&std::env::temp_dir(), &["check-ref-format", "--branch", name]);
     if !out.success() {
-        return Err(GitError::new(format!("브랜치 이름으로 쓸 수 없습니다: {name}")));
+        return Err(GitError::new(crate::trf!("브랜치 이름으로 쓸 수 없습니다: {name}", "Can't be used as a branch name: {name}")));
     }
     Ok(name.to_string())
 }
@@ -194,7 +195,7 @@ pub fn branch_name(git: &GitRunner, name: &str) -> Result<String> {
 /// 레포지토리를 만든 뒤 `git lfs install --local`.
 pub fn lfs_install(git: &GitRunner, dir: &Path) -> Result<()> {
     let out = git.run(dir, &["lfs", "install", "--local"]);
-    if out.success() { Ok(()) } else { Err(GitError::new(format!("Git LFS 를 켜지 못했습니다: {}", out.message()))) }
+    if out.success() { Ok(()) } else { Err(GitError::new(crate::trf!("Git LFS 를 켜지 못했습니다: {}", "Couldn't enable Git LFS: {}", out.message()))) }
 }
 
 /// 로컬 레포지토리 만들기 요청. `gitignore`·`license` 는 이미 받아 둔 본문.
@@ -220,23 +221,23 @@ pub struct LocalOutcome {
 /// 이미 있던 폴더면 앱이 쓴 .gitignore·LICENSE 만 첫 커밋에 넣는다(다른 파일은 그대로 둔다).
 pub fn create_local(git: &GitRunner, path: &Path, request: &LocalRepo) -> Result<LocalOutcome> {
     if path.as_os_str().is_empty() || path.file_name().is_none() {
-        return Err(GitError::new("레포지토리를 만들 곳을 정해 주세요."));
+        return Err(GitError::new(tr("레포지토리를 만들 곳을 정해 주세요.", "Choose where to create the repository.")));
     }
     let state = path_state(path);
     if state.exists && !state.is_dir {
-        return Err(GitError::new(format!("같은 이름의 파일이 있습니다: {}", path.display())));
+        return Err(GitError::new(crate::trf!("같은 이름의 파일이 있습니다: {}", "A file with the same name already exists: {}", path.display())));
     }
     if state.has_git {
-        return Err(GitError::new(format!("이미 git 레포지토리입니다: {}", path.display())));
+        return Err(GitError::new(crate::trf!("이미 git 레포지토리입니다: {}", "Already a git repository: {}", path.display())));
     }
     if !state.empty && !request.allow_existing {
-        return Err(GitError::new(format!("비어 있지 않은 폴더입니다: {}", path.display())));
+        return Err(GitError::new(crate::trf!("비어 있지 않은 폴더입니다: {}", "The folder isn't empty: {}", path.display())));
     }
     let branch = branch_name(git, &request.branch)?;
     if request.lfs && !lfs_available(git) {
         return Err(lfs_missing());
     }
-    std::fs::create_dir_all(path).map_err(|e| GitError::new(format!("폴더를 만들지 못했습니다: {e}")))?;
+    std::fs::create_dir_all(path).map_err(|e| GitError::new(crate::trf!("폴더를 만들지 못했습니다: {e}", "Couldn't create the folder: {e}")))?;
     let fail = |message: String| {
         // 이번에 만든 폴더면 반쯤 만든 것을 치운다(이미 있던 폴더는 .git 만).
         if state.exists {
@@ -262,7 +263,7 @@ pub fn create_local(git: &GitRunner, path: &Path, request: &LocalRepo) -> Result
         if target.exists() {
             continue;
         }
-        std::fs::write(&target, content).map_err(|e| GitError::new(format!("{file} 을 쓰지 못했습니다: {e}")))?;
+        std::fs::write(&target, content).map_err(|e| GitError::new(crate::trf!("{file} 을 쓰지 못했습니다: {e}", "Couldn't write {file}: {e}")))?;
         added.push(file);
     }
     if request.lfs {
@@ -275,11 +276,11 @@ pub fn create_local(git: &GitRunner, path: &Path, request: &LocalRepo) -> Result
     add.extend(added.iter().copied());
     let staged = git.run(path, &add);
     if !staged.success() {
-        return Ok(LocalOutcome { committed: false, warning: Some(format!("파일을 Stage 하지 못했습니다: {}", staged.message())) });
+        return Ok(LocalOutcome { committed: false, warning: Some(crate::trf!("파일을 Stage 하지 못했습니다: {}", "Couldn't stage the files: {}", staged.message())) });
     }
     let commit = git.run(path, &["commit", "-q", "-m", INITIAL_COMMIT]);
     if !commit.success() {
-        return Ok(LocalOutcome { committed: false, warning: Some(format!("첫 커밋을 만들지 못했습니다: {}", commit.message())) });
+        return Ok(LocalOutcome { committed: false, warning: Some(crate::trf!("첫 커밋을 만들지 못했습니다: {}", "Couldn't create the first commit: {}", commit.message())) });
     }
     Ok(LocalOutcome { committed: true, warning: None })
 }

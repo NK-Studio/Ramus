@@ -5,6 +5,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::i18n::tr;
 use crate::repo::{DiffTarget, GitError, Repository, Result};
 
 /// 무시·LFS 를 어떤 꼴로 넣는가.
@@ -30,7 +31,7 @@ pub fn pattern(path: &str, kind: PatternKind) -> Result<String> {
             let name = path.rsplit('/').next().unwrap_or(path);
             match name.rfind('.') {
                 Some(at) if at > 0 && at + 1 < name.len() => Ok(format!("*{}", escape(&name[at..]))),
-                _ => Err(GitError::new(format!("확장자가 없는 파일입니다: {name}"))),
+                _ => Err(GitError::new(crate::trf!("확장자가 없는 파일입니다: {name}", "The file has no extension: {name}"))),
             }
         }
     }
@@ -85,7 +86,7 @@ fn append_line(path: &Path, line: &str) -> Result<()> {
     }
     text.push_str(line);
     text.push('\n');
-    std::fs::write(path, text).map_err(|e| GitError::new(format!("{} 에 쓰지 못했습니다: {e}", path.display())))
+    std::fs::write(path, text).map_err(|e| GitError::new(crate::trf!("{} 에 쓰지 못했습니다: {e}", "Couldn't write to {}: {e}", path.display())))
 }
 
 impl Repository {
@@ -106,7 +107,7 @@ impl Repository {
         let pattern = pattern(path, kind)?;
         self.git_run(&["lfs", "track", &pattern]).map_err(|e| {
             if e.message.contains("is not a git command") {
-                GitError::new("git-lfs 가 설치되어 있지 않습니다. https://git-lfs.com 에서 설치해 주세요.")
+                GitError::new(tr("git-lfs 가 설치되어 있지 않습니다. https://git-lfs.com 에서 설치해 주세요.", "Git LFS isn't installed. Install it from https://git-lfs.com."))
             } else {
                 e
             }
@@ -147,7 +148,7 @@ impl Repository {
             }
         }
         if patch.trim().is_empty() {
-            return Err(GitError::new("패치로 만들 변경이 없습니다."));
+            return Err(GitError::new(tr("패치로 만들 변경이 없습니다.", "There are no changes to make a patch from.")));
         }
         Ok(patch)
     }
@@ -182,14 +183,14 @@ impl Repository {
             cmd.arg(to);
         }
         cmd.args(["--", path]);
-        cmd.spawn().map(|_| ()).map_err(|e| GitError::new(format!("diff 도구를 열지 못했습니다: {e}")))
+        cmd.spawn().map(|_| ()).map_err(|e| GitError::new(crate::trf!("diff 도구를 열지 못했습니다: {e}", "Couldn't open the diff tool: {e}")))
     }
 
     /// 작업 트리에서 파일·폴더를 지운다(휴지통이 아니다).
     pub fn delete_path(&self, path: &str) -> Result<()> {
         let full = self.safe_path(path)?;
         let result = if full.is_dir() { std::fs::remove_dir_all(&full) } else { std::fs::remove_file(&full) };
-        result.map_err(|e| GitError::new(format!("{path} 를 지우지 못했습니다: {e}")))
+        result.map_err(|e| GitError::new(crate::trf!("{path} 를 지우지 못했습니다: {e}", "Couldn't delete {path}: {e}")))
     }
 
     /// Stage 하기 전에 물어볼 것: 충돌 표시가 남은 파일, 안에 git 레포지토리가 있는 폴더.
@@ -241,11 +242,11 @@ impl Repository {
     pub fn file_bytes(&self, revision: &str, path: &str) -> Result<Vec<u8>> {
         if revision.is_empty() {
             let full = self.safe_path(path)?;
-            return std::fs::read(&full).map_err(|e| GitError::new(format!("{path} 를 읽지 못했습니다: {e}")));
+            return std::fs::read(&full).map_err(|e| GitError::new(crate::trf!("{path} 를 읽지 못했습니다: {e}", "Couldn't read {path}: {e}")));
         }
         let spec = if revision == ":0" { format!(":0:{path}") } else { format!("{revision}:{path}") };
         let out = self.runner().run_bytes(self.root(), &["cat-file", "-p", &spec]);
-        if out.0 == 0 { Ok(out.1) } else { Err(GitError::new(format!("{spec} 를 읽지 못했습니다."))) }
+        if out.0 == 0 { Ok(out.1) } else { Err(GitError::new(crate::trf!("{spec} 를 읽지 못했습니다.", "Couldn't read {spec}."))) }
     }
 }
 

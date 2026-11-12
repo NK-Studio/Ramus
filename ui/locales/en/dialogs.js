@@ -1,0 +1,30 @@
+// ui/dialogs.js 의 영어. 키는 t() 에 넘기는 한국어 원문 그대로.
+export default {
+  '닫기': 'Close',
+  '확인': 'OK',
+  '취소': 'Cancel',
+  '추적하지 않는 파일 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.': {
+    one: 'Stopped because {n} untracked file could be overwritten. Stash it and try again to carry on.',
+    other: 'Stopped because {n} untracked files could be overwritten. Stash them and try again to carry on.',
+  },
+  '추적하지 않는 파일이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.': 'Stopped because untracked files could be overwritten. Stash them and try again to carry on.',
+  '커밋하지 않은 수정 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.': {
+    one: 'Stopped because {n} uncommitted change could be overwritten. Stash it and try again to carry on.',
+    other: 'Stopped because {n} uncommitted changes could be overwritten. Stash them and try again to carry on.',
+  },
+  '커밋하지 않은 수정이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.': 'Stopped because uncommitted changes could be overwritten. Stash them and try again to carry on.',
+  'Stash 하고 다시 {op}': 'Stash and {op} Again',
+  '자동으로 합치지 못한 파일이 {n}개 있습니다.': { one: '{n} file could not be merged automatically.', other: '{n} files could not be merged automatically.' },
+  '자동으로 합치지 못한 파일이 있습니다.': 'Some files could not be merged automatically.',
+  '충돌을 해결해야 합니다': 'Conflicts to Resolve',
+  '충돌 보기': 'Show Conflicts',
+  '파일을 고치거나 한쪽을 고른 뒤 Stage 하고, 위쪽 띠에서 이어가세요.': 'Fix them or pick a side, stage them, then continue from the banner above.',
+  '작업을 끝내지 못했습니다': "Couldn't Finish the Operation",
+  '전체 복사': 'Copy All',
+  '복사됨': 'Copied',
+  '설명': 'Description',
+  'git 원문': 'Raw git output',
+  'SSL 설정 열기': 'Open SSL Settings',
+  '비우기': 'Clear',
+  '없습니다': 'None',
+};

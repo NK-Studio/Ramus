@@ -6,6 +6,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Repository, Result};
 use crate::status::FileState;
 
@@ -130,7 +131,7 @@ impl Operation {
     pub fn display_name(self) -> &'static str {
         match self {
             Operation::Rebase => "Rebase",
-            Operation::Merge => "병합",
+            Operation::Merge => tr("병합", "Merge"),
             Operation::CherryPick => "Cherry-pick",
             Operation::Revert => "Revert",
         }
@@ -252,7 +253,7 @@ impl Repository {
             }
             self.git_run(&["checkout", if side == Side::Ours { "--ours" } else { "--theirs" }, "--", path])?;
         } else if std::fs::read_to_string(self.root().join(path)).map(|t| has_markers(&t)).unwrap_or(false) {
-            return Err(GitError::new(format!("{path} 에 아직 충돌 표시(<<<<<<<)가 남아 있습니다.")));
+            return Err(GitError::new(crate::trf!("{path} 에 아직 충돌 표시(<<<<<<<)가 남아 있습니다.", "{path} still has conflict markers (<<<<<<<).")));
         }
         // -A: 파일을 지워서 푼 경우도 해결로 올린다.
         self.git_run(&["add", "-A", "--", path]).map(|_| ())
@@ -266,28 +267,28 @@ impl Repository {
     /// `allow_markers` 면 충돌 표시가 남아도 쓴다(직접 고치기에서 사용자가 한 번 더 확인한 뒤, 원본 GitMergeEditor.Save).
     pub fn save_resolution_with(&self, path: &str, text: &str, allow_markers: bool) -> Result<()> {
         if !allow_markers && has_markers(text) {
-            return Err(GitError::new("출력에 아직 충돌 표시(<<<<<<<)가 남아 있습니다. 모든 충돌을 고른 뒤 저장해 주세요."));
+            return Err(GitError::new(tr("출력에 아직 충돌 표시(<<<<<<<)가 남아 있습니다. 모든 충돌을 고른 뒤 저장해 주세요.", "The output still has conflict markers (<<<<<<<). Resolve every conflict, then save.")));
         }
         let relative = Path::new(path);
         if relative.is_absolute() || relative.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-            return Err(GitError::new("레포지토리 밖의 경로입니다."));
+            return Err(GitError::new(tr("레포지토리 밖의 경로입니다.", "The path is outside the repository.")));
         }
-        std::fs::write(self.root().join(relative), text).map_err(|e| GitError::new(format!("{path} 를 쓰지 못했습니다: {e}")))?;
+        std::fs::write(self.root().join(relative), text).map_err(|e| GitError::new(crate::trf!("{path} 를 쓰지 못했습니다: {e}", "Couldn't write {path}: {e}")))?;
         self.git_run(&["add", "-A", "--", path]).map(|_| ())
     }
 
     /// 이어가기를 막는 까닭. 없으면 None.
     pub fn continue_blocker(&self) -> Result<Option<String>> {
         let Some(op) = self.operation() else {
-            return Ok(Some("진행 중인 작업이 없습니다.".into()));
+            return Ok(Some(tr("진행 중인 작업이 없습니다.", "No operation is in progress.").into()));
         };
         let st = self.status()?;
         if st.conflicted > 0 {
-            return Ok(Some(format!("충돌 파일 {}개를 먼저 해결해 주세요.", st.conflicted)));
+            return Ok(Some(crate::trf!("충돌 파일 {}개를 먼저 해결해 주세요.", "Resolve the {} conflicted files first.", st.conflicted)));
         }
         // rebase 는 Stage 하지 않은 변경이 있으면 엉뚱한 말로 거부한다 — 미리 알린다.
         if op == Operation::Rebase && st.unstaged.iter().any(|e| e.state != FileState::Untracked) {
-            return Ok(Some("Stage 하지 않은 변경이 있습니다. Rebase 를 이어가려면 먼저 Stage 하거나 버려 주세요.".into()));
+            return Ok(Some(tr("Stage 하지 않은 변경이 있습니다. Rebase 를 이어가려면 먼저 Stage 하거나 버려 주세요.", "There are unstaged changes. Stage or discard them before continuing the Rebase.").into()));
         }
         Ok(None)
     }
@@ -308,7 +309,7 @@ impl Repository {
         {
             // MERGE_MSG 를 바꿔 두면 --continue 가 그 메시지로 커밋한다.
             std::fs::write(self.git_dir().join("MERGE_MSG"), format!("{}\n", message.trim_end()))
-                .map_err(|e| GitError::new(format!("메시지를 쓰지 못했습니다: {e}")))?;
+                .map_err(|e| GitError::new(crate::trf!("메시지를 쓰지 못했습니다: {e}", "Couldn't write the message: {e}")))?;
         }
         let out = self.git_run_with_env(&[op.verb(), "--continue"], &[("GIT_EDITOR", "true")]);
         self.explain_next_conflict(op, out)
@@ -320,13 +321,13 @@ impl Repository {
                 let out = self.git_run(&["rebase", "--skip"]);
                 self.explain_next_conflict(Operation::Rebase, out)
             }
-            _ => Err(GitError::new("건너뛰기는 Rebase 중에만 할 수 있습니다.")),
+            _ => Err(GitError::new(tr("건너뛰기는 Rebase 중에만 할 수 있습니다.", "Skip is only available during a Rebase."))),
         }
     }
 
     /// 취소해 시작 전 상태로 돌린다(rebase 의 autostash 한 변경도 돌아온다).
     pub fn abort_operation(&self) -> Result<()> {
-        let op = self.operation().ok_or_else(|| GitError::new("진행 중인 작업이 없습니다."))?;
+        let op = self.operation().ok_or_else(|| GitError::new(tr("진행 중인 작업이 없습니다.", "No operation is in progress.")))?;
         self.git_run(&[op.verb(), "--abort"]).map(|_| ())
     }
 
@@ -334,7 +335,7 @@ impl Repository {
         match out {
             Ok(text) => Ok(text),
             Err(e) if self.operation().is_some() && self.status().map(|s| s.conflicted > 0).unwrap_or(false) => {
-                Err(GitError::new(format!("{} 을 이어가다 다음 커밋에서 또 충돌했습니다. 충돌을 풀고 다시 이어가 주세요.\n\n{}", op.display_name(), e.message)))
+                Err(GitError::new(crate::trf!("{} 을 이어가다 다음 커밋에서 또 충돌했습니다. 충돌을 풀고 다시 이어가 주세요.\n\n{}", "{} hit another conflict on the next commit. Resolve it and continue again.\n\n{}", op.display_name(), e.message)))
             }
             Err(e) => Err(e),
         }

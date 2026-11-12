@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Repository, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -164,7 +165,7 @@ impl Repository {
 
     pub fn add_remote(&self, name: &str, url: &str, push_url: &str) -> Result<()> {
         if name.trim().is_empty() || url.trim().is_empty() {
-            return Err(GitError::new("이름과 주소를 적어 주세요."));
+            return Err(GitError::new(tr("이름과 주소를 적어 주세요.", "Enter a name and URL.")));
         }
         self.git_run(&["remote", "add", "--", name.trim(), url.trim()])?;
         if !push_url.trim().is_empty() && push_url.trim() != url.trim() {
@@ -223,7 +224,7 @@ impl Repository {
         let upstream = self.git_run(&["rev-parse", "--abbrev-ref", &format!("{branch}@{{u}}")])?.trim().to_string();
         self.git_run(&["fetch", ".", &format!("{upstream}:refs/heads/{branch}")]).map(|_| ()).map_err(|e| {
             if e.message.contains("non-fast-forward") || e.message.contains("rejected") {
-                GitError::new(format!("'{branch}' 와 '{upstream}' 가 갈라져 앞으로 감을 수 없습니다. 체크아웃한 뒤 병합하거나 Rebase 해 주세요."))
+                GitError::new(crate::trf!("'{branch}' 와 '{upstream}' 가 갈라져 앞으로 감을 수 없습니다. 체크아웃한 뒤 병합하거나 Rebase 해 주세요.", "'{branch}' and '{upstream}' have diverged, so it can't fast-forward. Check it out, then Merge or Rebase."))
             } else {
                 e
             }
@@ -259,7 +260,7 @@ impl Repository {
     /// 워크트리를 더한다. `new_branch` 면 `reference` 에서 그 이름의 브랜치를 새로 만든다.
     pub fn add_worktree(&self, path: &str, reference: &str, new_branch: Option<&str>) -> Result<()> {
         if path.trim().is_empty() {
-            return Err(GitError::new("폴더를 적어 주세요."));
+            return Err(GitError::new(tr("폴더를 적어 주세요.", "Enter a folder.")));
         }
         match new_branch.filter(|b| !b.trim().is_empty()) {
             Some(b) => {

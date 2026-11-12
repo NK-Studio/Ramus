@@ -12,6 +12,7 @@ use std::time::Duration;
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Result};
 use crate::runner::GitRunner;
 
@@ -116,7 +117,7 @@ fn read_json(response: ureq::Response) -> Value {
 /// GitHub REST 를 부른다. `path` 는 "/repos/o/r/pulls" 처럼 API 주소 뒤. 실패하면 GitHub 의 message 를 보인다.
 pub fn api(method: &str, path: &str, body: Option<&Value>, token: Option<&str>) -> Result<Value> {
     if !path.starts_with('/') || path.contains("://") {
-        return Err(GitError::new("잘못된 GitHub API 경로입니다."));
+        return Err(GitError::new(tr("잘못된 GitHub API 경로입니다.", "Invalid GitHub API path.")));
     }
     let url = format!("{API}{path}");
     let request = agent(method, &url, token);
@@ -128,11 +129,11 @@ pub fn api(method: &str, path: &str, body: Option<&Value>, token: Option<&str>) 
         Ok(response) => Ok(read_json(response)),
         Err(ureq::Error::Status(code, response)) => {
             let body = read_json(response);
-            let message = body.get("message").and_then(Value::as_str).unwrap_or("GitHub 요청이 실패했습니다.");
+            let message = body.get("message").and_then(Value::as_str).unwrap_or(tr("GitHub 요청이 실패했습니다.", "The GitHub request failed."));
             let detail = body.pointer("/errors/0/message").and_then(Value::as_str).map(|m| format!(" — {m}")).unwrap_or_default();
             Err(GitError::new(format!("GitHub {code}: {message}{detail}")))
         }
-        Err(e) => Err(GitError::new(format!("GitHub 에 연결하지 못했습니다: {e}"))),
+        Err(e) => Err(GitError::new(crate::trf!("GitHub 에 연결하지 못했습니다: {e}", "Couldn't reach GitHub: {e}"))),
     }
 }
 
@@ -179,7 +180,7 @@ pub fn viewer_repos_page(token: &str, after: Option<&str>) -> Result<(Vec<Value>
         pageInfo { hasNextPage endCursor } nodes { nameWithOwner name owner { login } description isPrivate isFork isArchived \
         url parent { nameWithOwner url } pushedAt diskUsage defaultBranchRef { name } stargazerCount } } } }";
     let data = graphql(QUERY, json!({ "after": after }), token)?;
-    let page = data.pointer("/data/viewer/repositories").ok_or_else(|| GitError::new("GitHub 레포지토리 목록을 읽지 못했습니다."))?;
+    let page = data.pointer("/data/viewer/repositories").ok_or_else(|| GitError::new(tr("GitHub 레포지토리 목록을 읽지 못했습니다.", "Couldn't read the GitHub repository list.")))?;
     let repos = page
         .get("nodes")
         .and_then(Value::as_array)
@@ -217,8 +218,8 @@ fn form(url: &str, fields: &[(&str, &str)]) -> Result<Value> {
     let response = ureq::post(url).set("User-Agent", USER_AGENT).set("Accept", "application/json").timeout(Duration::from_secs(20)).send_form(fields);
     match response {
         Ok(r) => Ok(read_json(r)),
-        Err(ureq::Error::Status(code, _)) => Err(GitError::new(format!("GitHub 이 요청을 거절했습니다({code})."))),
-        Err(e) => Err(GitError::new(format!("GitHub 에 연결하지 못했습니다: {e}"))),
+        Err(ureq::Error::Status(code, _)) => Err(GitError::new(crate::trf!("GitHub 이 요청을 거절했습니다({code}).", "GitHub rejected the request ({code})."))),
+        Err(e) => Err(GitError::new(crate::trf!("GitHub 에 연결하지 못했습니다: {e}", "Couldn't reach GitHub: {e}"))),
     }
 }
 
@@ -226,7 +227,7 @@ fn form(url: &str, fields: &[(&str, &str)]) -> Result<Value> {
 pub fn device_start() -> Result<Value> {
     let v = form("https://github.com/login/device/code", &[("client_id", CLIENT_ID), ("scope", SCOPE)])?;
     if v.get("user_code").is_none() {
-        return Err(GitError::new("GitHub 의 응답을 읽지 못했습니다."));
+        return Err(GitError::new(tr("GitHub 의 응답을 읽지 못했습니다.", "Couldn't read GitHub's response.")));
     }
     Ok(v)
 }
@@ -246,9 +247,9 @@ pub fn device_poll(device_code: &str) -> Result<Poll> {
     match v.get("error").and_then(Value::as_str) {
         Some("authorization_pending") => Ok(Poll::Pending),
         Some("slow_down") => Ok(Poll::SlowDown),
-        Some("expired_token") => Err(GitError::new("코드의 기한이 지났습니다. 다시 시작해 주세요.")),
-        Some("access_denied") => Err(GitError::new("GitHub 에서 승인을 거절했습니다.")),
-        _ => Err(GitError::new(v.get("error_description").and_then(Value::as_str).unwrap_or("GitHub 로그인에 실패했습니다.").to_string())),
+        Some("expired_token") => Err(GitError::new(tr("코드의 기한이 지났습니다. 다시 시작해 주세요.", "The code has expired. Start again."))),
+        Some("access_denied") => Err(GitError::new(tr("GitHub 에서 승인을 거절했습니다.", "The authorization was declined on GitHub."))),
+        _ => Err(GitError::new(v.get("error_description").and_then(Value::as_str).unwrap_or(tr("GitHub 로그인에 실패했습니다.", "GitHub sign-in failed.")).to_string())),
     }
 }
 

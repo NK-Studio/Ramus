@@ -2,20 +2,24 @@
 // 알림: {remote, phase, percent, current, total, detail, done} — phase 는 git 의 영어 단계 이름 그대로.
 
 import { on } from './bridge.js';
+import { scoped, locale } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/progress.js 를 먼저 본다). */
+const t = scoped('progress');
 
 const PHASES = {
-  'Enumerating objects': '개체 확인',
-  'Counting objects': '개체 세기',
-  'Compressing objects': '압축',
-  'Writing objects': '올리기',
-  'Receiving objects': '받기',
-  'Resolving deltas': '변경 정리',
-  'Unpacking objects': '풀기',
-  'Updating files': '파일 갱신',
-  'Checking out files': '파일 꺼내기',
-  'Filtering content': 'LFS 파일 받기',
-  'Downloading LFS objects': 'LFS 파일 받기',
-  'Uploading LFS objects': 'LFS 파일 올리기',
+  'Enumerating objects': t('개체 확인'),
+  'Counting objects': t('개체 세기'),
+  'Compressing objects': t('압축'),
+  'Writing objects': t('올리기'),
+  'Receiving objects': t('받기'),
+  'Resolving deltas': t('변경 정리'),
+  'Unpacking objects': t('풀기'),
+  'Updating files': t('파일 갱신'),
+  'Checking out files': t('파일 꺼내기'),
+  'Filtering content': t('LFS 파일 받기'),
+  'Downloading LFS objects': t('LFS 파일 받기'),
+  'Uploading LFS objects': t('LFS 파일 올리기'),
 };
 
 const handlers = new Set();
@@ -37,21 +41,21 @@ export function phaseName(phase) {
   return PHASES[phase] ?? phase;
 }
 
-export const number = (n) => Number(n).toLocaleString('ko-KR');
+export const number = (n) => Number(n).toLocaleString(locale);
 
 /** 단계 이름만("받기", 서버 단계는 "서버 …") — 개수·세부 글 없이. 작업 목록의 한 줄 상태. */
 export function phaseLabel(p) {
-  return p ? `${p.remote ? '서버 ' : ''}${phaseName(p.phase)}` : '';
+  return p ? (p.remote ? t('서버 {phase}', { phase: phaseName(p.phase) }) : phaseName(p.phase)) : '';
 }
 
 /** "받기 45% (1,234/2,700) · 1.20 MiB | 2.00 MiB/s", 서버 단계는 앞에 "서버 ". */
 export function progressText(p) {
   if (!p) return '';
-  const phase = `${p.remote ? '서버 ' : ''}${PHASES[p.phase] ?? p.phase}`;
+  const phase = phaseLabel(p);
   let text = phase;
   if (p.percent != null) text += ` ${p.percent}%`;
   if (p.current != null && p.total != null) text += ` (${number(p.current)}/${number(p.total)})`;
-  else if (p.current != null) text += ` ${number(p.current)}개`;
+  else if (p.current != null) text += ` ${t('{objects}개', { objects: number(p.current) })}`;
   if (p.detail) text += ` · ${p.detail}`;
   return text;
 }

@@ -6,6 +6,10 @@
 
 import { el, formatDate, initials, isComposing } from './util.js';
 import { icon } from './icons.js';
+import { scoped } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/graph.js 를 먼저 본다). */
+const t = scoped('graph');
 
 export const ROW_HEIGHT = 34;
 const OVERSCAN = 6;
@@ -76,9 +80,9 @@ const MAX_COLUMN_WIDTH = 2000;
 const SQUEEZE_ORDER = ['message', 'refs', 'graph'];
 const DETAIL_WIDTHS = { author: 150, sha: 84, date: 150 };
 const HEADER = {
-  refs: { text: '브랜치 / 태그', icon: 'branch' },
-  graph: { text: '그래프', icon: 'hierarchy' },
-  message: { text: '메시지', icon: 'comment' },
+  refs: { text: t('브랜치 / 태그'), icon: 'branch' },
+  graph: { text: t('그래프'), icon: 'hierarchy' },
+  message: { text: t('메시지'), icon: 'comment' },
 };
 
 // ── 머리 줄 끌기(원본 ColumnReorderer·ColumnResizer) ──
@@ -269,12 +273,12 @@ export function createAvatars(load) {
 
 export function branchNameProblem(name, existing = []) {
   const n = name.trim();
-  if (!n) return '이름을 적어 주세요.';
-  if (/[\s~^:?*[\\\x00-\x1f\x7f]/.test(n)) return '공백과 ~ ^ : ? * [ \\ 는 쓸 수 없습니다.';
-  if (n.includes('..') || n.includes('//') || n.includes('@{') || n === '@') return "'..', '//', '@{' 는 쓸 수 없습니다.";
-  if (n.startsWith('/') || n.endsWith('/') || n.startsWith('-')) return "'/' 나 '-' 로 시작하거나 '/' 로 끝날 수 없습니다.";
-  if (n.endsWith('.') || n.endsWith('.lock') || n.split('/').some((part) => part.startsWith('.'))) return "'.' 로 시작·끝나거나 '.lock' 으로 끝날 수 없습니다.";
-  if (existing.includes(n)) return `'${n}' 브랜치가 이미 있습니다.`;
+  if (!n) return t('이름을 적어 주세요.');
+  if (/[\s~^:?*[\\\x00-\x1f\x7f]/.test(n)) return t('공백과 ~ ^ : ? * [ \\ 는 쓸 수 없습니다.');
+  if (n.includes('..') || n.includes('//') || n.includes('@{') || n === '@') return t("'..', '//', '@{' 는 쓸 수 없습니다.");
+  if (n.startsWith('/') || n.endsWith('/') || n.startsWith('-')) return t("'/' 나 '-' 로 시작하거나 '/' 로 끝날 수 없습니다.");
+  if (n.endsWith('.') || n.endsWith('.lock') || n.split('/').some((part) => part.startsWith('.'))) return t("'.' 로 시작·끝나거나 '.lock' 으로 끝날 수 없습니다.");
+  if (existing.includes(n)) return t("'{name}' 브랜치가 이미 있습니다.", { name: n });
   return null;
 }
 
@@ -311,7 +315,7 @@ export function createGraph(opts) {
 
   // 그래프 위 요약 줄(원본 GraphWorkspaceView 의 도구 막대): "커밋 n개 · 줄 n개 (최근 n개까지)", 읽는 동안 "불러오는 중…".
   // Fork 탐색기(세부 칸 모양)는 탐색 머리 줄에 요약이 따로 있어 숨긴다.
-  const summary = el('div', { class: 'graph-summary' }, el('span', { class: 'graph-summary-text', text: '불러오는 중…' }));
+  const summary = el('div', { class: 'graph-summary' }, el('span', { class: 'graph-summary-text', text: t('불러오는 중…') }));
   header.before(summary);
   const measure = document.createElement('canvas').getContext('2d');
 
@@ -479,7 +483,9 @@ export function createGraph(opts) {
     }
     const commitCount = commits.filter((c) => !c.stash).length;
     const laneTotal = lanes.filter((l) => !l.stash).length;
-    summary.firstChild.textContent = `커밋 ${commitCount}개 · 줄 ${laneTotal}개${truncatedHistory ? ` (최근 ${commitCount}개까지)` : ''}`;
+    summary.firstChild.textContent = truncatedHistory
+      ? t('커밋 {n}개 · 줄 {lanes}개 (최근 {n}개까지)', { n: commitCount, lanes: laneTotal })
+      : t('커밋 {n}개 · 줄 {lanes}개', { n: commitCount, lanes: laneTotal });
     computeLayout();
     render();
   }
@@ -544,16 +550,16 @@ export function createGraph(opts) {
       cell.addEventListener('pointerdown', (event) => startReorder(event, column, cell));
       if (!isLast(column)) {
         // 경계 손잡이: 칸 오른쪽 끝 8px, 경계에 머리 높이 세로선(끄는 동안·마우스를 올리면 강조색 2px).
-        const handle = el('div', { class: `gh-resize${resizing === column ? ' dragging' : ''}`, 'data-tip': '끌어서 폭 바꾸기 · 두 번 누르면 기본 폭' });
+        const handle = el('div', { class: `gh-resize${resizing === column ? ' dragging' : ''}`, 'data-tip': t('끌어서 폭 바꾸기 · 두 번 누르면 기본 폭') });
         handle.addEventListener('pointerdown', (event) => startResize(event, column));
         cell.append(handle);
       }
       return cell;
     });
     const details = detailColumns
-      ? [el('div', { class: 'gh-cell gh-author', style: { width: `${DETAIL_WIDTHS.author}px` }, text: '작성자' }),
-        el('div', { class: 'gh-cell gh-sha', style: { width: `${DETAIL_WIDTHS.sha}px` }, text: '해시' }),
-        el('div', { class: 'gh-cell gh-date', style: { width: `${DETAIL_WIDTHS.date}px` }, text: '날짜' })]
+      ? [el('div', { class: 'gh-cell gh-author', style: { width: `${DETAIL_WIDTHS.author}px` }, text: t('작성자') }),
+        el('div', { class: 'gh-cell gh-sha', style: { width: `${DETAIL_WIDTHS.sha}px` }, text: t('해시') }),
+        el('div', { class: 'gh-cell gh-date', style: { width: `${DETAIL_WIDTHS.date}px` }, text: t('날짜') })]
       : [];
     header.replaceChildren(...cells, ...details);
   }
@@ -717,7 +723,7 @@ export function createGraph(opts) {
   }
 
   function makeWipRow() {
-    const input = el('input', { class: 'wip-input', placeholder: '// 작업 중', spellcheck: 'false', autocomplete: 'off' });
+    const input = el('input', { class: 'wip-input', placeholder: t('// 작업 중'), spellcheck: 'false', autocomplete: 'off' });
     input.value = wipSubject;
     input.addEventListener('input', () => {
       wipSubject = input.value;
@@ -750,7 +756,7 @@ export function createGraph(opts) {
     const conflict = conflicts > 0;
     row.classList.toggle('wip-conflict', conflict);
     row.querySelector('.wip-slot').replaceChildren(conflict ? '' : wipCounts());
-    row.querySelector('.subject').textContent = conflict ? `충돌 파일 ${conflicts}개가 있어 ${conflictTarget} 에 병합하지 못했습니다` : '';
+    row.querySelector('.subject').textContent = conflict ? t('충돌 파일 {n}개가 있어 {target} 에 병합하지 못했습니다', { n: conflicts, target: conflictTarget }) : '';
     if (document.activeElement !== row.wipInput && row.wipInput.value !== wipSubject) row.wipInput.value = wipSubject;
     sizeWipInput(row.wipInput);
     const band = row.querySelector('.band');
@@ -1206,7 +1212,7 @@ export function createGraph(opts) {
     cancelBranchInput();
     hideRefsPopup();
     if (!reveal(hash)) return false;
-    const input = el('input', { class: 'branch-input field', placeholder: '브랜치 이름', spellcheck: 'false', autocomplete: 'off' });
+    const input = el('input', { class: 'branch-input field', placeholder: t('브랜치 이름'), spellcheck: 'false', autocomplete: 'off' });
     branchInput = { hash, element: input, validate, submit };
     const check = () => {
       const problem = validate(input.value);
@@ -1341,7 +1347,7 @@ export function createGraph(opts) {
     },
     /** 다시 읽기 시작할 때 요약 줄을 "불러오는 중…" 으로(원본 GraphWorkspaceView.Load). 다 읽으면 setData 가 바꾼다. */
     setLoading() {
-      summary.firstChild.textContent = '불러오는 중…';
+      summary.firstChild.textContent = t('불러오는 중…');
     },
     focusWip() {
       reveal('wip', false);

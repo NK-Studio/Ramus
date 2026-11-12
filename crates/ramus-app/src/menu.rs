@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use muda::accelerator::Accelerator;
 use muda::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use ramus_core::i18n::tr;
 
 /// 화면이 켜고 끄는(menuState) 항목. 처음에는 꺼 두고, 화면이 상태를 알리면 바꾼다.
 const STATEFUL: &[&str] = &[
@@ -77,7 +78,7 @@ impl AppMenu {
             made
         };
         let sep = PredefinedMenuItem::separator;
-        let reveal_label = if cfg!(windows) { "탐색기에서 보기" } else { "Finder 에서 보기" };
+        let reveal_label = if cfg!(windows) { tr("탐색기에서 보기", "Show in Explorer") } else { tr("Finder 에서 보기", "Reveal in Finder") };
 
         let menu = Menu::new();
 
@@ -88,18 +89,18 @@ impl AppMenu {
                 "Ramus",
                 true,
                 &[
-                    &item("about", "Ramus 정보"),
+                    &item("about", tr("Ramus 정보", "About Ramus")),
                     &sep(),
-                    &item("settings", "설정…"),
+                    &item("settings", tr("설정…", "Settings…")),
                     &sep(),
-                    &PredefinedMenuItem::services(Some("서비스")),
+                    &PredefinedMenuItem::services(Some(tr("서비스", "Services"))),
                     &sep(),
-                    &PredefinedMenuItem::hide(Some("Ramus 가리기")),
-                    &PredefinedMenuItem::hide_others(Some("기타 가리기")),
-                    &PredefinedMenuItem::show_all(Some("모두 보기")),
+                    &PredefinedMenuItem::hide(Some(tr("Ramus 가리기", "Hide Ramus"))),
+                    &PredefinedMenuItem::hide_others(Some(tr("기타 가리기", "Hide Others"))),
+                    &PredefinedMenuItem::show_all(Some(tr("모두 보기", "Show All"))),
                     &sep(),
                     // 기본 종료 항목은 NSApp 이 바로 끝내 버려서, 도는 작업을 묻지 못한다 — 보통 항목으로 받아 main.rs 가 처리한다.
-                    &item(QUIT, "Ramus 종료"),
+                    &item(QUIT, tr("Ramus 종료", "Quit Ramus")),
                 ],
             )
             .expect("앱 메뉴");
@@ -107,107 +108,107 @@ impl AppMenu {
         }
 
         let file = Submenu::with_items(
-            "파일",
+            tr("파일", "File"),
             true,
             &[
-                &item("newTab", "새 탭"),
-                &item("closeTab", "탭 닫기"),
-                &item("reopenTab", "닫은 탭 다시 열기"),
+                &item("newTab", tr("새 탭", "New Tab")),
+                &item("closeTab", tr("탭 닫기", "Close Tab")),
+                &item("reopenTab", tr("닫은 탭 다시 열기", "Reopen Closed Tab")),
                 &sep(),
-                &item("clone", "레포지토리 복제…"),
-                &item("initRepo", "레포지토리 만들기…"),
-                &item("openRepo", "레포지토리 열기…"),
+                &item("clone", tr("레포지토리 복제…", "Clone Repository…")),
+                &item("initRepo", tr("레포지토리 만들기…", "Create Repository…")),
+                &item("openRepo", tr("레포지토리 열기…", "Open Repository…")),
                 &sep(),
-                &item("terminal", "터미널에서 열기"),
+                &item("terminal", tr("터미널에서 열기", "Open in Terminal")),
                 &item("reveal", reveal_label),
                 &sep(),
-                &item("githubLogout", "GitHub 로그아웃"),
+                &item("githubLogout", tr("GitHub 로그아웃", "Sign Out of GitHub")),
             ],
         )
         .expect("파일 메뉴");
         // Windows 는 앱 메뉴가 없으니 설정·끝내기를 파일 메뉴 끝에 둔다.
         #[cfg(not(target_os = "macos"))]
-        file.append_items(&[&sep(), &item("settings", "설정…"), &sep(), &item(QUIT, "끝내기")])
+        file.append_items(&[&sep(), &item("settings", tr("설정…", "Settings…")), &sep(), &item(QUIT, tr("끝내기", "Exit"))])
             .expect("파일 메뉴");
         menu.append(&file).expect("파일 메뉴");
 
         // 실행 취소·다시 실행은 직접 만든 항목: 글 칸이면 화면이 글 편집을 되돌리고, 아니면 git 작업을 되돌린다(undoRedo).
         let edit = Submenu::with_items(
-            "편집",
+            tr("편집", "Edit"),
             true,
             &[
-                &item("undo", "실행 취소"),
-                &item("redo", "다시 실행"),
+                &item("undo", tr("실행 취소", "Undo")),
+                &item("redo", tr("다시 실행", "Redo")),
                 &sep(),
-                &PredefinedMenuItem::cut(Some("잘라내기")),
-                &PredefinedMenuItem::copy(Some("복사")),
-                &PredefinedMenuItem::paste(Some("붙여넣기")),
-                &PredefinedMenuItem::select_all(Some("모두 선택")),
+                &PredefinedMenuItem::cut(Some(tr("잘라내기", "Cut"))),
+                &PredefinedMenuItem::copy(Some(tr("복사", "Copy"))),
+                &PredefinedMenuItem::paste(Some(tr("붙여넣기", "Paste"))),
+                &PredefinedMenuItem::select_all(Some(tr("모두 선택", "Select All"))),
                 &sep(),
-                &item("find", "찾기"),
+                &item("find", tr("찾기", "Find")),
             ],
         )
         .expect("편집 메뉴");
         menu.append(&edit).expect("편집 메뉴");
 
         let view = Submenu::with_items(
-            "보기",
+            tr("보기", "View"),
             true,
             &[
-                &item("zoomIn", "확대"),
-                &item("zoomOut", "축소"),
-                &item("zoomReset", "실제 크기"),
+                &item("zoomIn", tr("확대", "Zoom In")),
+                &item("zoomOut", tr("축소", "Zoom Out")),
+                &item("zoomReset", tr("실제 크기", "Actual Size")),
                 &sep(),
-                &item("refresh", "새로 고침"),
+                &item("refresh", tr("새로 고침", "Refresh")),
                 &sep(),
             ],
         )
         .expect("보기 메뉴");
         #[cfg(target_os = "macos")]
-        view.append(&PredefinedMenuItem::fullscreen(Some("전체 화면"))).expect("보기 메뉴");
+        view.append(&PredefinedMenuItem::fullscreen(Some(tr("전체 화면", "Enter Full Screen")))).expect("보기 메뉴");
         // Windows 에는 운영체제 기본 전체 화면 항목이 없어 창을 직접 바꾼다.
         #[cfg(not(target_os = "macos"))]
-        view.append(&item(FULLSCREEN, "전체 화면")).expect("보기 메뉴");
+        view.append(&item(FULLSCREEN, tr("전체 화면", "Full Screen"))).expect("보기 메뉴");
         menu.append(&view).expect("보기 메뉴");
 
         let repo = Submenu::with_items(
-            "레포지토리",
+            tr("레포지토리", "Repository"),
             true,
             &[
-                &item("commit", "커밋"),
+                &item("commit", tr("커밋", "Commit")),
                 &sep(),
                 &item("fetch", "Fetch"),
                 &item("pull", "Pull"),
                 &item("push", "Push"),
                 &sep(),
-                &item("stash", "Stash 저장"),
-                &item("pop", "Stash 꺼내기 (Pop)"),
+                &item("stash", tr("Stash 저장", "Stash Changes")),
+                &item("pop", tr("Stash 꺼내기 (Pop)", "Pop Stash")),
                 &sep(),
-                &item("switchBranch", "브랜치 전환…"),
-                &item("newBranch", "새 브랜치…"),
-                &item("newTag", "새 태그…"),
-                &item("newWorktree", "새 워크트리…"),
+                &item("switchBranch", tr("브랜치 전환…", "Switch Branch…")),
+                &item("newBranch", tr("새 브랜치…", "New Branch…")),
+                &item("newTag", tr("새 태그…", "New Tag…")),
+                &item("newWorktree", tr("새 워크트리…", "New Worktree…")),
             ],
         )
         .expect("레포지토리 메뉴");
         menu.append(&repo).expect("레포지토리 메뉴");
 
         let window = Submenu::with_items(
-            "창",
+            tr("창", "Window"),
             true,
-            &[&PredefinedMenuItem::minimize(Some("최소화")), &PredefinedMenuItem::maximize(Some("확대/축소"))],
+            &[&PredefinedMenuItem::minimize(Some(tr("최소화", "Minimize"))), &PredefinedMenuItem::maximize(Some(tr("확대/축소", "Zoom")))],
         )
         .expect("창 메뉴");
         #[cfg(target_os = "macos")]
         {
-            window.append_items(&[&sep(), &PredefinedMenuItem::bring_all_to_front(Some("모두 앞으로 가져오기"))]).expect("창 메뉴");
+            window.append_items(&[&sep(), &PredefinedMenuItem::bring_all_to_front(Some(tr("모두 앞으로 가져오기", "Bring All to Front")))]).expect("창 메뉴");
             window.set_as_windows_menu_for_nsapp();
         }
         menu.append(&window).expect("창 메뉴");
 
-        let help = Submenu::with_items("도움말", true, &[&item("shortcuts", "키보드 단축키 보기")]).expect("도움말 메뉴");
+        let help = Submenu::with_items(tr("도움말", "Help"), true, &[&item("shortcuts", tr("키보드 단축키 보기", "Keyboard Shortcuts"))]).expect("도움말 메뉴");
         #[cfg(not(target_os = "macos"))]
-        help.append_items(&[&sep(), &item("about", "Ramus 정보")]).expect("도움말 메뉴");
+        help.append_items(&[&sep(), &item("about", tr("Ramus 정보", "About Ramus"))]).expect("도움말 메뉴");
         // macOS 가 도움말 메뉴 맨 위에 검색 칸을 넣는다.
         #[cfg(target_os = "macos")]
         help.set_as_help_menu_for_nsapp();
@@ -233,6 +234,17 @@ impl AppMenu {
             if let Err(e) = unsafe { self.menu.init_for_hwnd_with_theme(window.hwnd(), theme) } {
                 eprintln!("메뉴 막대를 붙이지 못했습니다: {e}");
             }
+        }
+    }
+
+    /// 붙인 메뉴를 뗀다(언어를 바꿔 다시 만들기 전에). macOS 는 새 메뉴를 붙이면 바뀌므로 할 일이 없다.
+    #[allow(unused_variables)]
+    pub fn detach(&self, window: &tao::window::Window) {
+        #[cfg(target_os = "windows")]
+        {
+            use tao::platform::windows::WindowExtWindows;
+            // SAFETY: tao 가 만든 살아 있는 창의 HWND 다.
+            let _ = unsafe { self.menu.remove_for_hwnd(window.hwnd()) };
         }
     }
 

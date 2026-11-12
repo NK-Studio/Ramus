@@ -1,5 +1,10 @@
 // 화면 여러 곳에서 쓰는 작은 도구.
 
+import { scoped, isEn } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/util.js 를 먼저 본다). */
+const t = scoped('util');
+
 /** 태그·속성·자식으로 요소를 만든다. */
 export function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -26,10 +31,10 @@ export function el(tag, attrs = {}, ...children) {
 /** "3분 전" 처럼 지금부터 얼마 전인지. 일주일이 넘으면 날짜. */
 export function relativeTime(unixSeconds) {
   const diff = Date.now() / 1000 - unixSeconds;
-  if (diff < 60) return '방금';
-  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
-  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
+  if (diff < 60) return t('방금');
+  if (diff < 3600) return t('{n}분 전', { n: Math.floor(diff / 60) });
+  if (diff < 86400) return t('{n}시간 전', { n: Math.floor(diff / 3600) });
+  if (diff < 86400 * 7) return t('{n}일 전', { n: Math.floor(diff / 86400) });
   return formatDate(unixSeconds);
 }
 
@@ -63,6 +68,8 @@ export function initials(name) {
  * 받침에 맞는 조사(을/를, 이/가 등). 한글은 받침으로, 영문은 끝 글자가 모음인지로 고른다("Rebase를", "Revert을").
  */
 export function josa(word, withBatchim, without) {
+  // 영어에는 조사가 없다 — 원문의 '{name}을' 자리에 이름만 들어간다.
+  if (isEn) return word;
   const last = word.trim().slice(-1);
   const code = last.charCodeAt(0);
   const batchim = code >= 0xac00 && code <= 0xd7a3 ? (code - 0xac00) % 28 !== 0 : !/[aeiouyAEIOUY]/.test(last);

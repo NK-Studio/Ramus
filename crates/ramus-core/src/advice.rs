@@ -3,6 +3,8 @@
 use regex::Regex;
 use serde::Serialize;
 
+use crate::i18n::{is_en, tr};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ErrorKind {
@@ -113,14 +115,31 @@ pub fn classify(message: &str) -> ErrorKind {
 }
 
 /// 앱이 쓴 글인가: git 은 영어로만 답하게 띄우므로(LC_MESSAGES=C) 한글이 있으면 앱의 것이다.
+/// 영어 화면에서는 앱의 글도 영어라, git 출력의 머리말(fatal: · error: …)로 시작하는 줄이 없으면 앱의 것으로 본다.
 fn is_app_message(message: &str) -> bool {
-    message.chars().any(|c| ('\u{AC00}'..='\u{D7A3}').contains(&c))
+    if message.chars().any(|c| ('\u{AC00}'..='\u{D7A3}').contains(&c)) {
+        return true;
+    }
+    is_en() && !message.lines().any(looks_like_git_line)
+}
+
+/// git(과 ssh · git-lfs)이 남기는 줄의 머리말. 앱의 영어 글은 이것들로 시작하지 않는다.
+fn looks_like_git_line(line: &str) -> bool {
+    const PREFIXES: &[&str] = &[
+        "fatal:", "error:", "warning:", "remote:", "usage:", "hint:", "conflict", "aborting", "cloning into", "to ", "from ", "! [", "ssh:",
+        "git-lfs", "git:", "unable to", "could not",
+    ];
+    let lower = line.trim_start().to_lowercase();
+    PREFIXES.iter().any(|p| lower.starts_with(p))
 }
 
 /// 앱이 쓴 오류 중 해결 방법을 덧붙일 수 있는 것.
 fn app_fix(message: &str) -> &'static str {
-    if message.starts_with("이미 파일이 있는 폴더입니다") {
-        "Clone 은 비어 있는 폴더에만 받을 수 있습니다. 폴더 이름을 바꾸거나 다른 곳을 고르세요."
+    if message.starts_with("이미 파일이 있는 폴더입니다") || message.starts_with("The folder already has files") {
+        tr(
+            "Clone 은 비어 있는 폴더에만 받을 수 있습니다. 폴더 이름을 바꾸거나 다른 곳을 고르세요.",
+            "Clone only works into an empty folder. Rename the folder or choose another location.",
+        )
     } else {
         ""
     }
@@ -164,7 +183,7 @@ fn find_files(message: &str) -> Vec<String> {
 
 fn file_list(files: &[String]) -> String {
     let shown = files.iter().take(MAX_FILES).cloned().collect::<Vec<_>>().join(", ");
-    if files.len() > MAX_FILES { format!("{shown} 외 {}개", files.len() - MAX_FILES) } else { shown }
+    if files.len() > MAX_FILES { crate::trf!("{shown} 외 {}개", "{shown} and {} more", files.len() - MAX_FILES) } else { shown }
 }
 
 pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
@@ -174,69 +193,124 @@ pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
     let mut branch = None;
     let (cause, fix): (String, &str) = match kind {
         ErrorKind::App => (message.trim().to_string(), app_fix(message)),
-        ErrorKind::Unknown => ("git 이 작업을 끝내지 못했습니다.".into(), "새로고침한 뒤 다시 해 보고, 그래도 안 되면 'git 원문' 을 확인하세요."),
+        ErrorKind::Unknown => (
+            tr("git 이 작업을 끝내지 못했습니다.", "git couldn't finish the operation.").into(),
+            tr("새로고침한 뒤 다시 해 보고, 그래도 안 되면 'git 원문' 을 확인하세요.", "Refresh and try again; if it still fails, check 'git Output'."),
+        ),
         ErrorKind::NoRemote => {
             let r = group(r"(?i)'(?P<remote>[^']+)' does not appear to be a git repository", message, "remote").unwrap_or_else(|| "origin".into());
-            let cause = format!("원격 레포지토리 '{r}' 가 등록되어 있지 않습니다.");
+            let cause = crate::trf!("원격 레포지토리 '{r}' 가 등록되어 있지 않습니다.", "No remote named '{r}' is configured.");
             remote = Some(r);
-            (cause, "원격을 추가한 뒤 다시 Push 하세요.")
+            (cause, tr("원격을 추가한 뒤 다시 Push 하세요.", "Add a remote, then Push again."))
         }
         ErrorKind::NoUpstream => {
             remote = Some(group(r"git push --set-upstream (?P<remote>\S+) (?P<branch>\S+)", message, "remote").unwrap_or_else(|| "origin".into()));
             branch = group(r"git push --set-upstream (?P<remote>\S+) (?P<branch>\S+)", message, "branch")
                 .or_else(|| group(r"(?i)current branch (?P<branch>\S+) has no upstream branch", message, "branch"))
                 .or(current_branch.map(str::to_string));
-            (format!("브랜치 '{}' 가 아직 원격 브랜치와 이어지지 않았습니다.", branch.clone().unwrap_or_default()), "처음 한 번은 upstream 을 지정해 Push 하세요(git push -u).")
+            (
+                crate::trf!("브랜치 '{}' 가 아직 원격 브랜치와 이어지지 않았습니다.", "Branch '{}' has no upstream branch yet.", branch.clone().unwrap_or_default()),
+                tr("처음 한 번은 upstream 을 지정해 Push 하세요(git push -u).", "Push once with an upstream set (git push -u)."),
+            )
         }
         ErrorKind::RemoteAhead => {
             branch = group(r"\[rejected\]\s+(?P<branch>\S+)\s+->", message, "branch").or(current_branch.map(str::to_string));
-            (format!("원격 '{}' 에 내게 없는 커밋이 있습니다.", branch.clone().unwrap_or_default()), "Pull 로 받아 합친 뒤 다시 Push 하세요.")
+            (
+                crate::trf!("원격 '{}' 에 내게 없는 커밋이 있습니다.", "The remote '{}' has commits you don't have.", branch.clone().unwrap_or_default()),
+                tr("Pull 로 받아 합친 뒤 다시 Push 하세요.", "Pull and merge first, then Push again."),
+            )
         }
-        ErrorKind::Network => ("원격 서버에 연결하지 못했습니다.".into(), "인터넷·VPN·프록시를 확인하고 다시 해 보세요."),
+        ErrorKind::Network => (
+            tr("원격 서버에 연결하지 못했습니다.", "Couldn't connect to the remote server.").into(),
+            tr("인터넷·VPN·프록시를 확인하고 다시 해 보세요.", "Check your internet, VPN or proxy and try again."),
+        ),
         ErrorKind::Auth => {
             let lower = message.to_lowercase();
             // 비공개 레포지토리를 권한 없는 계정으로 열면 GitHub 는 "없다" 고 답한다 — 실제로 없는 것이 아니라 권한 문제라고 풀어 쓴다.
             let cause = if lower.contains("repository not found") || lower.contains("error: 404") || lower.contains("batch response: not found") {
                 match group(r"(?i)repository '(?:https?://[^/]+/)?(?P<repo>[^']+?)(?:\.git)?/?' not found", message, "repo") {
-                    Some(repo) => format!("서버가 '{repo}' 레포지토리를 찾을 수 없다고 답했습니다.\n지금 쓰는 계정에 권한이 없는 비공개 레포지토리면 GitHub 는 이렇게 답합니다."),
-                    None => "서버가 레포지토리를 찾을 수 없다고 답했습니다.\n지금 쓰는 계정에 권한이 없는 비공개 레포지토리면 GitHub 는 이렇게 답합니다.".to_string(),
+                    Some(repo) => crate::trf!(
+                        "서버가 '{repo}' 레포지토리를 찾을 수 없다고 답했습니다.\n지금 쓰는 계정에 권한이 없는 비공개 레포지토리면 GitHub 는 이렇게 답합니다.",
+                        "The server said it couldn't find the repository '{repo}'.\nGitHub answers this way for a private repository your current account can't access."
+                    ),
+                    None => tr(
+                        "서버가 레포지토리를 찾을 수 없다고 답했습니다.\n지금 쓰는 계정에 권한이 없는 비공개 레포지토리면 GitHub 는 이렇게 답합니다.",
+                        "The server said it couldn't find the repository.\nGitHub answers this way for a private repository your current account can't access.",
+                    )
+                    .to_string(),
                 }
             } else {
-                "서버가 접속을 받아 주지 않았습니다. 로그인하지 않았거나, 비밀번호·토큰이 틀렸거나 만료됐을 수 있습니다.".to_string()
+                tr(
+                    "서버가 접속을 받아 주지 않았습니다. 로그인하지 않았거나, 비밀번호·토큰이 틀렸거나 만료됐을 수 있습니다.",
+                    "The server refused the connection. You may not be signed in, or your password or token may be wrong or expired.",
+                )
+                .to_string()
             };
-            (cause, "이 레포지토리에 접근할 수 있는 계정으로 로그인하거나 계정을 바꾸세요(⋮ 메뉴 > GitHub 계정, 설정 > 로그인).")
+            (
+                cause,
+                tr(
+                    "이 레포지토리에 접근할 수 있는 계정으로 로그인하거나 계정을 바꾸세요(⋮ 메뉴 > GitHub 계정, 설정 > 로그인).",
+                    "Sign in with an account that can access this repository, or switch accounts (⋮ menu > GitHub Account, Settings > Sign In).",
+                ),
+            )
         }
         ErrorKind::SshKey => {
-            let host = group(r"@(?P<host>[^\s:']+): Permission denied \((?P<methods>[^)]*)\)", message, "host").unwrap_or_else(|| "서버".into());
+            let host = group(r"@(?P<host>[^\s:']+): Permission denied \((?P<methods>[^)]*)\)", message, "host").unwrap_or_else(|| tr("서버", "the server").into());
             let methods = group(r"@(?P<host>[^\s:']+): Permission denied \((?P<methods>[^)]*)\)", message, "methods").unwrap_or_default();
             let fix = if methods.contains("password") || methods.contains("keyboard-interactive") {
-                "이 서버는 계정 비밀번호로도 들어갈 수 있습니다. 다시 시도해 비밀번호로 로그인하거나, 서버에 이 PC 의 SSH 공개 키를 등록하세요."
+                tr("이 서버는 계정 비밀번호로도 들어갈 수 있습니다. 다시 시도해 비밀번호로 로그인하거나, 서버에 이 PC 의 SSH 공개 키를 등록하세요.", "This server also accepts account passwords. Try again and sign in with your password, or register this PC's SSH public key on the server.")
             } else {
-                "서버에 이 PC 의 SSH 공개 키를 등록하세요(GitHub 는 Settings > SSH keys). 또는 https 주소를 쓰세요."
+                tr("서버에 이 PC 의 SSH 공개 키를 등록하세요(GitHub 는 Settings > SSH keys). 또는 https 주소를 쓰세요.", "Register this PC's SSH public key on the server (GitHub: Settings > SSH keys), or use an https address.")
             };
-            (format!("SSH 로 {host} 에 로그인하지 못했습니다(이 PC 의 SSH 키가 등록되어 있지 않거나 거부됨)."), fix)
+            (crate::trf!("SSH 로 {host} 에 로그인하지 못했습니다(이 PC 의 SSH 키가 등록되어 있지 않거나 거부됨).", "Couldn't sign in to {host} over SSH (this PC's SSH key isn't registered or was rejected)."), fix)
         }
         ErrorKind::SshHostKey => (
-            "처음 접속하는 SSH 서버라 믿어도 되는지 확인하지 못했습니다.".into(),
-            "다시 시도해 로그인하면 이 서버를 신뢰 목록(known_hosts)에 추가합니다. 서버 주소가 맞는지 먼저 확인하세요.",
+            tr("처음 접속하는 SSH 서버라 믿어도 되는지 확인하지 못했습니다.", "This SSH server is new to this PC, so it couldn't be confirmed as trusted.").into(),
+            tr("다시 시도해 로그인하면 이 서버를 신뢰 목록(known_hosts)에 추가합니다. 서버 주소가 맞는지 먼저 확인하세요.", "Try again and sign in to add the server to your trusted hosts (known_hosts). Check the server address first."),
         ),
         ErrorKind::SshHostChanged => (
-            "SSH 서버의 호스트 키가 예전과 다릅니다. 다른 서버로 연결되었을 수 있어 위험합니다.".into(),
-            "서버 관리자에게 키를 바꿨는지 확인한 뒤, ~/.ssh/known_hosts 에서 그 서버 줄을 지우세요.",
+            tr(
+                "SSH 서버의 호스트 키가 예전과 다릅니다. 다른 서버로 연결되었을 수 있어 위험합니다.",
+                "The SSH server's host key has changed. You may be connected to a different server, which is dangerous.",
+            )
+            .into(),
+            tr("서버 관리자에게 키를 바꿨는지 확인한 뒤, ~/.ssh/known_hosts 에서 그 서버 줄을 지우세요.", "Ask the server admin whether the key changed, then remove that server's line from ~/.ssh/known_hosts."),
         ),
-        ErrorKind::LocalChanges => (format!("커밋하지 않은 수정이 덮어써질 수 있어 멈췄습니다: {}", file_list(&files)), "커밋하거나 Stash 한 뒤 다시 하세요."),
-        ErrorKind::UntrackedFiles => (format!("git 에 없는 같은 이름의 파일이 있습니다: {}", file_list(&files)), "그 파일을 옮기거나 지운 뒤 다시 하세요."),
-        ErrorKind::Conflict => (format!("자동으로 합치지 못한 충돌이 있습니다: {}", file_list(&files)), "충돌을 해결해 커밋하거나, 위 띠에서 중단하세요."),
-        ErrorKind::NoIdentity => ("커밋 작성자 이름·이메일이 설정되어 있지 않습니다.".into(), "git config user.name / user.email 을 설정하세요."),
-        ErrorKind::FileTooLarge => (format!("100MB 가 넘는 파일은 GitHub 에 올릴 수 없습니다: {}", file_list(&files)), "Git LFS 로 추적해 다시 커밋하세요."),
-        ErrorKind::ProtectedBranch => ("보호된 브랜치라 직접 Push 할 수 없습니다.".into(), "다른 브랜치로 올려 Pull Request 를 여세요."),
+        ErrorKind::LocalChanges => (
+            crate::trf!("커밋하지 않은 수정이 덮어써질 수 있어 멈췄습니다: {}", "Stopped so uncommitted changes aren't overwritten: {}", file_list(&files)),
+            tr("커밋하거나 Stash 한 뒤 다시 하세요.", "Commit or Stash them, then try again."),
+        ),
+        ErrorKind::UntrackedFiles => (
+            crate::trf!("git 에 없는 같은 이름의 파일이 있습니다: {}", "Untracked files with the same names are in the way: {}", file_list(&files)),
+            tr("그 파일을 옮기거나 지운 뒤 다시 하세요.", "Move or delete them, then try again."),
+        ),
+        ErrorKind::Conflict => (
+            crate::trf!("자동으로 합치지 못한 충돌이 있습니다: {}", "There are conflicts git couldn't merge: {}", file_list(&files)),
+            tr("충돌을 해결해 커밋하거나, 위 띠에서 중단하세요.", "Resolve them and commit, or abort from the banner above."),
+        ),
+        ErrorKind::NoIdentity => (
+            tr("커밋 작성자 이름·이메일이 설정되어 있지 않습니다.", "No commit author name and email are set.").into(),
+            tr("git config user.name / user.email 을 설정하세요.", "Set git config user.name / user.email."),
+        ),
+        ErrorKind::FileTooLarge => (
+            crate::trf!("100MB 가 넘는 파일은 GitHub 에 올릴 수 없습니다: {}", "Files over 100 MB can't be pushed to GitHub: {}", file_list(&files)),
+            tr("Git LFS 로 추적해 다시 커밋하세요.", "Track them with Git LFS and commit again."),
+        ),
+        ErrorKind::ProtectedBranch => (
+            tr("보호된 브랜치라 직접 Push 할 수 없습니다.", "This branch is protected and can't be pushed to directly.").into(),
+            tr("다른 브랜치로 올려 Pull Request 를 여세요.", "Push to another branch and open a Pull Request."),
+        ),
         ErrorKind::LockFile => (
-            format!("잠금 파일({})이 남아 있습니다.", group(r"'(?P<path>[^']*\.lock)'", message, "path").unwrap_or_else(|| "index.lock".into())),
-            "다른 git 작업이 끝났는지 확인하고 잠금 파일을 지우세요.",
+            crate::trf!("잠금 파일({})이 남아 있습니다.", "A lock file ({}) is left behind.", group(r"'(?P<path>[^']*\.lock)'", message, "path").unwrap_or_else(|| "index.lock".into())),
+            tr("다른 git 작업이 끝났는지 확인하고 잠금 파일을 지우세요.", "Make sure no other git process is running, then delete the lock file."),
         ),
         ErrorKind::Ssl => (
-            "원격 서버의 SSL 인증서를 확인하지 못했습니다. 회사망처럼 보안 프록시가 SSL 을 검사하는 환경일 수 있습니다.".into(),
-            "설정 > SSL 인증서에서 회사 루트 인증서 파일을 지정하거나, Windows 는 'Windows 인증서 저장소 쓰기' 를 켜세요.",
+            tr(
+                "원격 서버의 SSL 인증서를 확인하지 못했습니다. 회사망처럼 보안 프록시가 SSL 을 검사하는 환경일 수 있습니다.",
+                "Couldn't verify the remote server's SSL certificate. A security proxy may be inspecting SSL traffic (e.g. a corporate network).",
+            )
+            .into(),
+            tr("설정 > SSL 인증서에서 회사 루트 인증서 파일을 지정하거나, Windows 는 'Windows 인증서 저장소 쓰기' 를 켜세요.", "In Settings > SSL Certificate, set your company's root certificate file, or on Windows turn on 'Use Windows Certificate Store'."),
         ),
     };
     Advice { kind, cause, fix: fix.to_string(), remote, branch, files }

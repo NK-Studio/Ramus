@@ -5,8 +5,15 @@
 
 import { el, splitPath } from './util.js';
 import { icon } from './icons.js';
+import { scoped, isEn } from './i18n.js';
 
-export const STATE_LABEL = { modified: '수정', added: '추가', deleted: '삭제', renamed: '이름 바뀜', untracked: '새 파일', conflicted: '충돌' };
+/** 이 모듈의 글(locales/en/files.js 를 먼저 본다). */
+const t = scoped('files');
+
+// 상태 이름. '수정'·'추가'·'삭제' 같은 한 낱말 원문은 다른 화면의 버튼(Add·Delete 등)과 겹쳐 영어 표 하나로는 형용사 꼴을 고를 수 없다 — 여기서 따로 둔다.
+export const STATE_LABEL = isEn
+  ? { modified: 'Modified', added: 'Added', deleted: 'Deleted', renamed: 'Renamed', untracked: 'New file', conflicted: 'Conflicted' }
+  : { modified: '수정', added: '추가', deleted: '삭제', renamed: '이름 바뀜', untracked: '새 파일', conflicted: '충돌' }; // i18n-ignore
 export const CHANGE_STATE = { A: 'added', M: 'modified', D: 'deleted', R: 'renamed', C: 'renamed', T: 'modified' };
 
 /**
@@ -37,8 +44,8 @@ export function fileIcon(path) {
 /** 경로/트리 두 칸 묶음(원본 FileViewModeSwitch). large 는 스테이징 맨 위 줄의 큰 전환(.view-mode-switch--large). */
 export function viewSwitch(view, onChange, large = false) {
   return el('div', { class: `view-switch${large ? ' large' : ''}` },
-    el('button', { class: view === 'path' ? 'on' : '', 'data-tip': '전체 경로를 한 줄씩 봅니다.', onclick: () => onChange('path') }, icon('pathList', 13), el('span', { class: 'seg-text', text: '경로' })),
-    el('button', { class: view === 'tree' ? 'on' : '', 'data-tip': '폴더 구조로 봅니다.', onclick: () => onChange('tree') }, icon('fileTree', 13), el('span', { class: 'seg-text', text: '트리' })));
+    el('button', { class: view === 'path' ? 'on' : '', 'data-tip': t('전체 경로를 한 줄씩 봅니다.'), onclick: () => onChange('path') }, icon('pathList', 13), el('span', { class: 'seg-text', text: t('경로') })),
+    el('button', { class: view === 'tree' ? 'on' : '', 'data-tip': t('폴더 구조로 봅니다.'), onclick: () => onChange('tree') }, icon('fileTree', 13), el('span', { class: 'seg-text', text: t('트리') })));
 }
 
 /** 파일들을 폴더 트리로: 폴더 먼저·이름순. 하위 폴더 하나뿐인 폴더도 합치지 않고 단계마다 한 줄이다(원본 1.2.0, GitKraken 과 같다). */
@@ -105,7 +112,7 @@ export function fileList(opts) {
   const eyeButton = (path, hidden) => (eye ? el('button', {
     class: 'row-eye',
     // 툴팁은 띄우지 않는다(줄마다 나타나 거슬린다) — 화면 읽기용 이름만 둔다.
-    'aria-label': hidden ? '다시 보이기' : '숨기기',
+    'aria-label': hidden ? t('다시 보이기') : t('숨기기'),
     onclick: (event) => eye.toggle([path], { solo: event.altKey && !hidden }),
   }, icon(hidden ? 'eyeOff' : 'eye', 14)) : null);
   const st = opts.state ?? { selected: new Set(), anchor: null };
@@ -221,7 +228,7 @@ export function fileList(opts) {
   const children = [];
   let tree = null;
   if (!entries.length) {
-    children.push(el('div', { class: 'empty muted small', text: opts.empty ?? '파일이 없습니다.' }));
+    children.push(el('div', { class: 'empty muted small', text: opts.empty ?? t('파일이 없습니다.') }));
   } else if (view === 'tree') {
     tree = buildTree(entries);
     const emit = (node, depth) => {
@@ -330,7 +337,7 @@ export function fileList(opts) {
     if (folders.length) {
       const allOpen = folders.every((f) => !opts.collapsed?.has(f));
       const toolbar = el('div', { class: 'file-tree-toolbar' },
-        el('button', { class: 'expand-toggle', text: allOpen ? '모두 접기' : '모두 펼치기', onclick: () => opts.onSetCollapsed?.(allOpen ? folders : []) }));
+        el('button', { class: 'expand-toggle', text: allOpen ? t('모두 접기') : t('모두 펼치기'), onclick: () => opts.onSetCollapsed?.(allOpen ? folders : []) }));
       return el('div', { class: 'file-browser' }, toolbar, list);
     }
   }

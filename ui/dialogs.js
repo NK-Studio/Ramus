@@ -3,6 +3,10 @@
 
 import { el, isComposing } from './util.js';
 import { icon } from './icons.js';
+import { scoped } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/dialogs.js 를 먼저 본다). */
+const t = scoped('dialogs');
 
 const stack = [];
 
@@ -13,7 +17,7 @@ const put = (parent, ...nodes) => parent.append(...nodes.filter((n) => n != null
  * 막 + 카드(원본 branch-dialog). 머리: 강조색 원 배지(그림 또는 글자 하나) · 제목(그 아래 안내 한 줄) · 오른쪽 위 ✕.
  * 막을 눌러도 닫지 않는다 — 쓰던 이름을 실수로 잃지 않게(원본 GitBranchDialog). 닫기는 ✕·취소·Esc 로만.
  */
-function card({ className = '', glyph, mark, tone = 'accent', title, hint, onCancel, closeTip = '닫기', close = true }) {
+function card({ className = '', glyph, mark, tone = 'accent', title, hint, onCancel, closeTip = t('닫기'), close = true }) {
   const backdrop = el('div', { class: 'modal-backdrop' });
   const box = el('div', { class: `modal card ${className}`, role: 'dialog' });
   const badge = glyph || mark
@@ -68,7 +72,7 @@ const cardButton = (text, onclick) => el('button', { class: 'btn card-cancel', t
  * validate(values) 는 쓰는 동안 불린다 — 문제가 있으면 카드 안 한 줄에 보이고 확인을 끈다. 첫 글 칸이 비어 있으면 문구 없이 확인만 끈다.
  * 버튼은 원본처럼 [확인][취소] 를 오른쪽에 붙인다.
  */
-export function formDialog({ title, message, fields = [], ok = '확인', cancel = '취소', danger = false, validate, glyph, tone, className = '', extra, alert = false }) {
+export function formDialog({ title, message, fields = [], ok = t('확인'), cancel = t('취소'), danger = false, validate, glyph, tone, className = '', extra, alert = false }) {
   return new Promise((resolve) => {
     const inputs = {};
     const hasText = fields.some((f) => f.type !== 'checkbox' && f.type !== 'static');
@@ -88,7 +92,7 @@ export function formDialog({ title, message, fields = [], ok = '확인', cancel 
       glyph: glyph ?? (danger ? 'warning' : 'info'), tone, title,
       hint: hasText ? message : null,
       onCancel: () => close(null),
-      closeTip: cancel || '닫기',
+      closeTip: cancel || t('닫기'),
     });
     const values = () => Object.fromEntries(Object.entries(inputs).map(([name, input]) => [name, input.type === 'checkbox' ? input.checked : input.value]));
     const okButton = cardOk(ok, danger);
@@ -180,7 +184,7 @@ export function formDialog({ title, message, fields = [], ok = '확인', cancel 
 }
 
 /** 예/아니오 카드. 위험하면 빨간 확인. Enter 는 채운 버튼(기본은 확인, Tab 으로 옮기면 그 버튼). alert 면 Fork(macOS 경고창) 모양. cancel 로 취소 버튼 글을 바꾼다(예: "원격은 남기기"). */
-export async function confirmDialog({ title, message, ok = '확인', cancel = '취소', danger = false, glyph, tone, alert = false, extra, className }) {
+export async function confirmDialog({ title, message, ok = t('확인'), cancel = t('취소'), danger = false, glyph, tone, alert = false, extra, className }) {
   return (await formDialog({ title, message, ok, cancel, danger, glyph: glyph ?? (danger ? 'warning' : 'info'), tone, alert, extra, className })) !== null;
 }
 
@@ -189,9 +193,10 @@ export async function confirmDialog({ title, message, ok = '확인', cancel = '�
  * git 원문을 그대로 늘어놓지 않는다. 고르면 true.
  */
 export async function overwriteDialog({ title, op, files = [], untracked = false }) {
-  const what = untracked ? '추적하지 않는 파일' : '커밋하지 않은 수정';
-  const count = files.length ? ` ${files.length}개` : '';
-  const message = `${what}${count}${files.length ? '가' : '이'} 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.`;
+  const n = files.length;
+  const message = untracked
+    ? (n ? t('추적하지 않는 파일 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.', { n }) : t('추적하지 않는 파일이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.'))
+    : (n ? t('커밋하지 않은 수정 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.', { n }) : t('커밋하지 않은 수정이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.'));
   const list = files.length ? el('div', { class: 'overwrite-files' }, files.map((path) => {
     const at = path.lastIndexOf('/');
     const dir = at < 0 ? '' : path.slice(0, at + 1);
@@ -199,11 +204,11 @@ export async function overwriteDialog({ title, op, files = [], untracked = false
     return el('div', { class: 'overwrite-file', 'data-tip': path },
       icon('file', 14), el('span', { class: 'overwrite-name', text: name }), dir ? el('span', { class: 'overwrite-dir', text: dir }) : null);
   })) : null;
-  return (await formDialog({ title, message, glyph: 'stash', ok: `Stash 하고 다시 ${op}`, className: 'overwrite', extra: list })) !== null;
+  return (await formDialog({ title, message, glyph: 'stash', ok: t('Stash 하고 다시 {op}', { op }), className: 'overwrite', extra: list })) !== null;
 }
 
 /** 세 갈래 카드(원본 ChooseAsync): [확인][다른 쪽][취소]. 'ok' | 'alt' | null. */
-export function choiceDialog({ title, message, ok, alt, cancel = '취소', glyph = 'info', tone = 'accent' }) {
+export function choiceDialog({ title, message, ok, alt, cancel = t('취소'), glyph = 'info', tone = 'accent' }) {
   return new Promise((resolve) => {
     let closed = false;
     const close = (value) => {
@@ -254,7 +259,7 @@ export function pickDialog({ title, message, options, value, glyph = 'info' }) {
       document.removeEventListener('keydown', onKey, true);
       resolve(v);
     };
-    const { box, remove } = card({ className: 'confirm pick', glyph, title, onCancel: () => close(null), closeTip: '취소' });
+    const { box, remove } = card({ className: 'confirm pick', glyph, title, onCancel: () => close(null), closeTip: t('취소') });
     const list = el('div', { class: 'pick-list', role: 'listbox' });
     const buttons = options.map((o, i) => el('button', {
       class: 'pick-item',
@@ -269,7 +274,7 @@ export function pickDialog({ title, message, options, value, glyph = 'info' }) {
     };
     list.append(...buttons);
     put(box, message ? el('div', { class: 'modal-message', text: message }) : null, list,
-      el('div', { class: 'modal-actions' }, cardButton('취소', () => close(null))));
+      el('div', { class: 'modal-actions' }, cardButton(t('취소'), () => close(null))));
     const onKey = (event) => {
       if (stack[stack.length - 1] !== box.parentElement) return;
       if (event.key === 'Escape') close(null);
@@ -305,10 +310,10 @@ export function errorDialog(error, { openSsl, showConflicts, prefs, title } = {}
   const raw = String(error?.message ?? error).trim();
   if (advice.kind === 'conflict' && showConflicts) {
     const files = advice.files ?? [];
-    const head = files.length ? `자동으로 합치지 못한 파일이 ${files.length}개 있습니다.` : '자동으로 합치지 못한 파일이 있습니다.';
+    const head = files.length ? t('자동으로 합치지 못한 파일이 {n}개 있습니다.', { n: files.length }) : t('자동으로 합치지 못한 파일이 있습니다.');
     return confirmDialog({
-      title: '충돌을 해결해야 합니다', glyph: 'branch', ok: '충돌 보기', cancel: '닫기',
-      message: `${head}\n파일을 고치거나 한쪽을 고른 뒤 Stage 하고, 위쪽 띠에서 이어가세요.${files.length ? `\n\n${files.slice(0, 10).join('\n')}` : ''}`,
+      title: t('충돌을 해결해야 합니다'), glyph: 'branch', ok: t('충돌 보기'), cancel: t('닫기'),
+      message: `${head}\n${t('파일을 고치거나 한쪽을 고른 뒤 Stage 하고, 위쪽 띠에서 이어가세요.')}${files.length ? `\n\n${files.slice(0, 10).join('\n')}` : ''}`,
     }).then((show) => {
       if (show) showConflicts();
     });
@@ -320,7 +325,7 @@ export function errorDialog(error, { openSsl, showConflicts, prefs, title } = {}
       document.removeEventListener('keydown', onKey, true);
       resolve();
     };
-    const { box, remove } = card({ className: 'confirm error-card', mark: '!', tone: 'error', title: title ?? '작업을 끝내지 못했습니다', onCancel: close });
+    const { box, remove } = card({ className: 'confirm error-card', mark: '!', tone: 'error', title: title ?? t('작업을 끝내지 못했습니다'), onCancel: close });
     const preview = raw.split('\n').map((l) => l.trimEnd()).filter(Boolean).slice(0, UNKNOWN_PREVIEW_LINES).join('\n');
     const friendly = el('div', { class: 'error-view' },
       advice.cause ? el('div', { class: 'error-cause', text: advice.cause }) : null,
@@ -329,17 +334,17 @@ export function errorDialog(error, { openSsl, showConflicts, prefs, title } = {}
     const developer = el('div', { class: 'error-view' }, el('pre', { class: 'error-raw', text: raw }));
     const seg = el('div', { class: 'seg error-modes' });
     const copy = el('button', {
-      class: 'btn card-cancel error-copy', text: '전체 복사',
+      class: 'btn card-cancel error-copy', text: t('전체 복사'),
       onclick: () => {
         navigator.clipboard?.writeText(raw);
-        copy.textContent = '복사됨';
-        setTimeout(() => { copy.textContent = '전체 복사'; }, COPY_FEEDBACK_MS);
+        copy.textContent = t('복사됨');
+        setTimeout(() => { copy.textContent = t('전체 복사'); }, COPY_FEEDBACK_MS);
       },
     });
     const draw = () => {
       seg.replaceChildren(
-        el('button', { class: mode === 'friendly' ? 'on' : '', text: '설명', onclick: () => setMode('friendly') }),
-        el('button', { class: mode === 'raw' ? 'on' : '', text: 'git 원문', onclick: () => setMode('raw') }));
+        el('button', { class: mode === 'friendly' ? 'on' : '', text: t('설명'), onclick: () => setMode('friendly') }),
+        el('button', { class: mode === 'raw' ? 'on' : '', text: t('git 원문'), onclick: () => setMode('raw') }));
       friendly.classList.toggle('hidden', mode !== 'friendly');
       developer.classList.toggle('hidden', mode === 'friendly');
       copy.style.visibility = mode === 'friendly' ? 'hidden' : '';
@@ -350,12 +355,12 @@ export function errorDialog(error, { openSsl, showConflicts, prefs, title } = {}
       draw();
     };
     draw();
-    const okButton = cardOk('확인');
+    const okButton = cardOk(t('확인'));
     okButton.addEventListener('click', close);
     box.append(seg, el('div', { class: 'error-stack' }, friendly, developer),
       el('div', { class: 'modal-actions' },
         copy,
-        (error?.ssl || advice.kind === 'ssl') && openSsl ? cardButton('SSL 설정 열기', () => { close(); openSsl(); }) : null,
+        (error?.ssl || advice.kind === 'ssl') && openSsl ? cardButton(t('SSL 설정 열기'), () => { close(); openSsl(); }) : null,
         okButton));
     const onKey = (event) => {
       if (stack[stack.length - 1] !== box.parentElement) return;
@@ -389,7 +394,7 @@ export function openDrawer({ glyph, title, anchor, build, width = 480 }) {
   const clip = el('div', { class: 'drawer-clip', style: { left: `${rect.right}px`, top: `${rect.top}px`, height: `${rect.height}px`, width: `${room}px` } });
   const panel = el('aside', { class: `drawer${swap ? ' no-anim' : ''}`, style: { width: `${Math.min(width, room)}px` } },
     el('div', { class: 'drawer-head' }, glyph ? icon(glyph, 20, 'drawer-glyph') : null, el('div', { class: 'drawer-title', text: title }),
-      el('button', { class: 'card-close', 'data-tip': '닫기', onclick: () => close() }, icon('close', 14))));
+      el('button', { class: 'card-close', 'data-tip': t('닫기'), onclick: () => close() }, icon('close', 14))));
   const body = el('div', { class: 'drawer-body' });
   panel.append(body);
   clip.append(panel);
@@ -449,7 +454,7 @@ export function searchSelect({ items, value, placeholder = '', onChange, clearab
   const input = el('input', { class: 'ss-input', placeholder, spellcheck: 'false', autocomplete: 'off' });
   const list = el('div', { class: 'ss-list', hidden: true });
   const prefix = el('span', { class: 'ss-prefix', hidden: true });
-  const clear = clearable ? el('span', { class: 'ss-clear', 'data-tip': '비우기', hidden: true }, icon('close', 12)) : null;
+  const clear = clearable ? el('span', { class: 'ss-clear', 'data-tip': t('비우기'), hidden: true }, icon('close', 12)) : null;
   const wrap = el('div', { class: 'search-select' }, prefix, input, clear, el('span', { class: 'ss-sep' }), el('span', { class: 'ss-caret' }, icon('chevronDown', 14)), list);
   let active = 0;
   let shown = [];
@@ -472,7 +477,7 @@ export function searchSelect({ items, value, placeholder = '', onChange, clearab
       class: `ss-item${k === active ? ' on' : ''}${i.value === current ? ' chosen' : ''}`,
       onpointerdown: (e) => { e.preventDefault(); choose(i); },
     }, i.image ? avatar(i.image) : i.icon ? icon(i.icon, 14) : null, el('span', { text: i.label }), i.hint ? el('span', { class: 'muted small', text: i.hint }) : null))
-      : [el('div', { class: 'ss-empty muted small', text: '없습니다' })]));
+      : [el('div', { class: 'ss-empty muted small', text: t('없습니다') })]));
     list.querySelector('.ss-item.on')?.scrollIntoView({ block: 'nearest' });
   };
   // 목록이 열려 있으면 바깥 상자에 open — 드로어가 그 Esc 를 목록 닫기에 양보한다.

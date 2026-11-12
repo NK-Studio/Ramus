@@ -1,5 +1,5 @@
 // 앱을 켜는 동안 보이는 시작 화면. 모듈이 아니라 <body> 첫머리에서 바로 돈다 — 첫 그림부터 실제 테마 바탕색으로.
-// 힌트는 Rust 가 웹뷰를 만들 때 window.__boot 로 넘긴다: {theme, platform}.
+// 힌트는 Rust 가 웹뷰를 만들 때 window.__boot 로 넘긴다: {theme, platform, language}.
 // macOS 가 켜질 때처럼: 가운데에 단색의 큼직한 가지 표식이 조용히 떠오르고 그 아래 이름이 뒤따른다. 금방 열려도 적어도 MIN_MS 는 보이고, 그보다 오래 걸리면 아이콘 아래 가는 막대가 흐른다(시간은 app.css).
 // app.js 가 첫 화면(레포지토리·시작·GitHub 연결)을 다 그리면 window.__bootDone() 으로 걷어 낸다.
 (function () {
@@ -16,7 +16,9 @@
   boot.id = 'boot';
   boot.setAttribute('role', 'progressbar');
   boot.setAttribute('aria-busy', 'true');
-  boot.setAttribute('aria-label', '불러오는 중');
+  var language = hint.language;
+  try { language = window.sessionStorage.getItem('ramus.language') || language; } catch (e) { /* 저장소가 막혔다 */ }
+  boot.setAttribute('aria-label', language === 'en' ? 'Loading' : '불러오는 중'); // i18n-ignore
 
   // macOS 가 켜질 때의 사과처럼: 바탕 위에 단색의 큼직한 가지 표식만(Ramus 는 라틴어로 '가지' — 본줄기에서 곁가지가 하나 갈라진다),
   // 그 아래 이름, 오래 걸리면 가는 막대.

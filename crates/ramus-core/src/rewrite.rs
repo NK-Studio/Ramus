@@ -5,6 +5,7 @@
 
 use serde::Deserialize;
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Repository, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -52,8 +53,8 @@ pub fn parse(output: &str) -> Vec<RewriteCommit> {
 pub fn unsupported(kind: RewriteKind, parents: usize) -> Option<&'static str> {
     match kind {
         RewriteKind::Reword => None,
-        _ if parents == 0 => Some("최초 커밋은 합치거나 뺄 수 없습니다."),
-        _ if parents > 1 => Some("병합 커밋은 합치거나 뺄 수 없습니다."),
+        _ if parents == 0 => Some(tr("최초 커밋은 합치거나 뺄 수 없습니다.", "The root commit can't be squashed or dropped.")),
+        _ if parents > 1 => Some(tr("병합 커밋은 합치거나 뺄 수 없습니다.", "A merge commit can't be squashed or dropped.")),
         _ => None,
     }
 }
@@ -69,7 +70,7 @@ fn ensure_newline(text: &str) -> String {
 
 impl Repository {
     fn read_rewrite_commit(&self, revision: &str) -> Result<RewriteCommit> {
-        parse(&self.git_run(&["log", "-1", "--date=raw", FORMAT, revision])?).into_iter().next().ok_or_else(|| GitError::new("커밋을 읽지 못했습니다."))
+        parse(&self.git_run(&["log", "-1", "--date=raw", FORMAT, revision])?).into_iter().next().ok_or_else(|| GitError::new(tr("커밋을 읽지 못했습니다.", "Couldn't read the commit.")))
     }
 
     fn commit_tree(&self, tree: &str, parents: &[String], message: &str, author: &RewriteCommit) -> Result<String> {
@@ -85,9 +86,9 @@ impl Repository {
 
     /// 커밋 하나를 고친다. `new_message` 는 Reword(필수)·Squash(없으면 두 메시지를 잇는다)에 쓴다. 바뀐 뒤 HEAD 를 돌려준다.
     pub fn rewrite(&self, kind: RewriteKind, commit: &str, new_message: Option<&str>) -> Result<String> {
-        let head = self.head().ok_or_else(|| GitError::new("아직 커밋이 없습니다."))?;
+        let head = self.head().ok_or_else(|| GitError::new(tr("아직 커밋이 없습니다.", "There are no commits yet.")))?;
         if self.git_run(&["merge-base", "--is-ancestor", commit, "HEAD"]).is_err() {
-            return Err(GitError::new("지금 브랜치의 히스토리에 있는 커밋만 고칠 수 있습니다."));
+            return Err(GitError::new(tr("지금 브랜치의 히스토리에 있는 커밋만 고칠 수 있습니다.", "Only commits in the current branch's history can be edited.")));
         }
         let target = self.read_rewrite_commit(commit)?;
         if let Some(why) = unsupported(kind, target.parents.len()) {
@@ -95,7 +96,7 @@ impl Repository {
         }
         if kind == RewriteKind::Drop {
             if self.git_dir().join("rebase-merge").exists() || self.git_dir().join("rebase-apply").exists() {
-                return Err(GitError::new("이미 진행 중인 rebase 가 있습니다. 먼저 끝내거나 중단해 주세요."));
+                return Err(GitError::new(tr("이미 진행 중인 rebase 가 있습니다. 먼저 끝내거나 중단해 주세요.", "A rebase is already in progress. Finish or abort it first.")));
             }
             let result = if target.hash == head {
                 self.git_run(&["reset", "--keep", &target.parents[0]])
@@ -105,7 +106,7 @@ impl Repository {
             if let Err(e) = result {
                 if self.git_dir().join("rebase-merge").exists() {
                     let _ = self.git_run(&["rebase", "--abort"]);
-                    return Err(GitError::new(format!("커밋을 빼다 충돌이 나서 시작하기 전으로 되돌렸습니다.\n\n{}", e.message)));
+                    return Err(GitError::new(crate::trf!("커밋을 빼다 충돌이 나서 시작하기 전으로 되돌렸습니다.\n\n{}", "Dropping the commit caused a conflict, so it was rolled back to where it started.\n\n{}", e.message)));
                 }
                 return Err(e);
             }
@@ -114,12 +115,12 @@ impl Repository {
 
         let mut replaced: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         let rewritten = if kind == RewriteKind::Reword {
-            let message = new_message.filter(|m| !m.trim().is_empty()).ok_or_else(|| GitError::new("커밋 메시지를 적어 주세요."))?;
+            let message = new_message.filter(|m| !m.trim().is_empty()).ok_or_else(|| GitError::new(tr("커밋 메시지를 적어 주세요.", "Enter a commit message.")))?;
             self.commit_tree(&target.tree, &target.parents, &ensure_newline(message), &target)?
         } else {
             let parent = self.read_rewrite_commit(&target.parents[0])?;
             if parent.parents.len() > 1 {
-                return Err(GitError::new("부모가 병합 커밋이라 합칠 수 없습니다."));
+                return Err(GitError::new(tr("부모가 병합 커밋이라 합칠 수 없습니다.", "Can't squash because the parent is a merge commit.")));
             }
             let message = match new_message.filter(|m| !m.trim().is_empty()) {
                 Some(m) => ensure_newline(m),
@@ -151,7 +152,7 @@ impl Repository {
                 replaced.insert(d.hash.clone(), copy);
             }
         }
-        let new_head = replaced.get(&head).cloned().ok_or_else(|| GitError::new("커밋을 다시 만들지 못했습니다."))?;
+        let new_head = replaced.get(&head).cloned().ok_or_else(|| GitError::new(tr("커밋을 다시 만들지 못했습니다.", "Couldn't recreate the commit.")))?;
         self.git_run(&["reset", "--soft", &new_head])?;
         Ok(new_head)
     }
@@ -159,7 +160,7 @@ impl Repository {
     /// 커밋 하나를 패치 파일로 쓴다(format-patch).
     pub fn save_patch(&self, commit: &str, path: &str) -> Result<()> {
         let patch = self.git_run(&["format-patch", "-1", "--stdout", commit])?;
-        std::fs::write(path, patch).map_err(|e| GitError::new(format!("패치를 쓰지 못했습니다: {e}")))
+        std::fs::write(path, patch).map_err(|e| GitError::new(crate::trf!("패치를 쓰지 못했습니다: {e}", "Couldn't write the patch: {e}")))
     }
 }
 

@@ -304,7 +304,7 @@ impl GitRunner {
         let job = current_job();
         if let Some(job) = &job {
             if job_cancelled(job) {
-                return GitOutput::failed("작업을 취소했습니다.".into());
+                return GitOutput::failed(crate::i18n::tr("작업을 취소했습니다.", "The operation was cancelled.").into());
             }
             // 취소할 때 자식 git(git-remote-https 등)까지 함께 끝내려고 따로 묶는다.
             #[cfg(unix)]
@@ -319,7 +319,7 @@ impl GitRunner {
 
         let mut child = match cmd.spawn() {
             Ok(child) => child,
-            Err(e) => return GitOutput::failed(format!("git 을 실행하지 못했습니다({}): {e}", git.display())),
+            Err(e) => return GitOutput::failed(crate::trf!("git 을 실행하지 못했습니다({}): {e}", "Couldn't run git ({}): {e}", git.display())),
         };
         if let Some(job) = &job {
             running_jobs().lock().unwrap().insert(job.clone(), child.id());

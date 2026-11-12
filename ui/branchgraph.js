@@ -6,6 +6,10 @@
 import { namedLaneRgb, STASH, drawStashBox, stashLabel } from './graph.js';
 import { formatDate, initials } from './util.js';
 import { icon } from './icons.js';
+import { scoped } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/branchgraph.js 를 먼저 본다). */
+const t = scoped('branchgraph');
 
 // ── GraphStyle ──────────────────────────────────────
 const COLUMN_WIDTH = 110;
@@ -48,8 +52,11 @@ const LABEL_GAP = 3;
 /** 이름표 글자 줄 높이 배율(.bx-label 의 line-height 와 같다). */
 const LINE_HEIGHT = 1.2;
 
-/** 병합 메시지에서 이름을 찾지 못한 가지(graph.rs ANONYMOUS_LANE · 원본 graph.mergedBranch). */
-export const MERGED_BRANCH = '(병합된 브랜치)';
+/** 병합 메시지에서 이름을 찾지 못한 가지(graph.rs ANONYMOUS_LANE · 원본 graph.mergedBranch). Rust 가 보내는 이름(데이터)과 견주는 값이라 그대로 둔다 — 화면에는 laneName 으로. */
+export const MERGED_BRANCH = '(병합된 브랜치)'; // i18n-ignore
+
+/** 가지 이름을 화면 글로: 이름 없는 가지만 지금 언어로 바꾼다. */
+const laneName = (name) => (name === MERGED_BRANCH ? t('(병합된 브랜치)') : name);
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const lerp = (a, b, t) => a.map((c, i) => c + (b[i] - c) * t);
@@ -574,7 +581,7 @@ export function createBranchGraph(opts = {}) {
       const end = canvasX(lane.lastColumn) + radius;
       if (end < 0 || start > size.w) continue;
       // 이름 없는(병합된) 줄은 병합 메시지에서 딴 이름을 "master 에서 병합" 처럼 출처로 보인다 — 그냥 "master" 라고 쓰면 진짜 master 줄과 헷갈렸다.
-      const text = lane.stash ? lane.name : !lane.anonymous ? `/${lane.name}` : lane.name === MERGED_BRANCH ? lane.name : `${lane.name} 에서 병합`;
+      const text = lane.stash ? lane.name : !lane.anonymous ? `/${lane.name}` : lane.name === MERGED_BRANCH ? laneName(lane.name) : t('{name} 에서 병합', { name: lane.name });
       let left = Math.max(start, STICKY_MARGIN);
       let maxWidth = Infinity;
       const next = laneStartAfter(lane);
@@ -725,7 +732,7 @@ export function createBranchGraph(opts = {}) {
     // 참고한 문서 팝업처럼: 머리줄(가지 아이콘 + 가지 이름), 커밋 메시지, 구분선, 해시·작성자·시각.
     const branchIcon = icon('branch', 14, 'bx-tip-icon');
     branchIcon.style.color = css(hovered.lane.rgb);
-    const head = span('bx-tip-head', branchIcon, span('bx-tip-lane', nfc(hovered.lane.name)));
+    const head = span('bx-tip-head', branchIcon, span('bx-tip-lane', nfc(laneName(hovered.lane.name))));
     const subject = span('bx-tip-subject', nfc(c.stash ? stashLabel(c.subject) : c.subject));
     const meta = span('bx-tip-meta', span('bx-tip-hash', c.shortHash), ` · ${nfc(c.authorName)} · ${formatDate(c.time, true)}`);
     tooltip.replaceChildren(head, subject, div('bx-tip-rule'), meta);

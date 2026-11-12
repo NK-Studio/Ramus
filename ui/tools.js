@@ -2,6 +2,7 @@
 // 원본 FileHistoryPanel·GitBlameWindow·GitCompareWindow·GitCodeEditor·GitImageDiffView 를 옮겼다.
 
 import { el, relativeTime, formatDate, initials, isComposing } from './util.js';
+import { scoped, isEn } from './i18n.js';
 import { icon } from './icons.js';
 import { createDiffView } from './diff.js';
 import { fileList, viewSwitch, CHANGE_STATE, fileIcon } from './files.js';
@@ -9,8 +10,13 @@ import { confirmDialog, choiceDialog, showMenu } from './dialogs.js';
 import { highlight, languageOf } from './syntax.js';
 import { authorRgb } from './graph.js';
 
+/** 이 모듈의 글(locales/en/tools.js 를 먼저 본다). */
+const t = scoped('tools');
+
 const rgb = (c) => `rgb(${c.map(Math.round).join(',')})`;
 const ZERO = /^0+$/;
+/** 다른 화면과 같은 원문이 다른 뜻으로 쓰이는 짧은 낱말(예: '되돌리기' 는 여기서 Undo) — 공유 표 대신 여기서 고른다. */
+const own = (ko, en) => (isEn ? en : ko);
 const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /** 40자 해시만 7자리로(원본 GitDisplay.ShortRevision). `해시^` 도 줄인다. 브랜치 이름·HEAD 는 그대로. */
 export const shortRevision = (rev) => (rev ? rev.replace(/^([0-9a-f]{40})/i, (h) => h.slice(0, 7)) : rev);
@@ -146,7 +152,7 @@ export function createTools(ctx) {
   }
 
   /** 머리 줄(원본 file-history__header): 제목 · × */
-  const header = (title, extra = [], closeTip = '닫기 (Esc)') => el('div', { class: 'tool-head' },
+  const header = (title, extra = [], closeTip = t('닫기 (Esc)')) => el('div', { class: 'tool-head' },
     el('span', { class: 'tool-title', text: title, 'data-tip': title }), extra,
     el('button', { class: 'tool-close', text: '×', 'data-tip': closeTip, onclick: () => close() }));
 
@@ -166,13 +172,13 @@ export function createTools(ctx) {
 
   function fileHistory(path) {
     return open('history', async (root, me) => {
-      const notice = el('div', { class: 'fh-notice', text: '불러오는 중…' });
+      const notice = el('div', { class: 'fh-notice', text: t('불러오는 중…') });
       const rows = el('div', { class: 'fh-rows', tabindex: '0' });
       const footer = el('div', { class: 'fh-footer' });
       const list = el('div', { class: 'fh-list' }, notice, rows, footer);
       const diffHost = el('div', { class: 'fh-diff diff-view embedded' });
       const diff = createDiffView(diffHost);
-      root.append(header(`파일 히스토리: ${path}`, [], '히스토리 닫기(Esc)'),
+      root.append(header(t('파일 히스토리: {path}', { path }), [], t('히스토리 닫기(Esc)')),
         el('div', { class: 'fh-body' }, list, splitter({ pane: list, prefs: ctx.prefs, key: 'history.split', size: 400, min: 160 }), diffHost));
       me.dispose = () => diff.close();
       let revisions;
@@ -184,8 +190,8 @@ export function createTools(ctx) {
       }
       if (me.closed) return;
       notice.hidden = revisions.length > 0;
-      notice.textContent = '이 파일을 바꾼 커밋이 없습니다.';
-      footer.textContent = revisions.length >= HISTORY_MAX ? `최근 ${HISTORY_MAX}개까지만 보입니다.` : '히스토리 끝';
+      notice.textContent = t('이 파일을 바꾼 커밋이 없습니다.');
+      footer.textContent = revisions.length >= HISTORY_MAX ? t('최근 {n}개까지만 보입니다.', { n: HISTORY_MAX }) : t('히스토리 끝');
       let active = -1;
       const items = revisions.map((rev, i) => {
         const c = rev.commit;
@@ -227,7 +233,7 @@ export function createTools(ctx) {
   function blame(path, revision) {
     return open('blame', async (root, me) => {
       const name = path.split('/').pop();
-      const summary = el('div', { class: 'bl-summary', text: '불러오는 중…' });
+      const summary = el('div', { class: 'bl-summary', text: t('불러오는 중…') });
       const scroller = el('div', { class: 'blame-body' });
       root.append(header(`Blame: ${name}${revision ? ` @ ${shortRevision(revision)}` : ''}`), summary, scroller);
       let lines;
@@ -238,7 +244,7 @@ export function createTools(ctx) {
         return;
       }
       if (me.closed) return;
-      summary.textContent = `${path} — ${lines.length}줄`;
+      summary.textContent = t('{path} — {n}줄', { path, n: lines.length });
       // 같은 커밋이 이어지는 묶음: 첫 줄에만 정보, 묶음마다 바탕을 번갈아 칠한다.
       const starts = [];
       const odd = [];
@@ -267,11 +273,11 @@ export function createTools(ctx) {
           else code.textContent = line.text.replace(/\t/g, '    ');
           return el('div', {
             class: `bl-row${odd[i] ? ' odd' : ''}${first ? ' start' : ''}${uncommitted ? ' uncommitted' : ''}${i === selected ? ' selected' : ''}`,
-            'data-tip': uncommitted ? '커밋 안 됨' : `${line.hash.slice(0, 7)}  ${line.author}  ${formatDate(line.time, true)}\n${line.summary}`,
+            'data-tip': uncommitted ? t('커밋 안 됨') : `${line.hash.slice(0, 7)}  ${line.author}  ${formatDate(line.time, true)}\n${line.summary}`,
             onclick: () => { selected = i; view.refresh(); },
             ondblclick: () => { if (!uncommitted) close().then((ok) => ok && ctx.revealCommit(line.hash)); },
           },
-          el('span', { class: 'bl-hash', text: first ? (uncommitted ? '커밋 안 됨' : line.hash.slice(0, 7)) : '' }),
+          el('span', { class: 'bl-hash', text: first ? (uncommitted ? t('커밋 안 됨') : line.hash.slice(0, 7)) : '' }),
           el('span', { class: 'bl-author', text: first && !uncommitted ? line.author : '' }),
           el('span', { class: 'bl-date', text: first && !uncommitted ? formatDate(line.time, true) : '' }),
           el('span', { class: 'bl-ln', text: line.line }),
@@ -289,11 +295,11 @@ export function createTools(ctx) {
       const a = shortRevision(from);
       const b = shortRevision(to);
       const commitOnly = to && from === `${to}^`;
-      const label = title ?? (to == null ? `${a} ↔ 작업 트리` : commitOnly ? `커밋 ${b}` : range ? `${a}...${b}` : `${a} ↔ ${b}`);
-      const summaryOf = (n) => (to == null ? `${a} ↔ 작업 트리 · 파일 ${n}개 (새 파일 제외)`
-        : commitOnly ? `${b} 의 부모 ↔ ${b} · 파일 ${n}개`
-          : range ? `${b} 이 ${a} 에서 갈라진 뒤 바꾼 파일 ${n}개` : `${a} ↔ ${b} · 파일 ${n}개`);
-      const summary = el('span', { class: 'cmp-summary', text: '불러오는 중…' });
+      const label = title ?? (to == null ? t('{a} ↔ 작업 트리', { a }) : commitOnly ? t('커밋 {hash}', { hash: b }) : range ? `${a}...${b}` : `${a} ↔ ${b}`);
+      const summaryOf = (n) => (to == null ? t('{a} ↔ 작업 트리 · 파일 {n}개 (새 파일 제외)', { a, n })
+        : commitOnly ? t('{b} 의 부모 ↔ {b} · 파일 {n}개', { b, n })
+          : range ? t('{b} 이 {a} 에서 갈라진 뒤 바꾼 파일 {n}개', { a, b, n }) : t('{a} ↔ {b} · 파일 {n}개', { a, b, n }));
+      const summary = el('span', { class: 'cmp-summary', text: t('불러오는 중…') });
       const modeHost = el('span');
       const top = el('div', { class: 'cmp-files' });
       const diffHost = el('div', { class: 'cmp-diff diff-view embedded' });
@@ -315,7 +321,7 @@ export function createTools(ctx) {
       const openFile = (f) => diff.open({ target: { kind: 'range', from, to: to ?? null, range, path: f.path, originalPath: f.originalPath ?? null }, mode: 'commit', title: f.path, api: { ...ctx.diffApi, close: () => close() } });
       const draw = () => {
         modeHost.replaceChildren(viewSwitch(view, (v) => { view = v; ctx.prefs.set('compare.view', v); draw(); }));
-        top.replaceChildren(fileList({ entries: files, view, state: st, onOpen: openFile, empty: '두 판이 같습니다.' }));
+        top.replaceChildren(fileList({ entries: files, view, state: st, onOpen: openFile, empty: t('두 판이 같습니다.') }));
       };
       draw();
       if (files[0]) {
@@ -342,8 +348,8 @@ export function createTools(ctx) {
       } catch (error) {
         if (me.closed) return;
         finish(me);
-        if (/UTF-8·UTF-16/.test(error?.message ?? '')) {
-          if (await confirmDialog({ title: '여기서 편집할 수 없음', glyph: 'pencil', message: `${path}은(는) UTF-8·UTF-16 글 파일이 아니어서 여기서 고치면 내용이 깨질 수 있습니다. 외부 편집기에서 열까요?`, ok: '외부 편집기에서 열기' })) ctx.openEditor(path, line ?? 1);
+        if (/UTF-8·UTF-16|UTF-16/.test(error?.message ?? '')) {
+          if (await confirmDialog({ title: t('여기서 편집할 수 없음'), glyph: 'pencil', message: t('{path}은(는) UTF-8·UTF-16 글 파일이 아니어서 여기서 고치면 내용이 깨질 수 있습니다. 외부 편집기에서 열까요?', { path }), ok: t('외부 편집기에서 열기') })) ctx.openEditor(path, line ?? 1);
         } else {
           ctx.showError(error);
         }
@@ -356,17 +362,17 @@ export function createTools(ctx) {
       let moved = line != null;
 
       // 막대: 원본처럼 "이 파일 편집" 자리에 연필 + "편집 중" + [저장][취소][외부 편집기].
-      const label = el('span', { class: 'ed-label', text: '편집 중' });
-      const saveButton = el('button', { class: 'dbar-text outlined ed-save', text: '저장', 'data-tip': '고친 내용을 작업 사본 파일에 씁니다(Ctrl+S). 인코딩과 줄 끝은 원래대로 둡니다.', onclick: () => save() });
+      const label = el('span', { class: 'ed-label', text: t('편집 중') });
+      const saveButton = el('button', { class: 'dbar-text outlined ed-save', text: t('저장'), 'data-tip': t('고친 내용을 작업 사본 파일에 씁니다(Ctrl+S). 인코딩과 줄 끝은 원래대로 둡니다.'), onclick: () => save() });
       root.append(
         el('div', { class: 'diff-bar ed-bar' },
           el('div', { class: 'dbar-left' },
             el('span', { class: 'ed-editing' }, icon('pencil', 14), label),
             saveButton,
-            el('button', { class: 'dbar-text outlined', text: '취소', 'data-tip': '편집을 그만두고 diff 로 돌아갑니다(Esc).', onclick: () => close('cancel') }),
-            el('button', { class: 'dbar-text outlined', text: '외부 편집기', 'data-tip': '코드 편집기에서 이 파일을 엽니다(보고 있는 줄로 갑니다).', onclick: () => ctx.openEditor(path, caretLine() + 1) }),
+            el('button', { class: 'dbar-text outlined', text: t('취소'), 'data-tip': t('편집을 그만두고 diff 로 돌아갑니다(Esc).'), onclick: () => close('cancel') }),
+            el('button', { class: 'dbar-text outlined', text: t('외부 편집기'), 'data-tip': t('코드 편집기에서 이 파일을 엽니다(보고 있는 줄로 갑니다).'), onclick: () => ctx.openEditor(path, caretLine() + 1) }),
             el('div', { class: 'diff-title' }, fileIcon(path), el('span', { class: 'diff-path', text: path, 'data-tip': path }))),
-          el('div', { class: 'dbar-right' }, el('button', { class: 'dbar-btn', 'data-tip': '닫기', onclick: () => close() }, icon('close', 14)))));
+          el('div', { class: 'dbar-right' }, el('button', { class: 'dbar-btn', 'data-tip': t('닫기'), onclick: () => close() }, icon('close', 14)))));
 
       const numbers = el('div', { class: 'ed-numbers' });
       const gutter = el('div', { class: 'ed-gutter' }, numbers);
@@ -433,7 +439,7 @@ export function createTools(ctx) {
         numbers.style.width = `calc(${Math.max(3, String(lines.length).length)}ch + 14px)`;
         currentLine.style.top = `${caret * LH}px`;
         const d = dirty();
-        label.textContent = d ? '편집 중 · 저장 안 됨' : '편집 중';
+        label.textContent = d ? t('편집 중 · 저장 안 됨') : t('편집 중');
         label.classList.toggle('dirty', d);
         saveButton.disabled = !d;
       }
@@ -501,13 +507,13 @@ export function createTools(ctx) {
         event.preventDefault();
         const selection = textarea.selectionStart !== textarea.selectionEnd;
         showMenu(event.clientX, event.clientY, [
-          { label: '되돌리기', action: () => { textarea.focus(); document.execCommand('undo'); } },
-          { label: '다시 실행', action: () => { textarea.focus(); document.execCommand('redo'); } },
+          { label: own('되돌리기', 'Undo'), action: () => { textarea.focus(); document.execCommand('undo'); } }, // i18n-ignore
+          { label: t('다시 실행'), action: () => { textarea.focus(); document.execCommand('redo'); } },
           '-',
-          { label: '잘라 내기', disabled: !selection, action: () => { textarea.focus(); document.execCommand('cut'); } },
-          { label: '복사', disabled: !selection, action: () => { textarea.focus(); document.execCommand('copy'); } },
+          { label: t('잘라 내기'), disabled: !selection, action: () => { textarea.focus(); document.execCommand('cut'); } },
+          { label: t('복사'), disabled: !selection, action: () => { textarea.focus(); document.execCommand('copy'); } },
           {
-            label: '붙여 넣기',
+            label: t('붙여 넣기'),
             action: async () => {
               textarea.focus();
               const text = await navigator.clipboard?.readText?.().catch(() => null);
@@ -516,9 +522,9 @@ export function createTools(ctx) {
             },
           },
           '-',
-          { label: '모두 선택', action: () => { textarea.focus(); textarea.select(); } },
+          { label: t('모두 선택'), action: () => { textarea.focus(); textarea.select(); } },
           '-',
-          { label: '외부 편집기에서 열기', action: () => ctx.openEditor(path, caretLine() + 1) },
+          { label: t('외부 편집기에서 열기'), action: () => ctx.openEditor(path, caretLine() + 1) },
         ]);
       });
       // Esc 는 원본 CancelEdit: 저장 안 한 편집이 있으면 버릴지만 묻는다. 창 전체 Esc(도구 닫기)보다 먼저 받는다.
@@ -579,7 +585,7 @@ export function createTools(ctx) {
           return true;
         } catch (error) {
           if (error?.message === 'CHANGED_ON_DISK') {
-            const choice = await choiceDialog({ title: '디스크의 파일이 바뀌었습니다', glyph: 'pencil', tone: 'warning', message: `편집을 시작한 뒤 다른 곳에서 ${path}이(가) 바뀌었습니다. 덮어쓰면 그 변경은 사라집니다.`, ok: '덮어쓰기', alt: '편집 버리고 다시 읽기' });
+            const choice = await choiceDialog({ title: t('디스크의 파일이 바뀌었습니다'), glyph: 'pencil', tone: 'warning', message: t('편집을 시작한 뒤 다른 곳에서 {path}이(가) 바뀌었습니다. 덮어쓰면 그 변경은 사라집니다.', { path }), ok: t('덮어쓰기'), alt: t('편집 버리고 다시 읽기') });
             if (me.closed) return false;
             saving = false;
             if (choice === 'ok') return save(true);
@@ -587,7 +593,7 @@ export function createTools(ctx) {
             textarea.focus();
             return false;
           }
-          ctx.showError({ ...error, message: `${path}을(를) 쓰지 못했습니다.\n\n${error?.message ?? error}` });
+          ctx.showError({ ...error, message: t('{path}을(를) 쓰지 못했습니다.\n\n{error}', { path, error: error?.message ?? error }) });
           return false;
         } finally {
           saving = false;
@@ -613,7 +619,7 @@ export function createTools(ctx) {
       // 다른 곳으로 떠날 때: 원본 AskToLeaveEdit([저장][버리기][취소]). 저장에 실패하면 남는다.
       me.beforeClose = async () => {
         if (!dirty()) return true;
-        const choice = await choiceDialog({ title: '저장하지 않은 편집', glyph: 'pencil', message: `${path} 에 저장하지 않은 편집이 있습니다. 저장할까요?`, ok: '저장', alt: '버리기' });
+        const choice = await choiceDialog({ title: t('저장하지 않은 편집'), glyph: 'pencil', message: t('{path} 에 저장하지 않은 편집이 있습니다. 저장할까요?', { path }), ok: t('저장'), alt: t('버리기') });
         if (choice === 'ok') return save();
         if (choice !== 'alt') textarea.focus();
         return choice === 'alt';
@@ -621,7 +627,7 @@ export function createTools(ctx) {
       // Esc·[취소]: 원본 CancelEdit(버릴지만 묻는다).
       me.beforeCancel = async () => {
         if (!dirty()) return true;
-        const ok = await confirmDialog({ title: '저장하지 않은 편집', glyph: 'pencil', danger: true, message: `${path} 의 저장하지 않은 편집을 버릴까요?`, ok: '버리기' });
+        const ok = await confirmDialog({ title: t('저장하지 않은 편집'), glyph: 'pencil', danger: true, message: t('{path} 의 저장하지 않은 편집을 버릴까요?', { path }), ok: t('버리기') });
         if (!ok) textarea.focus();
         return ok;
       };
@@ -637,7 +643,7 @@ export function createTools(ctx) {
 
   async function newFile(folder) {
     const { formDialog } = await import('./dialogs.js');
-    const values = await formDialog({ title: '새 파일', glyph: 'file', message: `${folder}/ 에 만듭니다.`, fields: [{ name: 'name', placeholder: '이름.txt' }], ok: '만들기', validate: (v) => (!v.name.trim() ? '이름을 적어 주세요.' : /[\\:*?"<>|]/.test(v.name) ? '쓸 수 없는 글자가 있습니다.' : null) });
+    const values = await formDialog({ title: t('새 파일'), glyph: 'file', message: t('{folder}/ 에 만듭니다.', { folder }), fields: [{ name: 'name', placeholder: t('이름.txt') }], ok: t('만들기'), validate: (v) => (!v.name.trim() ? t('이름을 적어 주세요.') : /[\\:*?"<>|]/.test(v.name) ? t('쓸 수 없는 글자가 있습니다.') : null) });
     if (!values) return;
     const path = `${folder}/${values.name.trim()}`;
     try {
@@ -662,7 +668,7 @@ export function createTools(ctx) {
   }
 
   /** 판 이름(원본 GitDiffService.LabelOf): 인덱스는 Staged, 작업 트리는 작업 사본, 해시는 7자리. */
-  const revisionLabel = (rev) => (!rev ? '없음' : rev[0] === '' ? '작업 사본' : rev[0] === ':0' ? 'Staged' : shortRevision(rev[0]));
+  const revisionLabel = (rev) => (!rev ? t('없음') : rev[0] === '' ? t('작업 사본') : rev[0] === ':0' ? 'Staged' : shortRevision(rev[0]));
 
   async function loadImage(rev) {
     if (!rev) return null;
@@ -738,7 +744,7 @@ export function createTools(ctx) {
     const [before, after] = await Promise.all(revisions(target).map(loadImage));
     if (!before && !after) return false;
     const single = !before || !after;
-    const MODES = { twoUp: '나란히 보기', swipe: '스와이프', onion: '겹쳐 보기', difference: '차이 강조' };
+    const MODES = { twoUp: t('나란히 보기'), swipe: t('스와이프'), onion: t('겹쳐 보기'), difference: t('차이 강조') };
     const stored = ctx.prefs.get('image.mode');
     let mode = MODES[stored] ? stored : stored === 'diff' || stored === 'invert' ? 'difference' : 'twoUp';
     let zoom = 1;
@@ -754,29 +760,29 @@ export function createTools(ctx) {
     const alive = () => diffState.imageToken === token && container.isConnected;
     const W = Math.max(before?.w ?? 0, after?.w ?? 0);
     const H = Math.max(before?.h ?? 0, after?.h ?? 0);
-    const zoomTip = '휠로 확대·축소, 끌어서 이동, 두 번 클릭하면 화면에 맞춥니다.';
+    const zoomTip = t('휠로 확대·축소, 끌어서 이동, 두 번 클릭하면 화면에 맞춥니다.');
 
     // 위 막대: 파일 · 상태 · 닫기(코드 diff 막대 자리).
     const bar = el('div', { class: 'diff-bar' },
       el('div', { class: 'dbar-left' }, el('div', { class: 'diff-title' }, fileIcon(target.path), el('span', { class: 'diff-path', text: target.path, 'data-tip': target.path }),
-        el('span', { class: 'diff-state muted small', text: before && after ? '수정' : before ? '삭제' : '추가' }))),
-      el('div', { class: 'dbar-right' }, el('button', { class: 'dbar-btn', 'data-tip': '닫기 (Esc)', onclick: () => diffState.api.close() }, icon('close', 14))));
+        el('span', { class: 'diff-state muted small', text: before && after ? own('수정', 'Modified') : before ? own('삭제', 'Deleted') : own('추가', 'Added') }))), // i18n-ignore
+      el('div', { class: 'dbar-right' }, el('button', { class: 'dbar-btn', 'data-tip': t('닫기 (Esc)'), onclick: () => diffState.api.close() }, icon('close', 14))));
     // 보기 막대: [나란히 보기|스와이프|겹쳐 보기|차이 강조] (불투명도)   151% [화면에 맞춤|100%] [속성 보기]
     const modeButtons = Object.entries(MODES).map(([key, text]) => el('button', { class: 'dbar-text', text, onclick: () => { mode = key; ctx.prefs.set('image.mode', key); syncModes(); build(); } }));
     const slider = el('input', { type: 'range', min: 0, max: 100, value: 50, class: 'img-slider' });
     slider.addEventListener('input', () => { opacity = slider.value / 100; layout(); });
-    const sliderBox = el('label', { class: 'img-opacity' }, el('span', { text: '불투명도' }), slider);
+    const sliderBox = el('label', { class: 'img-opacity' }, el('span', { text: t('불투명도') }), slider);
     const zoomLabel = el('span', { class: 'img-zoom', 'data-tip': zoomTip });
-    const propsButton = el('button', { class: `dbar-text outlined img-props-btn${showProps ? ' on' : ''}`, text: '속성 보기', 'data-tip': '이전·이후 파일의 크기·형식·해상도를 아래에 나란히 보여 줍니다.', onclick: () => { showProps = !showProps; ctx.prefs.set('image.props', showProps); propsButton.classList.toggle('on', showProps); renderProps(); } });
+    const propsButton = el('button', { class: `dbar-text outlined img-props-btn${showProps ? ' on' : ''}`, text: t('속성 보기'), 'data-tip': t('이전·이후 파일의 크기·형식·해상도를 아래에 나란히 보여 줍니다.'), onclick: () => { showProps = !showProps; ctx.prefs.set('image.props', showProps); propsButton.classList.toggle('on', showProps); renderProps(); } });
     const toolbar = el('div', { class: 'diff-bar img-toolbar' },
       single ? null : el('div', { class: 'img-modes' }, el('div', { class: 'dbar-seg' }, modeButtons), sliderBox),
       el('span', { class: 'spacer' }),
       zoomLabel,
-      el('div', { class: 'dbar-seg' }, el('button', { class: 'dbar-text', text: '화면에 맞춤', 'data-tip': zoomTip, onclick: fit }), el('button', { class: 'dbar-text', text: '100%', onclick: () => zoomAt(1, center()) })),
+      el('div', { class: 'dbar-seg' }, el('button', { class: 'dbar-text', text: t('화면에 맞춤'), 'data-tip': zoomTip, onclick: fit }), el('button', { class: 'dbar-text', text: '100%', onclick: () => zoomAt(1, center()) })),
       propsButton);
     // 정보 줄: 크기 변경 · 바뀐 픽셀 수.
-    const sizeChanged = el('span', { class: 'img-size-changed', text: '크기가 바뀜', hidden: single || (before.w === after.w && before.h === after.h) });
-    const changedInfo = el('span', { class: 'img-changed', text: '차이를 계산하는 중…' });
+    const sizeChanged = el('span', { class: 'img-size-changed', text: t('크기가 바뀜'), hidden: single || (before.w === after.w && before.h === after.h) });
+    const changedInfo = el('span', { class: 'img-changed', text: t('차이를 계산하는 중…') });
     const info = el('div', { class: 'img-info', hidden: single }, sizeChanged, changedInfo);
     const stage = el('div', { class: 'img-stage' });
     const props = el('div', { class: 'img-props' });
@@ -841,11 +847,11 @@ export function createTools(ctx) {
         vp.content.append(vp.layers.bottom[0]);
         vp.root.classList.add(after ? 'added' : 'deleted');
         vp.backdrop.classList.add('framed');
-        vp.root.append(el('span', { class: 'img-status', text: after ? '추가됨' : '삭제됨' }));
+        vp.root.append(el('span', { class: 'img-status', text: after ? t('추가됨') : t('삭제됨') }));
         viewports = [vp];
       } else if (mode === 'twoUp') {
-        const left = viewport(`이전 · ${before.label}`);
-        const right = viewport(`이후 · ${after.label}`);
+        const left = viewport(t('이전 · {label}', { label: before.label }));
+        const right = viewport(t('이후 · {label}', { label: after.label }));
         left.root.classList.add('left');
         left.layers.bottom = [imgOf(before), before];
         right.layers.bottom = [imgOf(after), after];
@@ -854,7 +860,7 @@ export function createTools(ctx) {
         viewports = [left, right];
       } else if (mode === 'swipe') {
         // 경계선 왼쪽은 이전만, 오른쪽은 이후만 — 두 층을 각각 잘라 겹치지 않게 한다.
-        const vp = viewport(`이전 · ${before.label}  |  이후 · ${after.label}`);
+        const vp = viewport(t('이전 · {before}  |  이후 · {after}', { before: before.label, after: after.label }));
         const leftClip = el('div', { class: 'img-layer img-clip' }, imgOf(before));
         const rightImg = imgOf(after);
         const rightClip = el('div', { class: 'img-layer img-clip' }, rightImg);
@@ -880,13 +886,13 @@ export function createTools(ctx) {
         vp.layers.swipe = { leftClip, rightClip, rightImg, handle };
         viewports = [vp];
       } else if (mode === 'onion') {
-        const vp = viewport(`이전 · ${before.label}  →  이후 · ${after.label}`);
+        const vp = viewport(t('이전 · {before}  →  이후 · {after}', { before: before.label, after: after.label }));
         vp.layers.bottom = [imgOf(before), before];
         vp.layers.onion = [imgOf(after), after];
         vp.content.append(vp.layers.bottom[0], vp.layers.onion[0]);
         viewports = [vp];
       } else {
-        const vp = viewport('차이 강조');
+        const vp = viewport(t('차이 강조'));
         vp.layers.difference = el('div', { class: 'img-layer' });
         if (diffResult) vp.layers.difference.append(diffResult.canvas);
         vp.content.append(vp.layers.difference);
@@ -961,7 +967,7 @@ export function createTools(ctx) {
       propsSplit.hidden = !showProps;
       if (!showProps) return;
       props.style.height = `${ctx.prefs.get('image.propsHeight') ?? 90}px`;
-      const values = (s) => [`크기: ${formatBytes(s.size)} (${s.size.toLocaleString('en-US')}바이트)`, `형식: ${s.format || '-'}`, `해상도: ${s.w}×${s.h}`];
+      const values = (s) => [t('크기: {size} ({bytes}바이트)', { size: formatBytes(s.size), bytes: s.size.toLocaleString('en-US') }), t('형식: {format}', { format: s.format || '-' }), t('해상도: {w}×{h}', { w: s.w, h: s.h })];
       const column = (side, other, kind) => {
         const own = values(side);
         const theirs = other ? values(other) : null;
@@ -998,8 +1004,8 @@ export function createTools(ctx) {
       compareImages(before, after, alive).then((result) => {
         if (!result || !alive()) return;
         diffResult = result;
-        changedInfo.textContent = result.changed === 0 ? '바뀐 픽셀이 없습니다'
-          : `바뀐 픽셀 ${result.changed.toLocaleString('en-US')}개 / 전체 ${result.total.toLocaleString('en-US')}개 (${+((result.changed / result.total) * 100).toFixed(2)}%)`;
+        changedInfo.textContent = result.changed === 0 ? t('바뀐 픽셀이 없습니다')
+          : t('바뀐 픽셀 {changed}개 / 전체 {total}개 ({percent}%)', { changed: result.changed.toLocaleString('en-US'), total: result.total.toLocaleString('en-US'), percent: +((result.changed / result.total) * 100).toFixed(2) });
         changedInfo.classList.toggle('changed', result.changed > 0);
         for (const vp of viewports) {
           if (vp.layers.difference) vp.layers.difference.replaceChildren(result.canvas);

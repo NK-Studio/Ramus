@@ -65,6 +65,8 @@ enum UserEvent {
     QuitDismissed,
     /// 원격 작업을 정리했다 — 이제 끈다.
     Quit,
+    /// 글의 언어를 바꿨다 — 메뉴 막대를 새 언어로 다시 만든다.
+    Relabel,
 }
 
 /// 고르기 창 하나. kind: folder | file | save.
@@ -164,6 +166,8 @@ fn main() -> wry::Result<()> {
     let boot = json!({
         "theme": theme,
         "platform": std::env::consts::OS,
+        // 화면 글의 언어(ui/i18n.js). 설정에서 바꾸면 화면이 다시 읽는다.
+        "language": ramus_core::i18n::language(),
         // 개발 빌드: 화면이 점검용 손잡이(window.__ramus)를 드러낸다.
         "dev": cfg!(debug_assertions),
     });
@@ -186,7 +190,7 @@ fn main() -> wry::Result<()> {
     let window = builder.build(&event_loop).expect("창을 만들지 못했습니다");
 
     // 메뉴 막대. 항목을 누르면(macOS 는 단축키도) 이벤트 루프로 id 를 보낸다.
-    let app_menu = menu::AppMenu::build();
+    let mut app_menu = menu::AppMenu::build();
     let menu_proxy = Mutex::new(proxy.clone());
     muda::MenuEvent::set_event_handler(Some(move |event: muda::MenuEvent| {
         let _ = menu_proxy.lock().unwrap().send_event(UserEvent::Menu(event.id().0.clone()));
@@ -249,6 +253,11 @@ fn main() -> wry::Result<()> {
                     .unwrap_or_default();
                 let _ = ipc_proxy.send_event(UserEvent::MenuState(states));
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "setUi" && request.args.get("key").and_then(Value::as_str) == Some("language") {
+                // 언어는 메뉴 막대(메인 스레드)도 바꾼다. 다시 만들기 전에 언어부터 정한다.
+                ramus_core::i18n::set_language(request.args.get("value").and_then(Value::as_str).unwrap_or("ko"));
+                let _ = ipc_proxy.send_event(UserEvent::Relabel);
+                dispatch(ipc_state.clone(), ipc_proxy.clone(), request);
             } else if request.cmd == "toggleFullscreen" {
                 let _ = ipc_proxy.send_event(UserEvent::ToggleFullscreen);
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
@@ -323,6 +332,12 @@ fn main() -> wry::Result<()> {
                 let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.menu && window.__gitvcs.menu({})", json!(id)));
             }
             Event::UserEvent(UserEvent::MenuState(states)) => app_menu.set_enabled(&states),
+            Event::UserEvent(UserEvent::Relabel) => {
+                // 켜고 끈 상태는 화면이 다시 읽으며 menuState 로 다시 알린다.
+                app_menu.detach(&window);
+                app_menu = menu::AppMenu::build();
+                app_menu.attach(&window, menu_theme);
+            }
             Event::UserEvent(UserEvent::ToggleFullscreen) => toggle_fullscreen(&window),
             Event::UserEvent(UserEvent::WindowDrag) => {
                 let _ = window.drag_window();
@@ -377,7 +392,7 @@ fn main() -> wry::Result<()> {
                 let value = picked.map(|p| json!(p.display().to_string())).unwrap_or(Value::Null);
                 let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(value))));
             }
-            Event::UserEvent(UserEvent::PickRepo(id)) => match rfd::FileDialog::new().set_title("Git 레포지토리 폴더 열기").pick_folder() {
+            Event::UserEvent(UserEvent::PickRepo(id)) => match rfd::FileDialog::new().set_title(ramus_core::i18n::tr("Git 레포지토리 폴더 열기", "Open Git Repository Folder")).pick_folder() {
                 Some(folder) => dispatch(
                     state.clone(),
                     proxy.clone(),

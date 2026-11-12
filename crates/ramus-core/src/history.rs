@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 use crate::log::{self, Commit, FileChange};
+use crate::i18n::tr;
 use crate::repo::{GitError, Repository, Result};
 
 /// 파일 히스토리의 한 줄: 커밋과 그때의 경로(이름 변경을 따라간다).
@@ -326,8 +327,8 @@ impl Repository {
 
     pub fn read_text(&self, path: &str) -> Result<TextFile> {
         let full = self.safe_path(path)?;
-        let bytes = std::fs::read(&full).map_err(|e| GitError::new(format!("{path} 를 읽지 못했습니다: {e}")))?;
-        let (raw, encoding, bom) = decode(&bytes).ok_or_else(|| GitError::new("UTF-8·UTF-16 이 아닌 파일입니다. 외부 편집기로 열어 주세요."))?;
+        let bytes = std::fs::read(&full).map_err(|e| GitError::new(crate::trf!("{path} 를 읽지 못했습니다: {e}", "Couldn't read {path}: {e}")))?;
+        let (raw, encoding, bom) = decode(&bytes).ok_or_else(|| GitError::new(tr("UTF-8·UTF-16 이 아닌 파일입니다. 외부 편집기로 열어 주세요.", "The file isn't UTF-8 or UTF-16. Open it in an external editor.")))?;
         Ok(text_file(&raw, encoding, bom, modified_ms(&full)))
     }
 
@@ -346,7 +347,7 @@ impl Repository {
         let joined = join_with_separators(text, original);
         let bytes = encode_bytes(&joined, &original.encoding, original.bom);
         let tmp = full.with_extension("ramus-save");
-        std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &full)).map_err(|e| GitError::new(format!("{path} 를 쓰지 못했습니다: {e}")))?;
+        std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &full)).map_err(|e| GitError::new(crate::trf!("{path} 를 쓰지 못했습니다: {e}", "Couldn't write {path}: {e}")))?;
         Ok(text_file(&joined, original.encoding.clone(), original.bom, modified_ms(&full)))
     }
 }

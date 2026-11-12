@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::diff::{self, DiffDocument};
 use crate::graph::{self, GraphLayout};
+use crate::i18n::tr;
 use crate::patch;
 use crate::log::{self, Commit, FileChange};
 use crate::runner::{GitOutput, GitRunner};
@@ -57,12 +58,12 @@ impl GitError {
 
     /// 레포지토리 폴더가 사라져 아무것도 할 수 없다는 오류.
     pub fn gone(path: &Path) -> Self {
-        GitError { gone: true, ..GitError::new(format!("레포지토리 폴더를 찾을 수 없습니다: {}", path.display())) }
+        GitError { gone: true, ..GitError::new(crate::trf!("레포지토리 폴더를 찾을 수 없습니다: {}", "Couldn't find the repository folder: {}", path.display())) }
     }
 
     /// 탭을 바꾸는 사이에 온 요청을 건너뛰었다는 오류.
     pub fn stale() -> Self {
-        GitError { stale: true, ..GitError::new("다른 레포지토리로 바뀌어 이 요청을 건너뛰었습니다.") }
+        GitError { stale: true, ..GitError::new(tr("다른 레포지토리로 바뀌어 이 요청을 건너뛰었습니다.", "Skipped this request because a different repository is now open.")) }
     }
 }
 
@@ -296,7 +297,7 @@ impl Repository {
         if !out.success() {
             let msg = out.message();
             if msg.contains("not a git repository") {
-                return Err(GitError::new(format!("Git 레포지토리가 아닙니다: {}", path.display())));
+                return Err(GitError::new(crate::trf!("Git 레포지토리가 아닙니다: {}", "Not a Git repository: {}", path.display())));
             }
             return Err(GitError::new(msg));
         }
@@ -459,7 +460,7 @@ impl Repository {
                 let commits = self.load_commits(head.as_deref(), max_count, &refs)?;
                 Ok::<_, GitError>((refs, head, commits))
             })();
-            (status.join().unwrap_or_else(|_| Err(GitError::new("상태를 읽지 못했습니다."))), loaded, extra.join().unwrap_or_default())
+            (status.join().unwrap_or_else(|_| Err(GitError::new(tr("상태를 읽지 못했습니다.", "Couldn't read the status.")))), loaded, extra.join().unwrap_or_default())
         });
         let status = status?;
         let (refs, head, commits) = loaded?;
@@ -476,7 +477,7 @@ impl Repository {
         let out = self.run(&["show", "-s", "--format=%H%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%ct%x1f%P%x1f%B", hash])?;
         let f: Vec<&str> = out.stdout.splitn(9, '\x1f').collect();
         if f.len() < 9 {
-            return Err(GitError::new(format!("커밋을 읽지 못했습니다: {hash}")));
+            return Err(GitError::new(crate::trf!("커밋을 읽지 못했습니다: {hash}", "Couldn't read the commit: {hash}")));
         }
         let files = self.run(&["diff-tree", "-r", "-z", "--no-commit-id", "--name-status", "-M", "--root", "--diff-merges=first-parent", hash])?;
         Ok(CommitDetail {
@@ -537,7 +538,7 @@ impl Repository {
     /// Stage 한 변경을 커밋한다. 메시지는 표준 입력으로 넘긴다(따옴표·줄바꿈이 명령줄에서 깨지지 않게).
     pub fn commit(&self, message: &str, amend: bool) -> Result<String> {
         if message.trim().is_empty() {
-            return Err(GitError::new("커밋 메시지를 적어 주세요."));
+            return Err(GitError::new(tr("커밋 메시지를 적어 주세요.", "Enter a commit message.")));
         }
         let mut args = vec!["commit", "-F", "-"];
         if amend {
@@ -556,7 +557,7 @@ impl Repository {
     pub fn push_to(&self, remote: Option<&str>) -> Result<String> {
         let st = self.status()?;
         if st.branch.detached {
-            return Err(GitError::new("브랜치가 아닌 커밋을 보고 있어 푸시할 수 없습니다. 브랜치를 체크아웃해 주세요."));
+            return Err(GitError::new(tr("브랜치가 아닌 커밋을 보고 있어 푸시할 수 없습니다. 브랜치를 체크아웃해 주세요.", "Can't push while HEAD is detached. Check out a branch first.")));
         }
         let out = if st.branch.upstream.is_some() {
             self.run(&["push", "--progress"])?
@@ -564,7 +565,7 @@ impl Repository {
             let remotes = self.remotes()?;
             let remote = remote.map(str::to_string).filter(|r| remotes.contains(r)).or_else(|| remotes.iter().find(|r| *r == "origin").or(remotes.first()).cloned());
             let Some(remote) = remote else {
-                return Err(GitError::new("원격 레포지토리가 없습니다. 먼저 원격을 추가해 주세요."));
+                return Err(GitError::new(tr("원격 레포지토리가 없습니다. 먼저 원격을 추가해 주세요.", "There is no remote repository. Add a remote first.")));
             };
             self.run(&["push", "--progress", "-u", &remote, &st.branch.name])?
         };
@@ -604,23 +605,23 @@ impl Repository {
         };
         let doc = self.diff_with(&target, options.clone())?;
         if doc.fingerprint != fingerprint {
-            return Err(GitError::new("그 사이 파일이 바뀌었습니다. diff 를 다시 읽었으니 다시 골라 주세요."));
+            return Err(GitError::new(tr("그 사이 파일이 바뀌었습니다. diff 를 다시 읽었으니 다시 골라 주세요.", "The file changed in the meantime. The diff was reloaded; select the lines again.")));
         }
         let mut doc = doc;
         if untracked {
             if action == LineAction::Discard {
-                return Err(GitError::new("새 파일은 줄 단위로 버릴 수 없습니다. 파일을 통째로 버려 주세요."));
+                return Err(GitError::new(tr("새 파일은 줄 단위로 버릴 수 없습니다. 파일을 통째로 버려 주세요.", "Lines of a new file can't be discarded one by one. Discard the whole file instead.")));
             }
             // 새 파일은 인덱스에 없어 패치를 댈 곳이 없다. 빈 내용으로 먼저 올리면(intent-to-add) 보통 diff 와 같아진다.
             self.run(&["add", "-N", "--", path])?;
             doc = self.diff_with(&DiffTarget::Unstaged { path: path.to_string(), untracked: false }, options)?;
             if doc.fingerprint != fingerprint {
                 let _ = self.unstage(&[path.to_string()]);
-                return Err(GitError::new("새 파일의 diff 가 예상과 달라 Stage 하지 않았습니다."));
+                return Err(GitError::new(tr("새 파일의 diff 가 예상과 달라 Stage 하지 않았습니다.", "The new file's diff wasn't what was expected, so it wasn't staged.")));
             }
         }
         let Some(patch) = patch::build(&doc.lines, selected, path, action != LineAction::Stage) else {
-            return Err(GitError::new("고른 줄에 바뀐 줄이 없습니다."));
+            return Err(GitError::new(tr("고른 줄에 바뀐 줄이 없습니다.", "The selected lines contain no changes.")));
         };
         let args: &[&str] = match action {
             LineAction::Stage => &["apply", "--cached", "--whitespace=nowarn", "-"],
@@ -652,7 +653,7 @@ impl Repository {
         untracked.dedup();
         for path in &untracked {
             let full = self.safe_join(path)?;
-            std::fs::remove_file(&full).map_err(|e| GitError::new(format!("{path} 를 지우지 못했습니다: {e}")))?;
+            std::fs::remove_file(&full).map_err(|e| GitError::new(crate::trf!("{path} 를 지우지 못했습니다: {e}", "Couldn't delete {path}: {e}")))?;
         }
         added.sort();
         added.dedup();
@@ -689,7 +690,7 @@ impl Repository {
         untracked.dedup();
         for path in &untracked {
             let full = self.safe_join(path)?;
-            std::fs::remove_file(&full).map_err(|e| GitError::new(format!("{path} 를 지우지 못했습니다: {e}")))?;
+            std::fs::remove_file(&full).map_err(|e| GitError::new(crate::trf!("{path} 를 지우지 못했습니다: {e}", "Couldn't delete {path}: {e}")))?;
         }
         tracked.sort();
         tracked.dedup();
@@ -713,7 +714,7 @@ impl Repository {
     fn safe_join(&self, path: &str) -> Result<PathBuf> {
         let relative = Path::new(path);
         if relative.is_absolute() || relative.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-            return Err(GitError::new(format!("레포지토리 밖의 경로입니다: {path}")));
+            return Err(GitError::new(crate::trf!("레포지토리 밖의 경로입니다: {path}", "The path is outside the repository: {path}")));
         }
         Ok(self.root.join(relative))
     }
@@ -737,7 +738,7 @@ impl Repository {
     pub fn pull(&self, mode: PullMode) -> Result<String> {
         let st = self.status()?;
         if st.branch.upstream.is_none() {
-            return Err(GitError::new("이 브랜치에는 추적하는 원격 브랜치가 없어 풀할 수 없습니다. 먼저 푸시해 주세요."));
+            return Err(GitError::new(tr("이 브랜치에는 추적하는 원격 브랜치가 없어 풀할 수 없습니다. 먼저 푸시해 주세요.", "This branch doesn't track a remote branch, so it can't be pulled. Push it first.")));
         }
         let out = self.git.run(&self.root, mode.args());
         if out.success() {
@@ -745,8 +746,9 @@ impl Repository {
         }
         let msg = out.message();
         if mode == PullMode::FfOnly && (msg.contains("Not possible to fast-forward") || msg.contains("Diverging branches")) {
-            return Err(GitError::new(format!(
-                "로컬과 원격이 갈라져 앞으로 감기만으로는 풀할 수 없습니다. 풀 방식을 '병합' 이나 'Rebase' 로 바꿔 다시 해 주세요.\n\n{msg}"
+            return Err(GitError::new(crate::trf!(
+                "로컬과 원격이 갈라져 앞으로 감기만으로는 풀할 수 없습니다. 풀 방식을 '병합' 이나 'Rebase' 로 바꿔 다시 해 주세요.\n\n{msg}",
+                "Local and remote have diverged, so a fast-forward Pull isn't possible. Change the Pull mode to 'Merge' or 'Rebase' and try again.\n\n{msg}"
             )));
         }
         Err(GitError::new(msg))

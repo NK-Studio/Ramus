@@ -2,6 +2,11 @@
 // 반투명 유리판 위에 12살 회전 표시와 레포지토리 이름. 탭 이름에는 "밀어서 잠금 해제" 같은 빛 줄기가 지나간다.
 // 전환은 대개 금방 끝나므로 너무 빨리 깜박이지 않게 최소한 잠깐은 보인다. 연달아 바꾸면 마지막 것만 따른다.
 
+import { scoped } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/switchhud.js 를 먼저 본다). */
+const t = scoped('switchhud');
+
 const MIN_VISIBLE_MS = 420;
 const LEAVE_MS = 240;
 
@@ -27,7 +32,7 @@ export function createSwitchHud() {
     nameEl.className = 'hud-name';
     const sub = document.createElement('div');
     sub.className = 'hud-sub';
-    sub.textContent = '불러오는 중…';
+    sub.textContent = t('불러오는 중…');
     const text = document.createElement('div');
     text.className = 'hud-text';
     text.append(nameEl, sub);

@@ -2,6 +2,10 @@
 // 아래에 [닫기][복사하고 닫기]. 내용은 Rust 의 about 명령(commands.rs)이 준다 — 빌드 표식은 build.rs 가 묻은 것.
 import { el } from './util.js';
 import { call } from './bridge.js';
+import { scoped, locale } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/about.js 를 먼저 본다). */
+const t = scoped('about');
 
 /** 앱 아이콘(assets/icon/ramus.svg)과 같은 모양: 둥근 흰 타일 위 검정 가지 표식. 200 단위 타일, 48 단위 표식. */
 const TILE = 'M44 0H156C192 0 200 8 200 44V156C200 192 192 200 156 200H44C8 200 0 192 0 156V44C0 8 8 0 44 0Z';
@@ -23,7 +27,7 @@ function appIcon() {
 function koreanDate(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
   if (!m) return iso ?? '';
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 const OS_NAME = { macos: 'macOS', windows: 'Windows', linux: 'Linux' };
@@ -42,8 +46,8 @@ export async function showAbout() {
   // `git --version` 은 "git version 2.55.0"(Windows 는 뒤에 ".windows.1") — 앞머리를 "Git" 으로 줄인다.
   const git = info.git ? info.git.replace(/^git version\s*/i, 'Git ') : '';
   const env = [git, webviewLabel(info), [OS_NAME[info.platform] ?? info.platform, info.arch].filter(Boolean).join(' ')].filter(Boolean);
-  const build = info.build_hash ? `빌드 #${info.build_hash}, ${koreanDate(info.build_date)}에 빌드됨` : '';
-  const plain = [`Ramus ${version}`, info.build_hash ? `빌드 #${info.build_hash}, ${info.build_date}` : '', ...env].filter(Boolean).join('\n');
+  const build = info.build_hash ? t('빌드 #{hash}, {date}에 빌드됨', { hash: info.build_hash, date: koreanDate(info.build_date) }) : '';
+  const plain = [`Ramus ${version}`, info.build_hash ? t('빌드 #{hash}, {date}', { hash: info.build_hash, date: info.build_date }) : '', ...env].filter(Boolean).join('\n');
 
   const line = (text, className = '') => el('div', { class: className, text });
   const text = el('div', { class: 'about-text' },
@@ -52,7 +56,7 @@ export async function showAbout() {
     env.length ? el('div', { class: 'about-group' }, env.map((t) => line(t))) : null);
 
   const backdrop = el('div', { class: 'modal-backdrop' });
-  const box = el('div', { class: 'modal card about', role: 'dialog', 'aria-label': 'Ramus 정보' });
+  const box = el('div', { class: 'modal card about', role: 'dialog', 'aria-label': t('Ramus 정보') });
   const close = () => {
     if (!backdrop.isConnected) return;
     document.removeEventListener('keydown', onKey, true);
@@ -62,8 +66,8 @@ export async function showAbout() {
   const onKey = (event) => {
     if (event.key === 'Escape' || event.key === 'Esc') { event.preventDefault(); event.stopPropagation(); close(); }
   };
-  const copyClose = el('button', { class: 'btn card-ok default', text: '복사하고 닫기', onclick: () => { navigator.clipboard?.writeText(plain); close(); } });
-  const actions = el('div', { class: 'modal-actions' }, el('button', { class: 'btn card-cancel', text: '닫기', onclick: close }), copyClose);
+  const copyClose = el('button', { class: 'btn card-ok default', text: t('복사하고 닫기'), onclick: () => { navigator.clipboard?.writeText(plain); close(); } });
+  const actions = el('div', { class: 'modal-actions' }, el('button', { class: 'btn card-cancel', text: t('닫기'), onclick: close }), copyClose);
   box.append(el('div', { class: 'about-body' }, appIcon(), text), actions);
   backdrop.append(box);
   backdrop.addEventListener('mousedown', (event) => { if (event.target === backdrop) close(); });

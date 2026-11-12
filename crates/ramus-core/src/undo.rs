@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Repository, Result};
 
 pub const MAX_ENTRIES: usize = 30;
@@ -244,20 +245,20 @@ impl Repository {
 
 /// 되돌리기·다시 하기. 성공하면 그 작업 이름. 기록이 낡았으면 목록에서 빼고 알린다.
 pub fn undo(repo: &Repository, journal: &mut Journal) -> Result<String> {
-    let entry = journal.undo.last().cloned().ok_or_else(|| GitError::new("기록된 작업이 없습니다."))?;
+    let entry = journal.undo.last().cloned().ok_or_else(|| GitError::new(tr("기록된 작업이 없습니다.", "There are no recorded actions.")))?;
     if !repo.run_plan(&undo_plan(&entry))? {
         journal.undo.pop();
-        return Err(GitError::new("기록한 뒤 레포지토리가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다."));
+        return Err(GitError::new(tr("기록한 뒤 레포지토리가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다.", "The repository changed after this was recorded (another commit, a switch, etc.), so it can't be safely reverted. The entry was removed from the list.")));
     }
     journal.redo.push(journal.undo.pop().unwrap());
     Ok(entry.title)
 }
 
 pub fn redo(repo: &Repository, journal: &mut Journal) -> Result<String> {
-    let entry = journal.redo.last().cloned().ok_or_else(|| GitError::new("기록된 작업이 없습니다."))?;
+    let entry = journal.redo.last().cloned().ok_or_else(|| GitError::new(tr("기록된 작업이 없습니다.", "There are no recorded actions.")))?;
     if !repo.run_plan(&redo_plan(&entry))? {
         journal.redo.pop();
-        return Err(GitError::new("기록한 뒤 레포지토리가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다."));
+        return Err(GitError::new(tr("기록한 뒤 레포지토리가 바뀌어(다른 커밋·전환 등) 안전하게 되돌릴 수 없습니다. 이 기록은 목록에서 뺐습니다.", "The repository changed after this was recorded (another commit, a switch, etc.), so it can't be safely reverted. The entry was removed from the list.")));
     }
     let mut entry = journal.redo.pop().unwrap();
     // 다시 넣은 stash 는 새 커밋이다.

@@ -6,13 +6,17 @@ import { el, formatDate } from './util.js';
 import { icon } from './icons.js';
 import { openDrawer, showMenu, confirmDialog, searchSelect } from './dialogs.js';
 import { branchNameProblem } from './graph.js';
+import { scoped, isEn } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/github.js 를 먼저 본다). */
+const t = scoped('github');
 
 const GITHUB_REMOTE = /github\.com[:/]+([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i;
 
 // ── PR 묶음(필터)과 조건 문법 — 원본 Core/GitPullRequestFilter.cs ──
 
 /** 기본 묶음. 이름 대신 nameKey 로 두어, 고치지 않으면 기본 이름을 그대로 보인다. */
-const DEFAULT_NAMES = { mine: '내 Pull Request', assigned: '나에게 배정됨', review: '내 리뷰 대기', all: '모든 Pull Request' };
+const DEFAULT_NAMES = { mine: t('내 Pull Request'), assigned: t('나에게 배정됨'), review: t('내 리뷰 대기'), all: t('모든 Pull Request') };
 const DEFAULT_FILTERS = [
   { nameKey: 'mine', query: 'author:@me' },
   { nameKey: 'assigned', query: 'assignee:@me' },
@@ -156,7 +160,7 @@ export function createGitHub(ctx) {
         while (id === run) {
           await new Promise((r) => setTimeout(r, interval));
           if (id !== run) return;
-          if (Date.now() > deadline) throw new Error('코드 입력 시간이 지났습니다. 다시 시도하세요.');
+          if (Date.now() > deadline) throw new Error(t('코드 입력 시간이 지났습니다. 다시 시도하세요.'));
           const r = await ctx.call('githubDevicePoll', { deviceCode: code.device_code });
           if (id !== run) return;
           if (r.status === 'slowDown') interval += 5000;
@@ -167,7 +171,7 @@ export function createGitHub(ctx) {
             completed++;
             lastLogin = r.login;
             emit();
-            ctx.toast(`GitHub 에 @${r.login} 로 로그인했습니다.`, 'success');
+            ctx.toast(t('GitHub 에 @{login} 로 로그인했습니다.', { login: r.login }), 'success');
             info = null;
             loadedFor = null;
             ctx.onSignedIn?.(r.login);
@@ -224,25 +228,25 @@ export function createGitHub(ctx) {
       let tick = 0;
       const backdrop = el('div', { class: `${L}-backdrop` });
       const mark = el('div', { class: `${L}-mark` }, icon('github', 36));
-      const title = el('div', { class: `${L}-title`, text: 'GitHub 로 로그인' });
+      const title = el('div', { class: `${L}-title`, text: t('GitHub 로 로그인') });
       const lead = el('div', { class: `${L}-lead` });
-      const codeBox = el('button', { class: `${L}-code`, 'data-tip': '눌러서 코드 복사', onclick: () => copyCode() });
+      const codeBox = el('button', { class: `${L}-code`, 'data-tip': t('눌러서 코드 복사'), onclick: () => copyCode() });
       const copied = el('div', { class: `${L}-copied` });
       const stepRow = (n, text) => el('div', { class: `${L}-step` }, el('span', { class: `${L}-step-num` }, el('span', { class: `${L}-step-n`, text: String(n) }), icon('check', 12)), el('span', { class: `${L}-step-text`, text }));
-      const steps = [stepRow(1, '코드 복사됨'), stepRow(2, 'GitHub 페이지에서 코드를 붙여넣고 승인'), stepRow(3, '연결 완료')];
+      const steps = [stepRow(1, t('코드 복사됨')), stepRow(2, t('GitHub 페이지에서 코드를 붙여넣고 승인')), stepRow(3, t('연결 완료'))];
       const stepsBox = el('div', { class: `${L}-steps` }, steps);
-      const waitText = el('span', { text: '승인을 기다리는 중…' });
+      const waitText = el('span', { text: t('승인을 기다리는 중…') });
       const expiry = el('span', { class: `${L}-expiry` });
       const waiting = el('div', { class: `${L}-wait` }, el('span', { class: `${L}-spinner` }), waitText, expiry);
       const errorLine = el('div', { class: `${L}-error`, hidden: true });
       const primary = el('button', { class: `${L}-primary`, onclick: () => (login.step === 'failed' ? login.start() : login.openPage()) });
-      const cancel = el('button', { class: `${L}-secondary`, text: '취소', onclick: () => finish(null) });
+      const cancel = el('button', { class: `${L}-secondary`, text: t('취소'), onclick: () => finish(null) });
       const main = el('div', { class: `${L}-main` }, codeBox, copied, stepsBox, waiting, errorLine, primary, cancel);
       const avatar = el('div', { class: `${L}-avatar` });
       const successText = el('div', { class: `${L}-success-text` });
       const success = el('div', { class: `${L}-success`, hidden: true }, avatar, successText);
-      const box = el('div', { class: `${L}-window`, role: 'dialog', 'aria-label': 'GitHub 로 로그인' },
-        el('button', { class: `card-close ${L}-close`, 'data-tip': '취소', onclick: () => finish(null) }, icon('close', 14)),
+      const box = el('div', { class: `${L}-window`, role: 'dialog', 'aria-label': t('GitHub 로 로그인') },
+        el('button', { class: `card-close ${L}-close`, 'data-tip': t('취소'), onclick: () => finish(null) }, icon('close', 14)),
         mark, title, lead, main, success);
       backdrop.append(box);
       document.body.append(backdrop);
@@ -251,7 +255,7 @@ export function createGitHub(ctx) {
       function copyCode() {
         if (!login.code) return;
         login.copy();
-        copied.textContent = '복사됨 — GitHub 페이지에 붙여넣으세요';
+        copied.textContent = t('복사됨 — GitHub 페이지에 붙여넣으세요');
         copied.classList.add('flash');
         clearTimeout(copiedTimer);
         copiedTimer = setTimeout(() => copied.classList.remove('flash'), 1400);
@@ -281,23 +285,23 @@ export function createGitHub(ctx) {
         }
         codeBox.disabled = !hasCode;
         codeBox.classList.toggle('failed', failed);
-        lead.textContent = step === 'requesting' ? 'GitHub 에 로그인 코드를 요청하는 중…' : failed ? '새 코드를 받아 다시 시도하세요.' : '아래 코드를 GitHub 페이지에 입력하면 연결됩니다.';
-        if (!copied.classList.contains('flash')) copied.textContent = hasCode ? '코드를 클립보드에 복사해 두었습니다. 누르면 다시 복사합니다.' : '';
+        lead.textContent = step === 'requesting' ? t('GitHub 에 로그인 코드를 요청하는 중…') : failed ? t('새 코드를 받아 다시 시도하세요.') : t('아래 코드를 GitHub 페이지에 입력하면 연결됩니다.');
+        if (!copied.classList.contains('flash')) copied.textContent = hasCode ? t('코드를 클립보드에 복사해 두었습니다. 누르면 다시 복사합니다.') : '';
         copied.hidden = !hasCode;
         steps[0].className = `${L}-step${hasCode ? ' done' : step === 'requesting' ? ' active' : ''}`;
         steps[1].className = `${L}-step${hasCode ? ' active' : ''}`;
         steps[2].className = `${L}-step`;
         waiting.hidden = !hasCode;
         updateExpiry();
-        errorLine.textContent = failed ? (login.error || '로그인하지 못했습니다.') : '';
+        errorLine.textContent = failed ? (login.error || t('로그인하지 못했습니다.')) : '';
         errorLine.hidden = !failed;
-        primary.textContent = failed ? '다시 시도' : login.openedPage ? 'GitHub 페이지 다시 열기' : 'GitHub 페이지 열기';
+        primary.textContent = failed ? t('다시 시도') : login.openedPage ? t('GitHub 페이지 다시 열기') : t('GitHub 페이지 열기');
         primary.disabled = step === 'requesting';
         primary.classList.toggle('busy', step === 'requesting');
       }
       function updateExpiry() {
         const left = login.expiresAt - Date.now();
-        expiry.textContent = login.step === 'waiting' && left > 0 ? `코드 만료까지 ${Math.max(1, Math.ceil(left / 60000))}분` : '';
+        expiry.textContent = login.step === 'waiting' && left > 0 ? t('코드 만료까지 {n}분', { n: Math.max(1, Math.ceil(left / 60000)) }) : '';
       }
 
       function finish(result) {
@@ -332,8 +336,9 @@ export function createGitHub(ctx) {
           steps.forEach((s) => { s.className = `${L}-step done`; });
           const img = el('img', { src: `https://avatars.githubusercontent.com/${encodeURIComponent(name)}?s=128`, alt: '', onerror: (e) => { e.target.remove(); } });
           avatar.replaceChildren(el('span', { class: `${L}-avatar-letter`, text: (name[0] ?? '?').toUpperCase() }), img);
-          successText.replaceChildren(el('strong', { text: name }), ' 로 연결됐습니다');
-          title.textContent = 'GitHub 에 연결됨';
+          const [textBefore, textAfter] = t('{name} 로 연결됐습니다').split('{name}');
+          successText.replaceChildren(textBefore, el('strong', { text: name }), textAfter);
+          title.textContent = t('GitHub 에 연결됨');
           lead.textContent = '';
           main.hidden = true;
           mark.hidden = true;
@@ -360,19 +365,19 @@ export function createGitHub(ctx) {
    */
   function connectScreen(host, onLeave) {
     const B = 'github-connect';
-    const title = el('div', { class: `${B}__title`, text: 'GitHub 연결' });
-    const text = el('div', { class: `${B}__text`, text: 'Ramus 를 쓰기 전에 GitHub 계정을 연결하세요. 로그인하면 비공개 레포지토리에서도 커밋 작성자의 아바타가 보이고 Pull Request 를 보고 만들 수 있습니다. 한 번 로그인하면 이 PC 의 모든 레포지토리에 적용됩니다.' });
+    const title = el('div', { class: `${B}__title`, text: t('GitHub 연결') });
+    const text = el('div', { class: `${B}__text`, text: t('Ramus 를 쓰기 전에 GitHub 계정을 연결하세요. 로그인하면 비공개 레포지토리에서도 커밋 작성자의 아바타가 보이고 Pull Request 를 보고 만들 수 있습니다. 한 번 로그인하면 이 PC 의 모든 레포지토리에 적용됩니다.') });
     // 로그인은 전용 창(deviceLogin)에서 한다. 마치면 이 화면을 떠난다.
-    const signIn = el('button', { class: `${B}__primary`, text: 'GitHub 로 로그인', onclick: () => deviceLogin().then((r) => { if (r) leave(true); }) });
+    const signIn = el('button', { class: `${B}__primary`, text: t('GitHub 로 로그인'), onclick: () => deviceLogin().then((r) => { if (r) leave(true); }) });
     const startStep = el('div', { class: `${B}__step` }, signIn);
     const waitingText = el('div', { class: `${B}__text` });
     const codeBox = el('div', { class: `${B}__code` });
-    const copyButton = el('button', { class: `${B}__secondary`, text: '코드 복사' });
-    const cancelButton = el('button', { class: `${B}__secondary`, text: '취소', onclick: () => login.cancel() });
+    const copyButton = el('button', { class: `${B}__secondary`, text: t('코드 복사') });
+    const cancelButton = el('button', { class: `${B}__secondary`, text: t('취소'), onclick: () => login.cancel() });
     const openButton = el('button', { class: `${B}__primary ${B}__next`, onclick: () => login.openPage() });
     const waitingStep = el('div', { class: `${B}__step` }, waitingText, codeBox, el('div', { class: `${B}__row` }, copyButton, cancelButton), openButton);
     const errorText = el('div', { class: `${B}__error` });
-    const skip = el('button', { class: `${B}__link`, text: '이번에는 연결하지 않고 계속', onclick: () => leave(false) });
+    const skip = el('button', { class: `${B}__link`, text: t('이번에는 연결하지 않고 계속'), onclick: () => leave(false) });
     const card = el('div', { class: `${B}__card` }, title, text, startStep, waitingStep, errorText, skip);
     host.replaceChildren(card);
     host.hidden = false;
@@ -380,9 +385,9 @@ export function createGitHub(ctx) {
     let copiedTimer = 0;
     copyButton.addEventListener('click', () => {
       login.copy();
-      copyButton.textContent = '복사됨';
+      copyButton.textContent = t('복사됨');
       clearTimeout(copiedTimer);
-      copiedTimer = setTimeout(() => { copyButton.textContent = '코드 복사'; }, 1500);
+      copiedTimer = setTimeout(() => { copyButton.textContent = t('코드 복사'); }, 1500);
       // 칸이 왼쪽부터 차례로 잠깐 반짝인다.
       [...codeBox.querySelectorAll(`.${B}__code-cell`)].forEach((cell, i) => {
         setTimeout(() => cell.classList.add(`${B}__code-cell--flash`), i * 45);
@@ -397,10 +402,10 @@ export function createGitHub(ctx) {
       const hasCode = false;
       startStep.hidden = running;
       waitingStep.hidden = !running;
-      waitingText.textContent = !hasCode ? 'GitHub 에 로그인 코드를 요청하는 중…'
-        : login.openedPage ? '열린 GitHub 페이지에 코드를 붙여넣고 승인하세요. 승인하면 자동으로 연결됩니다(코드는 클립보드에 복사되어 있습니다).'
-          : "아래 코드를 복사한 뒤 '다음' 을 눌러 GitHub 페이지를 여세요. 그 페이지에 코드를 붙여넣고 승인하면 자동으로 연결됩니다.";
-      openButton.textContent = login.openedPage ? 'GitHub 페이지 다시 열기' : '다음: GitHub 페이지 열기';
+      waitingText.textContent = !hasCode ? t('GitHub 에 로그인 코드를 요청하는 중…')
+        : login.openedPage ? t('열린 GitHub 페이지에 코드를 붙여넣고 승인하세요. 승인하면 자동으로 연결됩니다(코드는 클립보드에 복사되어 있습니다).')
+          : t("아래 코드를 복사한 뒤 '다음' 을 눌러 GitHub 페이지를 여세요. 그 페이지에 코드를 붙여넣고 승인하면 자동으로 연결됩니다.");
+      openButton.textContent = login.openedPage ? t('GitHub 페이지 다시 열기') : t('다음: GitHub 페이지 열기');
       const value = hasCode ? login.code : '';
       if (value !== shownCode) {
         shownCode = value;
@@ -439,7 +444,7 @@ export function createGitHub(ctx) {
 
   /** failure 가 있으면 원격이 계정을 거부한 뒤라 "이 계정으로 다시". 고르면 true(부른 쪽이 그 작업을 다시 한다). */
   function chooseAccount(failure = null) {
-    const SOURCE = { app: '앱 로그인(설정 > 로그인)', credential: 'git 이 쓰는 계정' };
+    const SOURCE = { app: t('앱 로그인(설정 > 로그인)'), credential: t('git 이 쓰는 계정') };
     return new Promise((resolve) => {
       const backdrop = el('div', { class: 'modal-backdrop' });
       const card = el('div', { class: 'modal card account-dialog', role: 'dialog' });
@@ -457,15 +462,15 @@ export function createGitHub(ctx) {
         }
       };
       document.addEventListener('keydown', onKey, true);
-      const message = el('div', { class: 'modal-message', text: '계정을 확인하는 중…' });
+      const message = el('div', { class: 'modal-message', text: t('계정을 확인하는 중…') });
       const list = el('div', { class: 'account-list' });
       const status = el('div', { class: 'account-status error-text small', hidden: true });
       const buttons = el('div', { class: 'modal-actions' });
       // 목록에 맞는 계정이 없을 때 새 계정을 바로 연결한다. 로그인 창이 떠 있는 동안 이 카드는 숨기고,
       // 연결되면 그 계정을 이 레포지토리에 쓰도록 고른 뒤 닫는다(실패 흐름이면 부른 쪽이 작업을 다시 한다).
       buttons.append(el('span', { class: 'spacer' }), el('button', {
-        class: 'btn primary', text: signedIn ? '새 계정 연결…' : 'GitHub 로 로그인…',
-        'data-tip': 'GitHub 에 다른 계정으로 로그인합니다. 연결한 계정을 이 레포지토리에 씁니다.',
+        class: 'btn primary', text: signedIn ? t('새 계정 연결…') : t('GitHub 로 로그인…'),
+        'data-tip': t('GitHub 에 다른 계정으로 로그인합니다. 연결한 계정을 이 레포지토리에 씁니다.'),
         onclick: async () => {
           if (busy) return;
           busy = true;
@@ -489,7 +494,7 @@ export function createGitHub(ctx) {
       }));
       buttons.append(
         el('button', {
-          class: 'btn', text: 'git 기본으로', 'data-tip': '고른 계정을 지우고 자격 증명 도우미(gh·Git Credential Manager·키체인)가 정하는 계정을 씁니다.',
+          class: 'btn', text: t('git 기본으로'), 'data-tip': t('고른 계정을 지우고 자격 증명 도우미(gh·Git Credential Manager·키체인)가 정하는 계정을 씁니다.'),
           onclick: async () => {
             if (busy) return;
             busy = true;
@@ -499,13 +504,13 @@ export function createGitHub(ctx) {
             finish(failure != null);
           },
         }),
-        el('button', { class: 'btn', text: failure != null ? '닫기' : '취소', onclick: () => finish(false) }));
+        el('button', { class: 'btn', text: failure != null ? t('닫기') : t('취소'), onclick: () => finish(false) }));
       card.append(
         el('div', { class: 'card-head' },
           el('span', { class: `card-badge tone-${failure != null ? 'danger' : 'accent'}` }, icon('cloud', 18)),
-          el('div', { class: 'modal-title', text: failure != null ? '원격 레포지토리에 접근하지 못했습니다' : '이 레포지토리의 GitHub 계정' })),
+          el('div', { class: 'modal-title', text: failure != null ? t('원격 레포지토리에 접근하지 못했습니다') : t('이 레포지토리의 GitHub 계정') })),
         // ✕ 는 다른 카드처럼 오른쪽 위 구석에(.card > .card-close).
-        el('button', { class: 'card-close', 'data-tip': failure != null ? '닫기' : '취소', onclick: () => finish(false) }, icon('close', 14)),
+        el('button', { class: 'card-close', 'data-tip': failure != null ? t('닫기') : t('취소'), onclick: () => finish(false) }, icon('close', 14)),
         message, list, status, buttons);
       backdrop.append(card);
       document.body.append(backdrop);
@@ -515,18 +520,18 @@ export function createGitHub(ctx) {
         const repo = await ctx.call('githubRepo').catch(() => null);
         if (!repo?.owner) {
           // GitHub 가 아닌 원격: 계정 목록은 못 보이고 원인과 git 오류만 알린다.
-          message.textContent = `GitHub 가 아닌 원격이라 계정을 고를 수 없습니다. 자격 증명 도우미(키체인·Git Credential Manager)에서 계정을 확인하세요.\n\n${firstLines(failure)}`;
+          message.textContent = t('GitHub 가 아닌 원격이라 계정을 고를 수 없습니다. 자격 증명 도우미(키체인·Git Credential Manager)에서 계정을 확인하세요.\n\n{detail}', { detail: firstLines(failure) });
           return;
         }
         const name = `${repo.owner}/${repo.repo}`;
-        list.replaceChildren(el('div', { class: 'account-empty muted', text: '이 PC 의 계정과 접근 권한을 확인하는 중…' }));
+        list.replaceChildren(el('div', { class: 'account-empty muted', text: t('이 PC 의 계정과 접근 권한을 확인하는 중…') }));
         const accounts = await ctx.call('githubAccounts').catch((e) => { status.textContent = e?.message ?? String(e); status.hidden = false; return []; });
         const current = accounts.find((a) => a.inUse)?.login;
-        message.textContent = failure == null ? `${name} 에 쓸 계정을 고릅니다. 이 레포지토리에만 적용됩니다(다른 레포지토리는 그대로).`
-          : current ? `${current} 계정으로 ${name} 에 접속했지만 거부됐습니다. GitHub 는 권한 없는 계정에게 비공개 레포지토리를 "없다" 고 답합니다.\n이 레포지토리에 접근할 수 있는 계정을 고르면 이 레포지토리에만 적용하고 다시 시도합니다.`
-            : `${name} 에 접속할 계정을 찾지 못했습니다(로그인이 없거나 만료됨). 접근할 수 있는 계정을 고르거나 로그인하세요.`;
+        message.textContent = failure == null ? t('{name} 에 쓸 계정을 고릅니다. 이 레포지토리에만 적용됩니다(다른 레포지토리는 그대로).', { name })
+          : current ? t('{current} 계정으로 {name} 에 접속했지만 거부됐습니다. GitHub 는 권한 없는 계정에게 비공개 레포지토리를 "없다" 고 답합니다.\n이 레포지토리에 접근할 수 있는 계정을 고르면 이 레포지토리에만 적용하고 다시 시도합니다.', { current, name })
+            : t('{name} 에 접속할 계정을 찾지 못했습니다(로그인이 없거나 만료됨). 접근할 수 있는 계정을 고르거나 로그인하세요.', { name });
         if (!accounts.length) {
-          list.replaceChildren(el('div', { class: 'account-empty muted', text: '이 PC 에서 GitHub 계정을 찾지 못했습니다. 아래에서 앱으로 로그인하세요.' }));
+          list.replaceChildren(el('div', { class: 'account-empty muted', text: t('이 PC 에서 GitHub 계정을 찾지 못했습니다. 아래에서 앱으로 로그인하세요.') }));
           return;
         }
         // 접근할 수 있는 계정을 위로.
@@ -534,12 +539,12 @@ export function createGitHub(ctx) {
         list.replaceChildren(...[...accounts].sort((a, b) => rank(a) - rank(b)).map((a) => el('div', { class: 'account-row' },
           el('div', { class: 'account-names' },
             el('div', { class: 'account-login', text: a.login }),
-            el('div', { class: 'account-source', text: `${SOURCE[a.source] ?? a.source}${a.inUse ? ' · 지금 사용 중' : ''}` })),
+            el('div', { class: 'account-source', text: `${SOURCE[a.source] ?? a.source}${a.inUse ? t(' · 지금 사용 중') : ''}` })),
           el('div', { class: `account-access ${a.canAccess === true ? 'yes' : a.canAccess === false ? 'no' : 'unknown'}` },
             a.canAccess === true ? icon('check', 13) : null,
-            el('span', { text: a.canAccess === true ? '접근 가능' : a.canAccess === false ? '✗ 권한 없음' : '? 확인 못 함' })),
+            el('span', { text: a.canAccess === true ? t('접근 가능') : a.canAccess === false ? t('✗ 권한 없음') : t('? 확인 못 함') })),
           el('button', {
-            class: `btn small${a.canAccess === true ? ' primary' : ''}`, text: failure != null ? '이 계정으로 다시' : '이 계정 쓰기', disabled: a.inUse,
+            class: `btn small${a.canAccess === true ? ' primary' : ''}`, text: failure != null ? t('이 계정으로 다시') : t('이 계정 쓰기'), disabled: a.inUse,
             onclick: async () => {
               if (busy) return;
               busy = true;
@@ -626,7 +631,7 @@ export function createGitHub(ctx) {
 
   /** 계정·권한 때문에 못 읽었는지: 401(토큰 만료·잘못됨) · 403(권한·SSO) · 404(권한 없는 비공개 레포지토리를 GitHub 는 "없다" 고 답한다) · 로그인 없음. */
   function isAccessError(message) {
-    return /GitHub (401|403|404)\b/.test(message ?? '') || /로그인해 주세요/.test(message ?? '');
+    return /GitHub (401|403|404)\b/.test(message ?? '') || /로그인해 주세요|\bsign in\b/i.test(message ?? '');
   }
 
   /** 카드를 이미 저절로 띄운 레포지토리(경로). 이번 실행 동안만 기억한다. */
@@ -639,7 +644,7 @@ export function createGitHub(ctx) {
   function readFailureCard() {
     if (!set?.error) return;
     const failure = set.error;
-    const repository = set.repository ?? (info?.owner ? `${info.owner}/${info.repo}` : '이 레포지토리');
+    const repository = set.repository ?? (info?.owner ? `${info.owner}/${info.repo}` : t('이 레포지토리'));
     const account = set.login ?? info?.me ?? null;
     const backdrop = el('div', { class: 'modal-backdrop' });
     const card = el('div', { class: 'modal card account-dialog pr-read-failure', role: 'dialog' });
@@ -657,12 +662,12 @@ export function createGitHub(ctx) {
     const fact = (name, value, muted = false) => el('div', { class: 'pr-read-fact' },
       el('span', { class: 'pr-read-fact-name', text: name }), el('span', { class: `pr-read-fact-value${muted ? ' muted' : ''}`, text: value }));
     // 경우마다 한 문장. GitHub 원문(예: "GitHub 404: Not Found")은 문장에 마우스를 올렸을 때만 보인다.
-    const sentence = !account || /로그인해 주세요/.test(failure) ? 'GitHub 에 로그인해야 Pull Request 를 볼 수 있습니다.'
-      : /GitHub 401\b/.test(failure) ? '로그인이 만료됐습니다. 다시 로그인하세요.'
-        : '이 계정으로는 이 레포지토리에 접근할 수 없습니다.';
+    const sentence = !account || /로그인해 주세요|\bsign in\b/i.test(failure) ? t('GitHub 에 로그인해야 Pull Request 를 볼 수 있습니다.')
+      : /GitHub 401\b/.test(failure) ? t('로그인이 만료됐습니다. 다시 로그인하세요.')
+        : t('이 계정으로는 이 레포지토리에 접근할 수 없습니다.');
     const explain = el('div', { class: 'modal-message pr-read-explain', text: sentence, 'data-tip': failure });
 
-    const signIn = el('button', { class: 'btn card-ok', text: '다른 계정으로 로그인', onclick: () => {
+    const signIn = el('button', { class: 'btn card-ok', text: t('다른 계정으로 로그인'), onclick: () => {
       finish();
       // 로그인 전용 창. 마치면 그 계정을 이 레포지토리에 쓰도록 고르고 PR 을 다시 읽는다.
       deviceLogin().then((r) => {
@@ -670,15 +675,15 @@ export function createGitHub(ctx) {
         ctx.call('githubChoose', { source: 'app', login: r.login }).catch(() => {}).finally(() => accountChanged());
       });
     } });
-    const choose = el('button', { class: 'btn card-cancel', text: '계정 고르기', hidden: true, 'data-tip': '이 PC 에서 쓸 수 있는 다른 GitHub 계정 중 이 레포지토리에 쓸 것을 고릅니다.',
+    const choose = el('button', { class: 'btn card-cancel', text: t('계정 고르기'), hidden: true, 'data-tip': t('이 PC 에서 쓸 수 있는 다른 GitHub 계정 중 이 레포지토리에 쓸 것을 고릅니다.'),
       onclick: () => { finish(); chooseAccount(failure); } });
-    const closeButton = el('button', { class: 'btn card-cancel', text: '닫기', onclick: () => finish() });
+    const closeButton = el('button', { class: 'btn card-cancel', text: t('닫기'), onclick: () => finish() });
     card.append(
-      el('button', { class: 'card-close', 'data-tip': '닫기', onclick: () => finish() }, icon('close', 14)),
+      el('button', { class: 'card-close', 'data-tip': t('닫기'), onclick: () => finish() }, icon('close', 14)),
       el('div', { class: 'card-head' },
         el('span', { class: 'card-badge tone-danger' }, icon('pullRequest', 26)),
-        el('div', { class: 'modal-title', text: 'Pull Request 를 읽지 못했습니다' })),
-      el('div', { class: 'pr-read-facts' }, fact('계정', account ?? '로그인하지 않음', !account), fact('레포지토리', repository)),
+        el('div', { class: 'modal-title', text: t('Pull Request 를 읽지 못했습니다') })),
+      el('div', { class: 'pr-read-facts' }, fact(t('계정'), account ?? t('로그인하지 않음'), !account), fact(t('레포지토리'), repository)),
       explain,
       el('div', { class: 'modal-actions' }, signIn, choose, closeButton));
     backdrop.append(card);
@@ -704,9 +709,9 @@ export function createGitHub(ctx) {
   function footer() {
     const n = count();
     return {
-      text: !set || set.loading ? '읽는 중…' : n > 0 ? `풀 리퀘스트 ${n}개` : '풀 리퀘스트 없음',
-      tip: !set ? null : set.needsSignIn ? 'GitHub 에 로그인하면 Pull Request 가 보입니다(두 번 눌러 로그인).'
-        : set.noRemote ? 'GitHub 원격이 없습니다.' : set.error ? `Pull Request 를 읽지 못했습니다: ${set.error}` : set.repository,
+      text: !set || set.loading ? t('읽는 중…') : n > 0 ? t('풀 리퀘스트 {n}개', { n }) : t('풀 리퀘스트 없음'),
+      tip: !set ? null : set.needsSignIn ? t('GitHub 에 로그인하면 Pull Request 가 보입니다(두 번 눌러 로그인).')
+        : set.noRemote ? t('GitHub 원격이 없습니다.') : set.error ? t('Pull Request 를 읽지 못했습니다: {error}', { error: set.error }) : set.repository,
     };
   }
 
@@ -717,7 +722,7 @@ export function createGitHub(ctx) {
   }
 
   // PR 구역 맨 위 검색 칸. 사이드바를 다시 그려도 같은 칸을 써서 쓰던 글·포커스가 남는다.
-  const searchInput = el('input', { class: 'pr-search-input', placeholder: 'Pull Request 검색', spellcheck: 'false', autocomplete: 'off' });
+  const searchInput = el('input', { class: 'pr-search-input', placeholder: t('Pull Request 검색'), spellcheck: 'false', autocomplete: 'off' });
   searchInput.value = ctx.prefs.get('github.search') ?? '';
   let searchTimer = 0;
   searchInput.addEventListener('input', () => {
@@ -734,7 +739,7 @@ export function createGitHub(ctx) {
   });
   const searchRow = el('div', { class: 'pr-search' },
     el('div', { class: 'pr-search-box' }, icon('search', 13), searchInput),
-    el('button', { class: 'icon-btn', 'data-tip': '필터 추가', onclick: () => filterDrawer() }, icon('filterAdd', 15)));
+    el('button', { class: 'icon-btn', 'data-tip': t('필터 추가'), onclick: () => filterDrawer() }, icon('filterAdd', 15)));
 
   /**
    * 사이드바 구역(GH-03). GitHub 원격이 없으면 null.
@@ -746,13 +751,13 @@ export function createGitHub(ctx) {
     const needle = (tree.filter ?? '').trim().toLowerCase() || null;
     const matches = (text) => !needle || (text ?? '').toLowerCase().includes(needle);
     const rows = [];
-    const infoText = !set || set.loading ? '읽는 중…' : set.needsSignIn ? 'GitHub 에 로그인하면 Pull Request 가 보입니다(두 번 눌러 로그인).'
-      : set.noRemote ? 'GitHub 원격이 없습니다.' : set.error ? `Pull Request 를 읽지 못했습니다: ${set.error}` : null;
+    const infoText = !set || set.loading ? t('읽는 중…') : set.needsSignIn ? t('GitHub 에 로그인하면 Pull Request 가 보입니다(두 번 눌러 로그인).')
+      : set.noRemote ? t('GitHub 원격이 없습니다.') : set.error ? t('Pull Request 를 읽지 못했습니다: {error}', { error: set.error }) : null;
     if (infoText) {
       if (!needle) {
         rows.push({
           key: 'pr:info', depth: 1, info: true, label: infoText,
-          tip: set?.access ? `${infoText}\n두 번 눌러 다른 계정으로 로그인하거나 계정을 고릅니다.` : set?.error ? `${infoText}\n두 번 눌러 다시 읽습니다.` : infoText,
+          tip: set?.access ? t('{info}\n두 번 눌러 다른 계정으로 로그인하거나 계정을 고릅니다.', { info: infoText }) : set?.error ? t('{info}\n두 번 눌러 다시 읽습니다.', { info: infoText }) : infoText,
           activate: set?.needsSignIn ? () => ctx.connect() : set?.access ? () => readFailureCard() : set?.error ? () => load(true) : null,
         });
       }
@@ -783,7 +788,7 @@ export function createGitHub(ctx) {
         for (const p of pulls) {
           rows.push({
             key: `pr:${index}:${p.number}`, depth: 3, label: `#${p.number} ${p.title}`, glyph: 'pullRequest',
-            tip: `#${p.number} ${p.title}${p.draft ? ' (초안)' : ''}\n${p.author}  ·  ${p.headRef} → ${p.baseRef}`,
+            tip: `#${p.number} ${p.title}${p.draft ? t(' (초안)') : ''}\n${p.author}  ·  ${p.headRef} → ${p.baseRef}`,
             onClick: () => detail(p),
             activate: () => ctx.call('openUrl', { url: p.url }).catch(ctx.showError),
             menu: (e) => pullMenu(e, p),
@@ -791,13 +796,13 @@ export function createGitHub(ctx) {
         }
       });
     }
-    return { id: 'prs', title: '풀 리퀘스트', glyph: 'pullRequest', count: count(), rows, empty: '열린 Pull Request 가 없습니다', add: 'Pull Request 만들기…' };
+    return { id: 'prs', title: t('풀 리퀘스트'), glyph: 'pullRequest', count: count(), rows, empty: t('열린 Pull Request 가 없습니다'), add: t('Pull Request 만들기…') };
   }
 
   /** 구역 머리 우클릭(원본 RefSidebar PopulateMenu 의 PullRequests). */
   const sectionMenu = () => [
-    { label: 'Pull Request 만들기…', action: () => createPull() },
-    { label: 'Pull Request 새로고침', action: () => load(true) },
+    { label: t('Pull Request 만들기…'), action: () => createPull() },
+    { label: t('Pull Request 새로고침'), action: () => load(true) },
   ];
 
   /** GitKraken 의 PR ⋮ 메뉴: GitHub 에서 보기·링크 복사 / 바뀐 것 보기·그래프에서 보기 / 체크아웃·워크트리 만들기. */
@@ -805,14 +810,14 @@ export function createGitHub(ctx) {
     const head = headBranch(p);
     const busy = !!ctx.state.status?.operation;
     showMenu(event.clientX, event.clientY, [
-      { label: `GitHub 에서 Pull Request #${p.number} 보기`, action: () => ctx.call('openUrl', { url: p.url }).catch(ctx.showError) },
-      { label: `Pull Request #${p.number} 링크 복사`, action: () => navigator.clipboard?.writeText(p.url) },
+      { label: t('GitHub 에서 Pull Request #{number} 보기', { number: p.number }), action: () => ctx.call('openUrl', { url: p.url }).catch(ctx.showError) },
+      { label: t('Pull Request #{number} 링크 복사', { number: p.number }), action: () => navigator.clipboard?.writeText(p.url) },
       '-',
-      { label: `#${p.number} 의 변경 보기`, disabled: !head, action: () => viewChanges(p, head) },
-      { label: `그래프에서 ${p.headRef} 로 가기`, disabled: !head, action: () => ctx.revealCommit(head.hash) },
+      { label: t('#{number} 의 변경 보기', { number: p.number }), disabled: !head, action: () => viewChanges(p, head) },
+      { label: t('그래프에서 {branch} 로 가기', { branch: p.headRef }), disabled: !head, action: () => ctx.revealCommit(head.hash) },
       '-',
-      { label: head ? `${head.name} 체크아웃` : '체크아웃 (먼저 Fetch 하세요)', disabled: !head || busy, action: () => ctx.refsUi.checkout(head.name, true) },
-      { label: 'Pull Request 에서 워크트리 만들기', disabled: !head || busy, action: () => ctx.refsUi.addWorktree(head.name) },
+      { label: head ? t('{branch} 체크아웃', { branch: head.name }) : t('체크아웃 (먼저 Fetch 하세요)'), disabled: !head || busy, action: () => ctx.refsUi.checkout(head.name, true) },
+      { label: t('Pull Request 에서 워크트리 만들기'), disabled: !head || busy, action: () => ctx.refsUi.addWorktree(head.name) },
     ]);
   }
 
@@ -830,15 +835,15 @@ export function createGitHub(ctx) {
       saveFilters(list);
     };
     showMenu(event.clientX, event.clientY, [
-      { label: '이 필터 고치기', action: () => filterDrawer(index) },
-      { label: '이 필터 지우기', danger: true, action: async () => {
-        if (!(await confirmDialog({ title: '필터 지우기', glyph: 'pullRequest', message: `'${name}' 필터를 지울까요?`, ok: '지우기', danger: true }))) return;
+      { label: t('이 필터 고치기'), action: () => filterDrawer(index) },
+      { label: t('이 필터 지우기'), danger: true, action: async () => {
+        if (!(await confirmDialog({ title: t('필터 지우기'), glyph: 'pullRequest', message: t("'{name}' 필터를 지울까요?", { name }), ok: t('지우기'), danger: true }))) return;
         list.splice(index, 1);
         saveFilters(list);
       } },
       '-',
-      index > 0 ? { label: '이 필터를 위로', action: () => move(-1) } : null,
-      index < total - 1 ? { label: '이 필터를 아래로', action: () => move(1) } : null,
+      index > 0 ? { label: t('이 필터를 위로'), action: () => move(-1) } : null,
+      index < total - 1 ? { label: t('이 필터를 아래로'), action: () => move(1) } : null,
     ].filter(Boolean));
   }
 
@@ -846,18 +851,18 @@ export function createGitHub(ctx) {
 
   /** 원본 GitPullRequestReadiness 와 그 문구(prDetail.readiness*). */
   const READINESS = {
-    ready: '받는 브랜치와 충돌 없이 병합할 수 있습니다.',
-    unstable: '병합할 수 있지만 일부 검사가 실패했습니다.',
-    checking: 'GitHub 가 병합 가능 여부를 확인하는 중입니다…',
-    conflicts: '받는 브랜치와 충돌합니다. 충돌을 해결해야 병합할 수 있습니다.',
-    blocked: '브랜치 보호 규칙(리뷰·필수 검사)을 아직 만족하지 않습니다.',
-    behind: '받는 브랜치보다 뒤처졌습니다. 먼저 브랜치를 갱신하세요.',
-    draft: 'Draft 입니다. Ready for review 를 누르면 병합할 수 있습니다.',
-    closed: '닫힌 Pull Request 입니다.',
-    merged: '이미 병합되었습니다.',
+    ready: t('받는 브랜치와 충돌 없이 병합할 수 있습니다.'),
+    unstable: t('병합할 수 있지만 일부 검사가 실패했습니다.'),
+    checking: t('GitHub 가 병합 가능 여부를 확인하는 중입니다…'),
+    conflicts: t('받는 브랜치와 충돌합니다. 충돌을 해결해야 병합할 수 있습니다.'),
+    blocked: t('브랜치 보호 규칙(리뷰·필수 검사)을 아직 만족하지 않습니다.'),
+    behind: t('받는 브랜치보다 뒤처졌습니다. 먼저 브랜치를 갱신하세요.'),
+    draft: t('Draft 입니다. Ready for review 를 누르면 병합할 수 있습니다.'),
+    closed: t('닫힌 Pull Request 입니다.'),
+    merged: t('이미 병합되었습니다.'),
   };
   /** 원본 GitPullRequestMergeMethod 셋(GitHub 의 merge_method 이름 · prDetail.method*). */
-  const MERGE_METHODS = [['merge', '병합 커밋 만들기'], ['squash', 'Squash 후 병합'], ['rebase', 'Rebase 후 병합']];
+  const MERGE_METHODS = [['merge', t('병합 커밋 만들기')], ['squash', t('Squash 후 병합')], ['rebase', t('Rebase 후 병합')]];
   /** GitHub 가 병합 가능 여부를 계산하는 동안 다시 읽는 횟수와 간격. */
   const CHECKING_RETRIES = 4;
   const CHECKING_DELAY_MS = 1500;
@@ -905,12 +910,14 @@ export function createGitHub(ctx) {
     return items.sort((a, b) => time(a) - time(b) || (a.kind === 'reviewcomment') - (b.kind === 'reviewcomment'));
   }
 
+  // 영어는 버튼 이름(Approve·Comment)과 달리 "누가 무엇을 했다" 꼴이라 같은 한국어 원문을 쓸 수 없어 따로 둔다.
   function eventAction(item) {
     if (item.kind === 'review') {
-      return { APPROVED: '승인', CHANGES_REQUESTED: '변경 요청', DISMISSED: '리뷰 철회됨' }[item.state] ?? '리뷰';
+      if (isEn) return { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', DISMISSED: 'review dismissed' }[item.state] ?? 'reviewed';
+      return { APPROVED: '승인', CHANGES_REQUESTED: '변경 요청', DISMISSED: '리뷰 철회됨' }[item.state] ?? '리뷰'; // i18n-ignore
     }
-    if (item.kind === 'reviewcomment') return `${item.line > 0 ? `${item.path}:${item.line}` : item.path} 에 코멘트`;
-    return '코멘트';
+    if (item.kind === 'reviewcomment') return t('{path} 에 코멘트', { path: item.line > 0 ? `${item.path}:${item.line}` : item.path });
+    return isEn ? 'commented' : '코멘트'; // i18n-ignore
   }
 
   /** 페이지를 넘기며 다 읽는다(원본 FilesAsync — 100개씩). */
@@ -925,7 +932,7 @@ export function createGitHub(ctx) {
   }
 
   /** 실패를 알리는 카드(원본 Dialogs.AlertAsync): 확인 하나. */
-  const alertCard = (title, error) => confirmDialog({ title, message: error?.message ?? String(error), ok: '확인', cancel: null, glyph: 'pullRequest', tone: 'danger' });
+  const alertCard = (title, error) => confirmDialog({ title, message: error?.message ?? String(error), ok: t('확인'), cancel: null, glyph: 'pullRequest', tone: 'danger' });
 
   function detail(pr) {
     const number = pr.number;
@@ -940,8 +947,8 @@ export function createGitHub(ctx) {
 
         if (!info?.me) {
           body.append(el('div', { class: 'drawer-form' },
-            el('div', { class: 'drawer-note', text: 'Pull Request 를 보려면 GitHub 에 로그인하세요.' }),
-            el('button', { class: 'btn drawer-secondary', text: 'GitHub 로그인…', onclick: () => { close(); deviceLogin().then(async (r) => { if (!r) return; info = await ctx.call('githubRepo').catch(() => info); detail(pr); }); } })));
+            el('div', { class: 'drawer-note', text: t('Pull Request 를 보려면 GitHub 에 로그인하세요.') }),
+            el('button', { class: 'btn drawer-secondary', text: t('GitHub 로그인…'), onclick: () => { close(); deviceLogin().then(async (r) => { if (!r) return; info = await ctx.call('githubRepo').catch(() => info); detail(pr); }); } })));
           return;
         }
 
@@ -987,22 +994,22 @@ export function createGitHub(ctx) {
 
         // 작업 버튼 줄.
         const secondary = (text, onclick) => el('button', { class: 'btn drawer-secondary', text, onclick });
-        const viewOnGitHub = secondary('GitHub 에서 보기', () => ctx.call('openUrl', { url: current?.html_url ?? pr.url }).catch(ctx.showError));
-        const viewChangesButton = secondary('바뀐 것 보기', () => { const h = head(); if (h) viewChanges(pullInfo(current), h); });
-        const checkout = secondary('체크아웃', () => { const h = head(); if (h) ctx.refsUi.checkout(h.name, true); });
+        const viewOnGitHub = secondary(t('GitHub 에서 보기'), () => ctx.call('openUrl', { url: current?.html_url ?? pr.url }).catch(ctx.showError));
+        const viewChangesButton = secondary(t('바뀐 것 보기'), () => { const h = head(); if (h) viewChanges(pullInfo(current), h); });
+        const checkout = secondary(t('체크아웃'), () => { const h = head(); if (h) ctx.refsUi.checkout(h.name, true); });
         const draftToggle = secondary('', () => toggleDraft());
         const openToggle = secondary('', () => toggleOpen());
 
         const descriptionBody = el('div', { class: `${P}-body` });
 
-        const timelineCaption = el('span', { class: 'drawer-caption', text: '대화' });
+        const timelineCaption = el('span', { class: 'drawer-caption', text: t('대화') });
         const timeline = el('div', { class: `${P}-timeline` }, timelineSkeleton());
-        const reply = el('textarea', { class: 'field drawer-multiline', placeholder: '내용을 쓰세요(Markdown)', spellcheck: 'false' });
+        const reply = el('textarea', { class: 'field drawer-multiline', placeholder: t('내용을 쓰세요(Markdown)'), spellcheck: 'false' });
         const replyProblem = problemLine();
-        const commentButton = secondary('코멘트', () => post(null));
-        const approveButton = secondary('승인', () => post('APPROVE'));
+        const commentButton = secondary(t('코멘트'), () => post(null));
+        const approveButton = secondary(t('승인'), () => post('APPROVE'));
         approveButton.classList.add(`${P}-approve`);
-        const requestChangesButton = secondary('변경 요청', () => post('REQUEST_CHANGES'));
+        const requestChangesButton = secondary(t('변경 요청'), () => post('REQUEST_CHANGES'));
         requestChangesButton.classList.add(`${P}-danger`);
         reply.addEventListener('input', () => validate());
 
@@ -1012,10 +1019,10 @@ export function createGitHub(ctx) {
 
         content.append(
           el('div', { class: 'drawer-section' }, el('div', { class: `${P}-title-row` }, badge, title), summary, stats),
-          el('div', { class: 'drawer-section' }, caption('병합'), readiness, el('div', { class: `${P}-methods` }, methodButtons), mergeButton),
+          el('div', { class: 'drawer-section' }, caption(t('병합')), readiness, el('div', { class: `${P}-methods` }, methodButtons), mergeButton),
           el('div', { class: `drawer-buttons ${P}-actions` }, viewOnGitHub, viewChangesButton, checkout, draftToggle, openToggle),
-          el('div', { class: 'drawer-section' }, caption('설명'), descriptionBody),
-          el('div', { class: 'drawer-section' }, timelineCaption, timeline, caption('코멘트·리뷰 남기기'), reply, replyProblem,
+          el('div', { class: 'drawer-section' }, caption(t('설명')), descriptionBody),
+          el('div', { class: 'drawer-section' }, timelineCaption, timeline, caption(t('코멘트·리뷰 남기기')), reply, replyProblem,
             el('div', { class: `drawer-buttons ${P}-reply-buttons` }, commentButton, approveButton, requestChangesButton)),
           facts,
           el('div', { class: 'drawer-section' }, filesCaption, files));
@@ -1047,7 +1054,7 @@ export function createGitHub(ctx) {
         function fact(name, values) {
           facts.append(el('div', { class: `${P}-fact` },
             el('span', { class: `${P}-fact-name`, text: name }),
-            el('span', { class: `${P}-fact-value${values.length ? '' : ' empty'}`, text: values.length ? values.join(', ') : '없음' })));
+            el('span', { class: `${P}-fact-value${values.length ? '' : ' empty'}`, text: values.length ? values.join(', ') : t('없음') })));
         }
 
         function showDetail(p) {
@@ -1058,25 +1065,25 @@ export function createGitHub(ctx) {
           const state = p.merged ? 'merged' : p.state !== 'open' ? 'closed' : p.draft ? 'draft' : 'open';
           badge.textContent = { merged: 'Merged', closed: 'Closed', draft: 'Draft', open: 'Open' }[state];
           badge.className = `${P}-badge ${state}`;
-          summary.textContent = `${p.user?.login ?? '?'} 님이 ${headLabel(p)} 의 커밋 ${p.commits ?? 0}개를 ${p.base?.ref ?? '?'} 에 합치려 합니다.`;
-          stats.textContent = `바뀐 파일 ${p.changed_files ?? 0}개 · +${p.additions ?? 0} −${p.deletions ?? 0} · 댓글 ${(p.comments ?? 0) + (p.review_comments ?? 0)}개`;
+          summary.textContent = t('{user} 님이 {head} 의 커밋 {n}개를 {base} 에 합치려 합니다.', { user: p.user?.login ?? '?', head: headLabel(p), n: p.commits ?? 0, base: p.base?.ref ?? '?' });
+          stats.textContent = t('바뀐 파일 {files}개 · +{additions} −{deletions} · 댓글 {comments}개', { files: p.changed_files ?? 0, additions: p.additions ?? 0, deletions: p.deletions ?? 0, comments: (p.comments ?? 0) + (p.review_comments ?? 0) });
           readiness.textContent = READINESS[r];
           readiness.className = `${P}-readiness${canMerge(r) ? ' ok' : ['conflicts', 'blocked', 'behind'].includes(r) ? ' bad' : ''}`;
           const text = (p.body ?? '').replace(/\r\n/g, '\n').trim();
-          descriptionBody.textContent = text || '설명이 없습니다.';
+          descriptionBody.textContent = text || t('설명이 없습니다.');
           descriptionBody.classList.toggle('empty', !text);
           facts.replaceChildren();
-          fact('리뷰어', (p.requested_reviewers ?? []).map((u) => u.login).filter(Boolean));
-          fact('담당자', (p.assignees ?? []).map((u) => u.login).filter(Boolean));
-          fact('라벨', (p.labels ?? []).map((l) => l.name).filter(Boolean));
-          fact('브랜치', [`${headLabel(p)} → ${p.base?.ref}`]);
+          fact(t('리뷰어'), (p.requested_reviewers ?? []).map((u) => u.login).filter(Boolean));
+          fact(t('담당자'), (p.assignees ?? []).map((u) => u.login).filter(Boolean));
+          fact(t('라벨'), (p.labels ?? []).map((l) => l.name).filter(Boolean));
+          fact(t('브랜치'), [`${headLabel(p)} → ${p.base?.ref}`]);
           validate();
         }
 
         function showTimeline(items, failure) {
-          timelineCaption.textContent = `대화 ${items.length}개`;
+          timelineCaption.textContent = t('대화 {n}개', { n: items.length });
           timeline.replaceChildren(
-            ...(!items.length && !failure ? [el('div', { class: 'drawer-note', text: '아직 코멘트나 리뷰가 없습니다.' })] : []),
+            ...(!items.length && !failure ? [el('div', { class: 'drawer-note', text: t('아직 코멘트나 리뷰가 없습니다.') })] : []),
             ...items.map((item) => el('div', { class: `${P}-event ${item.kind}` },
               el('div', { class: `${P}-event-head` },
                 el('span', { class: `${P}-event-author`, text: item.author ?? '?' }),
@@ -1088,7 +1095,7 @@ export function createGitHub(ctx) {
 
         const STATUS_LETTER = { added: 'A', removed: 'D', renamed: 'R', copied: 'C' };
         function showFiles(list, total, failure) {
-          filesCaption.textContent = `바뀐 파일 ${Math.max(total ?? 0, list.length)}개`;
+          filesCaption.textContent = t('바뀐 파일 {n}개', { n: Math.max(total ?? 0, list.length) });
           files.replaceChildren(...list.map((f) => el('div', { class: `${P}-file` },
             el('span', { class: `${P}-file-status ${f.status || 'modified'}`, text: STATUS_LETTER[f.status] ?? 'M' }),
             el('span', { class: `${P}-file-path`, text: f.previous_filename ? `${f.previous_filename} → ${f.filename}` : f.filename, 'data-tip': f.filename }),
@@ -1115,7 +1122,7 @@ export function createGitHub(ctx) {
           } catch (e) {
             if (stale()) return;
             hideSkeleton();
-            error.set(e?.message || 'Pull Request 를 읽지 못했습니다.');
+            error.set(e?.message || t('Pull Request 를 읽지 못했습니다.'));
             return;
           }
           if (stale()) return;
@@ -1141,16 +1148,16 @@ export function createGitHub(ctx) {
           const r = current ? readinessOf(current) : 'checking';
           const open = current?.state === 'open';
           mergeButton.disabled = merging || !canMerge(r);
-          mergeButton.textContent = merging ? '병합하는 중…' : 'Merge Pull Request';
+          mergeButton.textContent = merging ? t('병합하는 중…') : 'Merge Pull Request';
           methodButtons.forEach((b) => { b.disabled = !open || merging; });
           const h = current ? head() : null;
           viewChangesButton.disabled = !h;
           checkout.disabled = !h || !!ctx.state.busy;
           const idle = !!current && !posting && !merging;
-          draftToggle.textContent = current?.draft ? 'Ready for review' : 'Draft 로 되돌리기';
+          draftToggle.textContent = current?.draft ? 'Ready for review' : t('Draft 로 되돌리기');
           draftToggle.hidden = !open;
           draftToggle.disabled = !idle || !current?.node_id;
-          openToggle.textContent = open ? 'Pull Request 닫기' : 'Pull Request 다시 열기';
+          openToggle.textContent = open ? t('Pull Request 닫기') : t('Pull Request 다시 열기');
           openToggle.hidden = !current || !!current.merged;
           openToggle.disabled = !idle;
           openToggle.classList.toggle(`${P}-danger`, open);
@@ -1167,7 +1174,7 @@ export function createGitHub(ctx) {
           const text = reply.value.trim();
           if (!p || posting) return;
           if (decision !== 'APPROVE' && !text) {
-            replyProblem.set(decision == null ? '코멘트 내용을 쓰세요.' : '변경 요청에는 내용이 필요합니다.');
+            replyProblem.set(decision == null ? t('코멘트 내용을 쓰세요.') : t('변경 요청에는 내용이 필요합니다.'));
             return;
           }
           posting = true;
@@ -1179,7 +1186,7 @@ export function createGitHub(ctx) {
             posting = false;
             if (stale() || p !== current) return;
             validate();
-            await alertCard(decision == null ? '코멘트를 남기지 못함' : '리뷰를 남기지 못함', e);
+            await alertCard(decision == null ? t('코멘트를 남기지 못함') : t('리뷰를 남기지 못함'), e);
             return;
           }
           posting = false;
@@ -1216,7 +1223,7 @@ export function createGitHub(ctx) {
           const toDraft = !p.draft;
           const mutation = toDraft ? 'convertPullRequestToDraft' : 'markPullRequestReadyForReview';
           changeState(p, () => ctx.call('githubGraphql', { query: `mutation($id: ID!) { ${mutation}(input: { pullRequestId: $id }) { pullRequest { isDraft } } }`, variables: { id: p.node_id } }),
-            toDraft ? `Pull Request #${number}을(를) Draft 로 되돌리지 못함` : `Pull Request #${number}을(를) Ready for review 로 바꾸지 못함`);
+            toDraft ? t('Pull Request #{number}을(를) Draft 로 되돌리지 못함', { number }) : t('Pull Request #{number}을(를) Ready for review 로 바꾸지 못함', { number }));
         }
 
         async function toggleOpen() {
@@ -1224,11 +1231,11 @@ export function createGitHub(ctx) {
           if (!p || p.merged || posting) return;
           const reopen = p.state !== 'open';
           if (!reopen && !(await confirmDialog({
-            title: `Pull Request #${number} 닫기`, glyph: 'pullRequest', danger: true, ok: 'Pull Request 닫기',
-            message: `#${number} ${p.title}\n\nGitHub 에서 이 Pull Request 를 병합하지 않고 닫습니다. 나중에 다시 열 수 있습니다.`,
+            title: t('Pull Request #{number} 닫기', { number }), glyph: 'pullRequest', danger: true, ok: t('Pull Request 닫기'),
+            message: t('#{number} {title}\n\nGitHub 에서 이 Pull Request 를 병합하지 않고 닫습니다. 나중에 다시 열 수 있습니다.', { number, title: p.title }),
           }))) return;
           changeState(p, () => api(`${root}/pulls/${number}`, { method: 'PATCH', body: { state: reopen ? 'open' : 'closed' } }),
-            reopen ? `Pull Request #${number} 다시 열기 실패` : `Pull Request #${number} 닫기 실패`);
+            reopen ? t('Pull Request #{number} 다시 열기 실패', { number }) : t('Pull Request #{number} 닫기 실패', { number }));
         }
 
         /** 병합은 GitHub 에 바로 반영되므로 늘 확인 카드를 거치고, 본 때의 head 커밋을 함께 보내 그 사이 새 커밋이 올라왔으면 GitHub 가 거절하게 한다. */
@@ -1237,8 +1244,8 @@ export function createGitHub(ctx) {
           if (!p || merging) return;
           const method = MERGE_METHODS.find(([m]) => m === mergeMethod)?.[1];
           const ok = await confirmDialog({
-            title: `Pull Request #${number} 병합`, glyph: 'pullRequest', ok: 'Merge Pull Request',
-            message: `#${number} ${p.title}\n\n${headLabel(p)} → ${p.base?.ref}을(를) '${method}' 방식으로 GitHub(${info.owner}/${info.repo})에서 병합합니다. 되돌리려면 GitHub 에서 Revert 해야 합니다.`,
+            title: t('Pull Request #{number} 병합', { number }), glyph: 'pullRequest', ok: 'Merge Pull Request',
+            message: t("#{number} {title}\n\n{head} → {base}을(를) '{method}' 방식으로 GitHub({repo})에서 병합합니다. 되돌리려면 GitHub 에서 Revert 해야 합니다.", { number, title: p.title, head: headLabel(p), base: p.base?.ref, method, repo: `${info.owner}/${info.repo}` }),
           });
           if (!ok || p !== current || stale()) return;
           merging = true;
@@ -1249,7 +1256,7 @@ export function createGitHub(ctx) {
             merging = false;
             if (stale()) return;
             validate();
-            await alertCard(`Pull Request #${number} 병합 실패`, e);
+            await alertCard(t('Pull Request #{number} 병합 실패', { number }), e);
             return;
           }
           merging = false;
@@ -1341,13 +1348,13 @@ export function createGitHub(ctx) {
       }
     }
     openDrawer({
-      glyph: 'pullRequest', title: 'Pull Request 만들기', anchor: ctx.sidebarElement(),
+      glyph: 'pullRequest', title: t('Pull Request 만들기'), anchor: ctx.sidebarElement(),
       build(body, close) {
         const box = el('div', { class: 'drawer-form' });
         body.append(box);
         if (!info?.me) {
-          box.append(el('div', { class: 'drawer-note', text: 'Pull Request 를 만들려면 먼저 GitHub 에 로그인하세요.' }),
-            el('button', { class: 'btn drawer-secondary', text: 'GitHub 로그인…', onclick: () => { close(); deviceLogin().then((r) => { if (r) { info = null; createPull(headName); } }); } }));
+          box.append(el('div', { class: 'drawer-note', text: t('Pull Request 를 만들려면 먼저 GitHub 에 로그인하세요.') }),
+            el('button', { class: 'btn drawer-secondary', text: t('GitHub 로그인…'), onclick: () => { close(); deviceLogin().then((r) => { if (r) { info = null; createPull(headName); } }); } }));
           return;
         }
         const refs = ctx.state.refs ?? { local: [], remote: [] };
@@ -1361,29 +1368,29 @@ export function createGitHub(ctx) {
         let creating = false;
         let serverError = null;
 
-        const fromRepo = searchSelect({ items: repoItems, placeholder: '선택…', onChange: () => { fillBranches(fromRepo, fromBranch, preferredFromBranch()); fillTitle(); inputChanged(); } });
-        const fromBranch = searchSelect({ items: [], placeholder: '선택…', onChange: () => { fillTitle(); inputChanged(); } });
-        const toRepo = searchSelect({ items: repoItems, placeholder: '선택…', onChange: () => { fillBranches(toRepo, toBranch, toRepo.value ? defaultBase(toRepo.value) : null); inputChanged(); } });
-        const toBranch = searchSelect({ items: [], placeholder: '선택…', onChange: () => inputChanged() });
+        const fromRepo = searchSelect({ items: repoItems, placeholder: t('선택…'), onChange: () => { fillBranches(fromRepo, fromBranch, preferredFromBranch()); fillTitle(); inputChanged(); } });
+        const fromBranch = searchSelect({ items: [], placeholder: t('선택…'), onChange: () => { fillTitle(); inputChanged(); } });
+        const toRepo = searchSelect({ items: repoItems, placeholder: t('선택…'), onChange: () => { fillBranches(toRepo, toBranch, toRepo.value ? defaultBase(toRepo.value) : null); inputChanged(); } });
+        const toBranch = searchSelect({ items: [], placeholder: t('선택…'), onChange: () => inputChanged() });
         const title = textField();
-        title.placeholder = 'Pull Request 제목';
+        title.placeholder = t('Pull Request 제목');
         title.spellcheck = true;
-        const description = el('textarea', { class: 'field drawer-multiline', placeholder: 'Pull Request 설명' });
-        const draft = toggle('초안(Draft)으로 올리기', false);
-        draft.dataset.tip = '초안은 검토 요청 전까지 병합할 수 없습니다.';
+        const description = el('textarea', { class: 'field drawer-multiline', placeholder: t('Pull Request 설명') });
+        const draft = toggle(t('초안(Draft)으로 올리기'), false);
+        draft.dataset.tip = t('초안은 검토 요청 전까지 병합할 수 없습니다.');
         const noteLine = note();
         const problem = problemLine();
-        const create = el('button', { class: 'btn drawer-primary', text: 'Pull Request 만들기', onclick: () => submit() });
+        const create = el('button', { class: 'btn drawer-primary', text: t('Pull Request 만들기'), onclick: () => submit() });
 
         box.append(
           el('div', { class: 'drawer-columns' },
-            el('div', { class: 'drawer-column' }, caption('보낼 레포지토리'), fromRepo.element, caption('브랜치'), fromBranch.element),
+            el('div', { class: 'drawer-column' }, caption(t('보낼 레포지토리')), fromRepo.element, caption(t('브랜치')), fromBranch.element),
             el('div', { class: 'drawer-arrow', text: '→' }),
-            el('div', { class: 'drawer-column' }, caption('받을 레포지토리'), toRepo.element, caption('브랜치'), toBranch.element)),
-          caption('제목'), title,
-          caption('설명'), description,
+            el('div', { class: 'drawer-column' }, caption(t('받을 레포지토리')), toRepo.element, caption(t('브랜치')), toBranch.element)),
+          caption(t('제목')), title,
+          caption(t('설명')), description,
           draft, noteLine, problem,
-          el('div', { class: 'drawer-row-buttons' }, el('button', { class: 'btn drawer-secondary', text: '취소', onclick: () => close() }), create));
+          el('div', { class: 'drawer-row-buttons' }, el('button', { class: 'btn drawer-secondary', text: t('취소'), onclick: () => close() }), create));
 
         title.addEventListener('input', () => { titleEdited = true; inputChanged(); });
 
@@ -1432,7 +1439,7 @@ export function createGitHub(ctx) {
         /** 연 로컬 브랜치가 고른 원격에 아직 없으면 먼저 Push 하라고 알린다. */
         function pushHint() {
           if (!initial || initialIsRemote || !fromRepo.value || fromBranch.value) return null;
-          return `'${initial.name}' 가 ${fromRepo.value} 에 아직 없습니다. 먼저 Push 하세요.`;
+          return t("'{branch}' 가 {remote} 에 아직 없습니다. 먼저 Push 하세요.", { branch: initial.name, remote: fromRepo.value });
         }
 
         function applyDefaults() {
@@ -1447,7 +1454,7 @@ export function createGitHub(ctx) {
           fillBranches(toRepo, toBranch, to ? defaultBase(to.remote) : null);
           if (!titleEdited) title.value = '';
           fillTitle();
-          noteLine.set(!repos.length ? 'GitHub 원격이 없습니다. 먼저 원격을 추가하세요.' : pushHint());
+          noteLine.set(!repos.length ? t('GitHub 원격이 없습니다. 먼저 원격을 추가하세요.') : pushHint());
           validate();
         }
 
@@ -1460,7 +1467,7 @@ export function createGitHub(ctx) {
           const fr = repoOf(fromRepo.value);
           const tr = repoOf(toRepo.value);
           const same = fr && tr && fromBranch.value && fr.fullName === tr.fullName && fromBranch.value === toBranch.value;
-          problem.set(same ? '보낼 브랜치와 받을 브랜치가 같습니다.' : serverError);
+          problem.set(same ? t('보낼 브랜치와 받을 브랜치가 같습니다.') : serverError);
           create.disabled = creating || !!same || !fr || !fromBranch.value || !tr || !toBranch.value || !title.value.trim();
         }
 
@@ -1472,7 +1479,7 @@ export function createGitHub(ctx) {
           if (creating || create.disabled || !from || !to || !head || !base) return;
           creating = true;
           serverError = null;
-          noteLine.set('만드는 중…');
+          noteLine.set(t('만드는 중…'));
           validate();
           let created;
           try {
@@ -1482,18 +1489,18 @@ export function createGitHub(ctx) {
           } catch (e) {
             creating = false;
             noteLine.set(null);
-            serverError = `GitHub 가 거절했습니다: ${e?.message ?? e}`;
+            serverError = t('GitHub 가 거절했습니다: {error}', { error: e?.message ?? e });
             validate();
             return;
           }
           creating = false;
           noteLine.set(null);
-          const done = `${to.fullName} 에 Pull Request #${created.number} 를 만들었습니다.`;
+          const done = t('{repo} 에 Pull Request #{number} 를 만들었습니다.', { repo: to.fullName, number: created.number });
           ctx.toast(done, 'success');
           load(true);
           close();
           // 브라우저를 멋대로 앞으로 가져오지 않는다. 열지 고르게 한다.
-          if (created.html_url && await confirmDialog({ title: 'Pull Request 를 만들었습니다', message: done, ok: '브라우저에서 열기', cancel: '닫기', glyph: 'pullRequest' })) {
+          if (created.html_url && await confirmDialog({ title: t('Pull Request 를 만들었습니다'), message: done, ok: t('브라우저에서 열기'), cancel: t('닫기'), glyph: 'pullRequest' })) {
             ctx.call('openUrl', { url: created.html_url }).catch(ctx.showError);
           }
         }
@@ -1506,24 +1513,24 @@ export function createGitHub(ctx) {
 
   // ── PR 필터 서랍 — 원본 Elements/PullRequestFilterDrawer ──
 
-  const FILTER_SYNTAX = '작성자: author:아이디\n담당자: assignee:아이디\n관련: involves:아이디\n리뷰 요청: review-requested:아이디\n리뷰한 사람: reviewed-by:아이디\n받는 브랜치: base:브랜치\n보내는 브랜치: head:브랜치\n초안: draft:true / draft:false\n라벨: label:라벨\n리뷰 상태: review:approved / changes_requested / none\n검사 상태: status:success / pending / failure\n없음: no:assignee / no:label / no:milestone\n만든 날: created:2026-10-01 / created:>2026-10-01\n고친 날: updated:2026-10-01\n\n@me 는 로그인한 계정입니다.';
+  const FILTER_SYNTAX = t('작성자: author:아이디\n담당자: assignee:아이디\n관련: involves:아이디\n리뷰 요청: review-requested:아이디\n리뷰한 사람: reviewed-by:아이디\n받는 브랜치: base:브랜치\n보내는 브랜치: head:브랜치\n초안: draft:true / draft:false\n라벨: label:라벨\n리뷰 상태: review:approved / changes_requested / none\n검사 상태: status:success / pending / failure\n없음: no:assignee / no:label / no:milestone\n만든 날: created:2026-10-01 / created:>2026-10-01\n고친 날: updated:2026-10-01\n\n@me 는 로그인한 계정입니다.');
 
   /** 이름과 GitHub 검색 문법 조건으로 사이드바 PR 묶음을 만들거나 고친다. index 가 있으면 그 묶음을 고친다. 아래에 쓸 수 있는 조건을 늘 보인다. */
   function filterDrawer(index = -1) {
     const existing = index >= 0 ? filters()[index] ?? null : null;
     const editing = !!existing;
     openDrawer({
-      glyph: 'pullRequest', title: editing ? 'Pull Request 필터 고치기' : 'Pull Request 필터 만들기', anchor: ctx.sidebarElement(),
+      glyph: 'pullRequest', title: editing ? t('Pull Request 필터 고치기') : t('Pull Request 필터 만들기'), anchor: ctx.sidebarElement(),
       build(body, close) {
         const name = textField(existing ? filterName(existing) : '');
-        name.placeholder = '필터 이름을 쓰세요';
+        name.placeholder = t('필터 이름을 쓰세요');
         const query = textField(existing?.query ?? '');
-        query.placeholder = '조건을 쓰세요 (예: author:@me draft:false)';
+        query.placeholder = t('조건을 쓰세요 (예: author:@me draft:false)');
         const problem = problemLine();
-        const submitButton = el('button', { class: 'btn drawer-primary', text: editing ? '필터 고치기' : '필터 만들기', onclick: () => submit() });
+        const submitButton = el('button', { class: 'btn drawer-primary', text: editing ? t('필터 고치기') : t('필터 만들기'), onclick: () => submit() });
         const validate = () => {
           const hasName = !!name.value.trim();
-          problem.set(hasName ? null : '이름을 쓰세요.');
+          problem.set(hasName ? null : t('이름을 쓰세요.'));
           submitButton.disabled = !hasName;
         };
         function submit() {
@@ -1542,8 +1549,8 @@ export function createGitHub(ctx) {
         name.addEventListener('input', validate);
         query.addEventListener('input', validate);
         body.append(el('div', { class: 'drawer-form' },
-          el('div', { class: 'drawer-section' }, caption('필터 이름'), name, caption('Pull Request 거르기'), query, problem, submitButton),
-          el('div', { class: 'drawer-section' }, caption('Pull Request 필터 문법'), el('div', { class: 'drawer-note pr-filter-syntax', text: FILTER_SYNTAX }))));
+          el('div', { class: 'drawer-section' }, caption(t('필터 이름')), name, caption(t('Pull Request 거르기')), query, problem, submitButton),
+          el('div', { class: 'drawer-section' }, caption(t('Pull Request 필터 문법')), el('div', { class: 'drawer-note pr-filter-syntax', text: FILTER_SYNTAX }))));
         validate();
       },
     });
@@ -1551,11 +1558,11 @@ export function createGitHub(ctx) {
 
   // ── 원격 추가 드로어의 GitHub 탭(DLG-09 · GH-06, 원본 AddRemoteDrawer) ──
 
-  const NAME_HELP = "이 컴퓨터에서 이 원격을 부를 짧은 별명입니다. 원격 브랜치가 'origin/main' 처럼 이 이름 뒤에 붙어 보입니다.\n처음 연결하는 원격이면 보통 'origin' 을 씁니다. 이 레포지토리 안에서만 쓰는 이름이라 서버에는 영향이 없습니다.";
+  const NAME_HELP = t("이 컴퓨터에서 이 원격을 부를 짧은 별명입니다. 원격 브랜치가 'origin/main' 처럼 이 이름 뒤에 붙어 보입니다.\n처음 연결하는 원격이면 보통 'origin' 을 씁니다. 이 레포지토리 안에서만 쓰는 이름이라 서버에는 영향이 없습니다.");
   const REPO_NAME_PROBLEM = {
-    tooLong: '레포지토리 이름은 100자를 넘을 수 없습니다.',
-    invalid: '레포지토리 이름에는 영문·숫자와 . - _ 만 쓸 수 있습니다.',
-    reserved: "'.' 이나 '..' 은 레포지토리 이름으로 쓸 수 없습니다.",
+    tooLong: t('레포지토리 이름은 100자를 넘을 수 없습니다.'),
+    invalid: t('레포지토리 이름에는 영문·숫자와 . - _ 만 쓸 수 있습니다.'),
+    reserved: t("'.' 이나 '..' 은 레포지토리 이름으로 쓸 수 없습니다."),
   };
   const isRepoChar = (c) => /[A-Za-z0-9._-]/.test(c);
 
@@ -1593,8 +1600,8 @@ export function createGitHub(ctx) {
   /** 원본 CheckName: 비면 null(버튼만 끔), 같은 이름이면 그 문구, 그 밖에는 브랜치 이름 규칙. */
   function remoteNameProblem(name, existing) {
     if (!name) return null;
-    if (existing.includes(name)) return '같은 이름의 원격이 이미 있습니다.';
-    if (name.includes('/')) return '원격 이름에 / 는 쓸 수 없습니다.';
+    if (existing.includes(name)) return t('같은 이름의 원격이 이미 있습니다.');
+    if (name.includes('/')) return t('원격 이름에 / 는 쓸 수 없습니다.');
     return branchNameProblem(name, []) || null;
   }
 
@@ -1643,8 +1650,8 @@ export function createGitHub(ctx) {
     const box = el('div', { class: 'drawer-form' });
     if (signedIn === false) {
       // 원본 SignInPrompt: 안내 + 보조 버튼.
-      box.append(el('div', { class: 'drawer-note', text: 'GitHub 레포지토리를 고르거나 새로 만들려면 먼저 GitHub 에 로그인하세요.' }),
-        el('button', { class: 'btn drawer-secondary', text: 'GitHub 로그인…', onclick: () => { closeDrawer(); deviceLogin(); } }));
+      box.append(el('div', { class: 'drawer-note', text: t('GitHub 레포지토리를 고르거나 새로 만들려면 먼저 GitHub 에 로그인하세요.') }),
+        el('button', { class: 'btn drawer-secondary', text: t('GitHub 로그인…'), onclick: () => { closeDrawer(); deviceLogin(); } }));
       return box;
     }
     const busy = () => !!ctx.state.busy;
@@ -1662,8 +1669,8 @@ export function createGitHub(ctx) {
     let created = null;
 
     // ── [기존 레포지토리 | 새로 만들기] (원본 diff 막대의 칸 묶음 모양, 반씩) ──
-    const existingMode = el('button', { class: 'dbar-btn', text: '기존 레포지토리', onclick: () => selectMode(false) });
-    const createMode = el('button', { class: 'dbar-btn', text: '새로 만들기', onclick: () => selectMode(true) });
+    const existingMode = el('button', { class: 'dbar-btn', text: t('기존 레포지토리'), onclick: () => selectMode(false) });
+    const createMode = el('button', { class: 'dbar-btn', text: t('새로 만들기'), onclick: () => selectMode(true) });
     const modes = el('div', { class: 'dbar-seg drawer-modes' }, existingMode, createMode);
 
     // ── 기존 레포지토리 ──
@@ -1671,9 +1678,9 @@ export function createGitHub(ctx) {
     let nameEdited = false;
     const gitHubName = textField(suggested);
     const gitHubProblem = problemLine();
-    const gitHubAdd = el('button', { class: 'btn drawer-primary', text: '원격 추가' });
+    const gitHubAdd = el('button', { class: 'btn drawer-primary', text: t('원격 추가') });
     const repoSelect = searchSelect({
-      items: [], placeholder: '선택…',
+      items: [], placeholder: t('선택…'),
       onChange: (value) => {
         const repo = known.find((r) => r.full_name === value);
         if (repo && !nameEdited) gitHubName.value = suggestRemoteName(existing, repo.owner?.login);
@@ -1682,32 +1689,32 @@ export function createGitHub(ctx) {
       },
     });
     const existingPanel = el('div', { class: 'drawer-section' },
-      caption('GitHub 레포지토리'), repoSelect.element, repoNote,
-      caption('이름', NAME_HELP), gitHubName, gitHubProblem, gitHubAdd);
+      caption(t('GitHub 레포지토리')), repoSelect.element, repoNote,
+      caption(t('이름'), NAME_HELP), gitHubName, gitHubProblem, gitHubAdd);
 
     // ── 새로 만들기 ──
-    const ownerSelect = searchSelect({ items: me ? [{ value: me, label: me, hint: '내 계정' }] : [], value: me || null, placeholder: '선택…', onChange: () => validate() });
+    const ownerSelect = searchSelect({ items: me ? [{ value: me, label: me, hint: t('내 계정') }] : [], value: me || null, placeholder: t('선택…'), onChange: () => validate() });
     const repoName = textField(suggestRepoName((ctx.state.repo?.path ?? '').replace(/[\\/]+$/, '').split(/[\\/]/).pop()));
     const repoNameNote = problemLine();
-    const priv = toggle('비공개 레포지토리', true);
+    const priv = toggle(t('비공개 레포지토리'), true);
     const createRemoteName = textField(suggested);
     const createRemoteProblem = problemLine();
-    const pushAfter = toggle('만든 뒤 브랜치 올리기 (Push)', true);
+    const pushAfter = toggle(t('만든 뒤 브랜치 올리기 (Push)'), true);
     const defaultSelect = searchSelect({
-      items: locals.map((b) => ({ value: b, label: b, hint: b === current ? '현재' : '' })),
-      value: pickDefaultBranch(locals, current), placeholder: '선택…', onChange: () => validate(),
+      items: locals.map((b) => ({ value: b, label: b, hint: b === current ? t('현재') : '' })),
+      value: pickDefaultBranch(locals, current), placeholder: t('선택…'), onChange: () => validate(),
     });
     const pushCurrent = toggle('', true);
     const pushOthers = toggle('', false);
-    const pushTags = toggle(`태그 ${tagCount}개도 올리기`, false);
-    const pushOptions = el('div', { class: 'drawer-suboptions' }, caption('기본 브랜치'), defaultSelect.element,
-      el('div', { class: 'drawer-note', text: 'GitHub 레포지토리의 기본 브랜치가 되며 맨 먼저 올라갑니다.' }), pushCurrent, pushOthers, pushTags);
+    const pushTags = toggle(t('태그 {n}개도 올리기', { n: tagCount }), false);
+    const pushOptions = el('div', { class: 'drawer-suboptions' }, caption(t('기본 브랜치')), defaultSelect.element,
+      el('div', { class: 'drawer-note', text: t('GitHub 레포지토리의 기본 브랜치가 되며 맨 먼저 올라갑니다.') }), pushCurrent, pushOthers, pushTags);
     const createNote = note();
-    const createButton = el('button', { class: 'btn drawer-primary', text: '레포지토리 만들기' });
+    const createButton = el('button', { class: 'btn drawer-primary', text: t('레포지토리 만들기') });
     const createPanel = el('div', { class: 'drawer-section' },
-      caption('소유자'), ownerSelect.element,
-      caption('레포지토리 이름'), repoName, repoNameNote, priv,
-      caption('원격 이름', NAME_HELP), createRemoteName, createRemoteProblem,
+      caption(t('소유자')), ownerSelect.element,
+      caption(t('레포지토리 이름')), repoName, repoNameNote, priv,
+      caption(t('원격 이름'), NAME_HELP), createRemoteName, createRemoteProblem,
       pushAfter, pushOptions, createNote, createButton);
 
     const plan = () => {
@@ -1726,7 +1733,7 @@ export function createGitHub(ctx) {
       const name = repoName.value.trim();
       const already = created && created.full_name.toLowerCase() === `${owner}/${name}`.toLowerCase();
       const nameProblem = already ? null : repoNameProblem(name, owner, known);
-      repoNameNote.set(nameProblem === 'exists' ? `${owner} 에 같은 이름의 레포지토리가 이미 있습니다. 있는 레포지토리는 "기존 레포지토리" 에서 고르세요.` : REPO_NAME_PROBLEM[nameProblem] ?? null);
+      repoNameNote.set(nameProblem === 'exists' ? t('{owner} 에 같은 이름의 레포지토리가 이미 있습니다. 있는 레포지토리는 "기존 레포지토리" 에서 고르세요.', { owner }) : REPO_NAME_PROBLEM[nameProblem] ?? null);
       const remoteText = remoteNameProblem(createRemoteName.value.trim(), existing);
       createRemoteProblem.set(remoteText);
       pushAfter.hidden = !canPublish;
@@ -1734,17 +1741,17 @@ export function createGitHub(ctx) {
       const def = defaultSelect.value;
       const differs = !!current && !!def && current !== def;
       pushCurrent.hidden = !differs;
-      if (differs) pushCurrent.setText(`현재 브랜치 '${current}' 도 올리기`);
+      if (differs) pushCurrent.setText(t("현재 브랜치 '{branch}' 도 올리기", { branch: current }));
       const others = publishBranches(def, current, true, true, locals).length - 1 - (differs ? 1 : 0);
       pushOthers.hidden = others <= 0;
-      pushOthers.setText(`다른 로컬 브랜치 ${others}개도 올리기`);
+      pushOthers.setText(t('다른 로컬 브랜치 {n}개도 올리기', { n: others }));
       pushTags.hidden = tagCount <= 0;
       const { branches, tags } = plan();
       const ready = !!owner && !nameProblem && !!createRemoteName.value.trim() && !remoteText && (!canPublish || !pushAfter.input.checked || !!def);
       let preview = null;
       if (ready) {
-        preview = `github.com/${owner}/${name} 에 빈 레포지토리를 만들고 원격 '${createRemoteName.value.trim()}' 로 추가합니다.`;
-        if (branches.length) preview += `\n올릴 브랜치: ${branches[0]} (기본)${branches.slice(1).map((b) => `, ${b}`).join('')}${tags ? ` · 태그 ${tagCount}개` : ''}`;
+        preview = t("github.com/{owner}/{name} 에 빈 레포지토리를 만들고 원격 '{remote}' 로 추가합니다.", { owner, name, remote: createRemoteName.value.trim() });
+        if (branches.length) preview += `\n${t('올릴 브랜치: {first} (기본){rest}', { first: branches[0], rest: branches.slice(1).map((b) => `, ${b}`).join('') })}${tags ? t(' · 태그 {n}개', { n: tagCount }) : ''}`;
       }
       createNote.set(preview);
       createButton.disabled = busy() || !ready;
@@ -1768,10 +1775,10 @@ export function createGitHub(ctx) {
     // 원격을 더하고 그 원격만 Fetch 한 뒤 닫는다. 더하기부터 실패했으면 고칠 수 있게 열어 둔다(원본 Add).
     async function add(name, url) {
       if (busy()) return;
-      const added = await ctx.act(`원격 '${name}' 를 추가하는 중…`, () => ctx.call('addRemote', { name, url, pushUrl: '' }).then(() => true));
+      const added = await ctx.act(t("원격 '{name}' 를 추가하는 중…", { name }), () => ctx.call('addRemote', { name, url, pushUrl: '' }).then(() => true));
       if (added !== true) { validate(); return; }
       closeDrawer();
-      await ctx.act(`'${name}' 에서 Fetch 하는 중…`, () => ctx.call('fetchRemote', { name }), { success: () => `원격 '${name}' 를 추가했습니다.` });
+      await ctx.act(t("'{name}' 에서 Fetch 하는 중…", { name }), () => ctx.call('fetchRemote', { name }), { success: () => t("원격 '{name}' 를 추가했습니다.", { name }) });
     }
     gitHubAdd.addEventListener('click', () => {
       const repo = known.find((r) => r.full_name === repoSelect.value);
@@ -1786,20 +1793,20 @@ export function createGitHub(ctx) {
       const name = repoName.value.trim();
       const remote = createRemoteName.value.trim();
       const { branches, tags } = plan();
-      const ok = await ctx.act(`GitHub 레포지토리 ${owner}/${name} 만드는 중…`, async () => {
+      const ok = await ctx.act(t('GitHub 레포지토리 {owner}/{name} 만드는 중…', { owner, name }), async () => {
         if (!created || created.full_name.toLowerCase() !== `${owner}/${name}`.toLowerCase()) {
           created = await api(owner === me ? '/user/repos' : `/orgs/${owner}/repos`, { method: 'POST', body: { name, private: priv.input.checked } })
-            .catch((error) => { throw { ...error, message: `GitHub 레포지토리를 만들지 못했습니다: ${error?.message ?? error}` }; });
+            .catch((error) => { throw { ...error, message: t('GitHub 레포지토리를 만들지 못했습니다: {error}', { error: error?.message ?? error }) }; });
         }
         await ctx.call('addRemote', { name: remote, url: created.clone_url, pushUrl: '' });
         for (const b of branches) await ctx.call('pushBranch', { branch: b, remote, setUpstream: !tracked.has(b) });
         if (tags) for (const t of refs.tags) await ctx.call('pushTag', { remote, name: t.name ?? t });
         if (branches.length > 1) {
           await api(`/repos/${created.full_name}`, { method: 'PATCH', body: { default_branch: branches[0] } })
-            .catch((error) => console.warn(`GitHub 기본 브랜치를 '${branches[0]}' 로 정하지 못했습니다: ${error?.message ?? error}`));
+            .catch((error) => console.warn(t("GitHub 기본 브랜치를 '{branch}' 로 정하지 못했습니다: {error}", { branch: branches[0], error: error?.message ?? error })));
         }
         return true;
-      }, { success: () => `${created.full_name} 를 만들었습니다.` });
+      }, { success: () => t('{repo} 를 만들었습니다.', { repo: created.full_name }) });
       // 원격까지 더해졌으면(뒤의 Push 만 실패해도) 닫는다. 화면이 다시 읽은 원격 목록으로 판단한다.
       await new Promise((r) => setTimeout(r, 300));
       existing = [...(ctx.state.refs?.remotes ?? existing)];
@@ -1814,22 +1821,22 @@ export function createGitHub(ctx) {
       if (!me) {
         me = await ctx.call('githubStatus').then((st) => st?.login ?? '').catch(() => '');
         if (me) {
-          ownerSelect.setItems([{ value: me, label: me, hint: '내 계정' }]);
+          ownerSelect.setItems([{ value: me, label: me, hint: t('내 계정') }]);
           ownerSelect.set(me);
         }
       }
-      repoNote.set('읽는 중…');
+      repoNote.set(t('읽는 중…'));
       try {
         known = await api('/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member');
-        repoSelect.setItems(known.map((r) => ({ value: r.full_name, label: r.full_name, hint: r.private ? '비공개' : '', icon: r.private ? 'lock' : 'github' })));
-        repoNote.set(known.length ? null : '이 계정에서 볼 수 있는 레포지토리가 없습니다.');
+        repoSelect.setItems(known.map((r) => ({ value: r.full_name, label: r.full_name, hint: r.private ? t('비공개') : '', icon: r.private ? 'lock' : 'github' })));
+        repoNote.set(known.length ? null : t('이 계정에서 볼 수 있는 레포지토리가 없습니다.'));
       } catch (error) {
-        repoNote.set(`레포지토리 목록을 읽지 못했습니다: ${error?.message ?? error}`);
+        repoNote.set(t('레포지토리 목록을 읽지 못했습니다: {error}', { error: error?.message ?? error }));
       }
       validate();
       const orgs = await api('/user/orgs').catch(() => []);
       const owners = [me, ...orgs.map((o) => o.login).filter((o) => o.toLowerCase() !== me.toLowerCase())].filter(Boolean);
-      ownerSelect.setItems(owners.map((o) => ({ value: o, label: o, hint: o === me ? '내 계정' : '' })));
+      ownerSelect.setItems(owners.map((o) => ({ value: o, label: o, hint: o === me ? t('내 계정') : '' })));
       validate();
     })();
 

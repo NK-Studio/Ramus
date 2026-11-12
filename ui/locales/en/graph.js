@@ -1,0 +1,25 @@
+// ui/graph.js 의 영어. 키는 t() 에 넘기는 한국어 원문 그대로.
+export default {
+  '브랜치 / 태그': 'Branch / Tag',
+  '그래프': 'Graph',
+  '메시지': 'Message',
+  '이름을 적어 주세요.': 'Enter a name.',
+  '공백과 ~ ^ : ? * [ \\ 는 쓸 수 없습니다.': 'Spaces and ~ ^ : ? * [ \\ are not allowed.',
+  "'..', '//', '@{' 는 쓸 수 없습니다.": "'..', '//', '@{' are not allowed.",
+  "'/' 나 '-' 로 시작하거나 '/' 로 끝날 수 없습니다.": "Can't start with '/' or '-', or end with '/'.",
+  "'.' 로 시작·끝나거나 '.lock' 으로 끝날 수 없습니다.": "Can't start or end with '.', or end with '.lock'.",
+  "'{name}' 브랜치가 이미 있습니다.": "A branch named '{name}' already exists.",
+  '불러오는 중…': 'Loading…',
+  '커밋 {n}개 · 줄 {lanes}개': { one: '{n} commit · lanes: {lanes}', other: '{n} commits · lanes: {lanes}' },
+  '커밋 {n}개 · 줄 {lanes}개 (최근 {n}개까지)': { one: '{n} commit · lanes: {lanes} (latest {n} only)', other: '{n} commits · lanes: {lanes} (latest {n} only)' },
+  '끌어서 폭 바꾸기 · 두 번 누르면 기본 폭': 'Drag to resize · Double-click to reset',
+  '작성자': 'Author',
+  '해시': 'Hash',
+  '날짜': 'Date',
+  '// 작업 중': '// WIP',
+  '충돌 파일 {n}개가 있어 {target} 에 병합하지 못했습니다': {
+    one: '{n} file conflict was found when attempting to merge into {target}',
+    other: '{n} file conflicts were found when attempting to merge into {target}',
+  },
+  '브랜치 이름': 'Branch name',
+};

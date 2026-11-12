@@ -5,26 +5,34 @@
 import { el, isComposing } from './util.js';
 import { icon } from './icons.js';
 import { onProgress } from './progress.js';
+import { scoped, isEn } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/toolbar.js 를 먼저 본다). */
+const t = scoped('toolbar');
 
 /** 이 폭보다 좁으면 버튼 글자와 진행 상태 글자를 숨긴다(원본 CompactWidth). */
 const NARROW = 840;
 
 const badgeText = (n) => (n > 99 ? '99+' : String(n));
 
+// '스태시'·'서브모듈' 은 사이드바 구역 이름(Stashes·Submodules)과 원문이 같아 영어 표를 같이 쓰지 않는다 — 버튼·이름표는 단수.
+const STASH_LABEL = isEn ? 'Stash' : '스태시'; // i18n-ignore
+const SUBMODULE_CAPTION = isEn ? 'Submodule' : '서브모듈'; // i18n-ignore
+
 /** 원본 GitToolbar.FetchAgeText: "마지막 Fetch: 3분 전" / "아직 Fetch 하지 않아 …". at 은 초. */
 function fetchAgeText(at) {
-  if (!at) return '아직 Fetch 하지 않아 받을 커밋 수를 모릅니다.';
+  if (!at) return t('아직 Fetch 하지 않아 받을 커밋 수를 모릅니다.');
   const minutes = Math.floor((Date.now() / 1000 - at) / 60);
-  if (minutes < 1) return '마지막 Fetch: 방금';
-  if (minutes < 60) return `마지막 Fetch: ${minutes}분 전`;
-  if (minutes < 60 * 24) return `마지막 Fetch: ${Math.floor(minutes / 60)}시간 전`;
-  return `마지막 Fetch: ${Math.floor(minutes / 60 / 24)}일 전`;
+  if (minutes < 1) return t('마지막 Fetch: 방금');
+  if (minutes < 60) return t('마지막 Fetch: {n}분 전', { n: minutes });
+  if (minutes < 60 * 24) return t('마지막 Fetch: {n}시간 전', { n: Math.floor(minutes / 60) });
+  return t('마지막 Fetch: {n}일 전', { n: Math.floor(minutes / 60 / 24) });
 }
 
 /** 원본 GitDisplay.FormatBranch: "main → origin/main  ↑1  ↓2". */
 function formatBranch(br) {
   if (!br) return '-';
-  if (!br.hasCommits) return `${br.name} (아직 커밋 없음)`;
+  if (!br.hasCommits) return t('{name} (아직 커밋 없음)', { name: br.name });
   let text = br.detached ? 'HEAD (detached)' : br.name;
   if (br.upstream) text += ` → ${br.upstream}`;
   if (br.ahead > 0) text += `  ↑${br.ahead}`;
@@ -51,26 +59,26 @@ export function createToolbar(container, ctx) {
   };
 
   // 레포지토리·브랜치: 위에 작은 이름표, 아래 이름 + ▾(펼치면 뒤집힌다). 마우스를 올리면 이름 + ▾ 만 밝힌다.
-  const repoButton = el('button', { class: 'tb-picker', id: 'repo-button', 'data-tip': '프로젝트 레포지토리와 서브모듈 중에서 열 레포지토리를 고릅니다.' },
+  const repoButton = el('button', { class: 'tb-picker', id: 'repo-button', 'data-tip': t('프로젝트 레포지토리와 서브모듈 중에서 열 레포지토리를 고릅니다.') },
     el('span', { class: 'tb-name', id: 'repo-name' }), el('span', { class: 'tb-caret' }, icon('caret', 12)));
-  const branchButton = el('button', { class: 'tb-picker', id: 'branch-button', 'data-tip': '사이드바에서 브랜치 찾기' },
+  const branchButton = el('button', { class: 'tb-picker', id: 'branch-button', 'data-tip': t('사이드바에서 브랜치 찾기') },
     el('span', { class: 'tb-name', id: 'branch-name' }), el('span', { class: 'tb-caret' }, icon('caret', 12)));
-  const repoCaption = el('span', { class: 'tb-caption', text: '레포지토리' });
+  const repoCaption = el('span', { class: 'tb-caption', text: t('레포지토리') });
   const repoContext = el('div', { class: 'tb-context' }, repoCaption, repoButton);
-  const branchContext = el('div', { class: 'tb-context branch' }, el('span', { class: 'tb-caption', text: '브랜치' }), branchButton);
+  const branchContext = el('div', { class: 'tb-context branch' }, el('span', { class: 'tb-caption', text: t('브랜치') }), branchButton);
 
-  const undo = action('act-undo', 'undo', '실행 취소', () => ctx.undo(), { png: 'Undo' });
-  const redo = action('act-redo', 'redo', '다시 실행', () => ctx.redo(), { png: 'Redo' });
-  const fetch = action('act-fetch', 'fetch', '페치', () => (fetch.classList.contains('problem') ? ctx.fetchProblem() : ctx.fetch()), { tip: '원격의 새 커밋을 받아 옵니다(작업 트리는 그대로).' });
-  const pull = action('act-pull', 'pull', '풀', () => ctx.pull());
-  const pullCaret = el('button', { class: 'tb-split-caret', id: 'act-pull-mode', 'data-tip': '풀 방식 고르기', onclick: (e) => ctx.pullMenu(e.currentTarget) }, icon('chevronDown', 12));
-  const push = action('act-push', 'push', '푸시', () => ctx.push());
-  const branch = action('act-branch', 'branch', '브랜치', () => ctx.newBranch(), { tip: '지금 위치(HEAD)에서 새 브랜치를 만듭니다.' });
-  const stash = action('act-stash', 'stash', '스태시', () => ctx.stash(), { tip: '작업 중인 변경(새 파일 포함)을 stash 에 넣고 작업 트리를 비웁니다.' });
-  const pop = action('act-pop', 'pop', '팝', () => ctx.pop());
-  const terminal = action('act-terminal', 'terminal', '터미널', () => ctx.terminal(), { tip: '레포지토리 폴더에서 터미널을 엽니다.' });
-  const refresh = action('act-refresh', 'reload', '새로고침', () => ctx.refresh(), { tip: '레포지토리 상태와 지금 보고 있는 탭을 다시 읽습니다.' });
-  const more = el('button', { class: 'tb-more', id: 'act-more', 'data-tip': '메뉴', onclick: (e) => ctx.windowMenu(e.currentTarget) }, icon('moreVert', 18));
+  const undo = action('act-undo', 'undo', t('실행 취소'), () => ctx.undo(), { png: 'Undo' });
+  const redo = action('act-redo', 'redo', t('다시 실행'), () => ctx.redo(), { png: 'Redo' });
+  const fetch = action('act-fetch', 'fetch', t('페치'), () => (fetch.classList.contains('problem') ? ctx.fetchProblem() : ctx.fetch()), { tip: t('원격의 새 커밋을 받아 옵니다(작업 트리는 그대로).') });
+  const pull = action('act-pull', 'pull', t('풀'), () => ctx.pull());
+  const pullCaret = el('button', { class: 'tb-split-caret', id: 'act-pull-mode', 'data-tip': t('풀 방식 고르기'), onclick: (e) => ctx.pullMenu(e.currentTarget) }, icon('chevronDown', 12));
+  const push = action('act-push', 'push', t('푸시'), () => ctx.push());
+  const branch = action('act-branch', 'branch', t('브랜치'), () => ctx.newBranch(), { tip: t('지금 위치(HEAD)에서 새 브랜치를 만듭니다.') });
+  const stash = action('act-stash', 'stash', STASH_LABEL, () => ctx.stash(), { tip: t('작업 중인 변경(새 파일 포함)을 stash 에 넣고 작업 트리를 비웁니다.') });
+  const pop = action('act-pop', 'pop', t('팝'), () => ctx.pop());
+  const terminal = action('act-terminal', 'terminal', t('터미널'), () => ctx.terminal(), { tip: t('레포지토리 폴더에서 터미널을 엽니다.') });
+  const refresh = action('act-refresh', 'reload', t('새로고침'), () => ctx.refresh(), { tip: t('레포지토리 상태와 지금 보고 있는 탭을 다시 읽습니다.') });
+  const more = el('button', { class: 'tb-more', id: 'act-more', 'data-tip': t('메뉴'), onclick: (e) => ctx.windowMenu(e.currentTarget) }, icon('moreVert', 18));
   const group = (...children) => el('div', { class: 'tb-group' }, children);
   // 작업이 도는 동안 도구 막대 아래 가장자리에 흐르는 막대(진행률을 알면 그만큼 찬다).
   const bar = el('div', { class: 'tb-progress' }, el('div', { class: 'tb-progress-fill' }));
@@ -110,9 +118,9 @@ export function createToolbar(container, ctx) {
 
   /** 진행 글로 어느 버튼의 작업인지 안다: "풀 하는 중…", "푸시하는 중…", "페치하는 중…", "'origin' 에서 Fetch 하는 중…". */
   function runningButton(text) {
-    if (/^풀\s/.test(text)) return pull;
-    if (/^푸시/.test(text)) return push;
-    if (/^페치|Fetch 하는/.test(text)) return fetch;
+    if (/^풀\s|^Pulling\b/.test(text)) return pull;
+    if (/^푸시|^Pushing\b/.test(text)) return push;
+    if (/^페치|Fetch 하는|^Fetching\b/.test(text)) return fetch;
     return null;
   }
 
@@ -129,7 +137,7 @@ export function createToolbar(container, ctx) {
     bar.classList.toggle('known', progress?.percent != null);
     fill.style.width = progress?.percent != null ? `${progress.percent}%` : '';
     // 자동 Fetch 실패도 글로 띄우지 않는다(원본 AutoFetch: 콘솔에만 남기고, 계정 문제면 Fetch 버튼의 ! 배지).
-    if (fetchState.error && fetchState.error !== warned) console.warn(`[Git] 자동 fetch 실패 — ${fetchState.error}`);
+    if (fetchState.error && fetchState.error !== warned) console.warn(`[Git] 자동 fetch 실패 — ${fetchState.error}`); // i18n-ignore
     warned = fetchState.error;
   }
 
@@ -177,7 +185,7 @@ export function createToolbar(container, ctx) {
   function branchPicker(state) {
     openPopup(branchButton, (panel, close) => {
       const refs = state.refs ?? { local: [], remote: [] };
-      const search = el('input', { class: 'field tb-search', placeholder: '검색', spellcheck: 'false' });
+      const search = el('input', { class: 'field tb-search', placeholder: t('검색'), spellcheck: 'false' });
       const list = el('div', { class: 'tb-list' });
       let active = 0;
       let rows = [];
@@ -199,7 +207,7 @@ export function createToolbar(container, ctx) {
           onclick: () => choose(item),
           onmouseenter: () => { active = index; mark(); },
         }, icon(item.remote ? 'cloud' : 'branch', 15), el('span', { class: 'tb-item-name', text: item.b.name })))
-          : [el('div', { class: 'tb-empty muted', text: '일치하는 브랜치가 없습니다' })]));
+          : [el('div', { class: 'tb-empty muted', text: t('일치하는 브랜치가 없습니다') })]));
       };
       const mark = () => list.querySelectorAll('.tb-item').forEach((n, i) => n.classList.toggle('on', i === active));
       // 지금 브랜치거나 다른 작업이 도는 중이면 닫기만 한다(원본 Pick).
@@ -228,11 +236,11 @@ export function createToolbar(container, ctx) {
     openPopup(repoButton, (panel, close) => {
       const repo = state.repo;
       const items = [];
-      if (repo.superproject) items.push({ name: repo.superproject.split(/[\\/]/).pop(), path: repo.superproject, hint: '프로젝트 레포지토리', glyph: 'folder' });
-      items.push({ name: repo.name, path: repo.path, hint: repo.superproject ? '서브모듈 (지금)' : '프로젝트 레포지토리', current: true, glyph: repo.superproject ? 'submodule' : 'folder' });
+      if (repo.superproject) items.push({ name: repo.superproject.split(/[\\/]/).pop(), path: repo.superproject, hint: t('프로젝트 레포지토리'), glyph: 'folder' });
+      items.push({ name: repo.name, path: repo.path, hint: repo.superproject ? t('서브모듈 (지금)') : t('프로젝트 레포지토리'), current: true, glyph: repo.superproject ? 'submodule' : 'folder' });
       for (const s of state.submodules ?? []) {
         const path = `${repo.path}/${s.path}`;
-        items.push({ name: s.path.split('/').pop(), path, hint: s.state === 'uninitialized' ? `${s.path} (받지 않음)` : s.path, disabled: s.state === 'uninitialized', glyph: 'submodule' });
+        items.push({ name: s.path.split('/').pop(), path, hint: s.state === 'uninitialized' ? t('{path} (받지 않음)', { path: s.path }) : s.path, disabled: s.state === 'uninitialized', glyph: 'submodule' });
       }
       let active = Math.max(0, items.findIndex((i) => i.current));
       const pick = (item) => {
@@ -282,7 +290,7 @@ export function createToolbar(container, ctx) {
       if (!st) return;
       const br = st.branch;
       // 서브모듈을 열었으면 칸 이름도 "서브모듈" 로 바꿔, 프로젝트 레포지토리가 아님을 바로 알게 한다.
-      repoCaption.textContent = state.repo?.superproject ? '서브모듈' : '레포지토리';
+      repoCaption.textContent = state.repo?.superproject ? SUBMODULE_CAPTION : t('레포지토리');
       repoButton.querySelector('.tb-name').textContent = state.repo?.name ?? '-';
       repoButton.dataset.tip = state.repo?.path ?? '';
       branchButton.querySelector('.tb-name').textContent = br.detached ? 'HEAD (detached)' : br.name;
@@ -291,25 +299,25 @@ export function createToolbar(container, ctx) {
       // 작업이 도는 동안은 모두 끈다(원본 idle). 끝나고 화면이 새 상태로 바뀐 뒤 다시 켠다.
       const idle = !state.busy;
       const u = state.undo ?? {};
-      disable(undo, !idle || !u.undo, u.undo ? `실행 취소: ${u.undo}` : '되돌릴 작업이 없습니다.');
-      disable(redo, !idle || !u.redo, u.redo ? `다시 실행: ${u.redo}` : '다시 할 작업이 없습니다.');
+      disable(undo, !idle || !u.undo, u.undo ? t('실행 취소: {name}', { name: u.undo }) : t('되돌릴 작업이 없습니다.'));
+      disable(redo, !idle || !u.redo, u.redo ? t('다시 실행: {name}', { name: u.redo }) : t('다시 할 작업이 없습니다.'));
 
       const noRemote = !(state.refs?.remotes?.length);
       // 병합·리베이스가 충돌로 멈춘 동안 Pull·Push 를 하면 진행 중인 작업이 꼬인다. 끝내거나 중단할 때까지 막는다.
       const inProgress = !!st.operation;
-      const blocked = inProgress ? '병합·리베이스가 진행 중입니다. 위쪽 띠에서 이어가거나 중단한 뒤 쓸 수 있습니다.' : null;
-      disable(fetch, !idle || noRemote, fetchState.auth ? '자동 fetch 가 계정 문제로 실패했습니다. 눌러서 Fetch 하면 이 레포지토리에 쓸 계정을 고를 수 있습니다.' : noRemote ? '원격이 없습니다.' : '원격의 새 커밋을 받아 옵니다(작업 트리는 그대로).');
+      const blocked = inProgress ? t('병합·리베이스가 진행 중입니다. 위쪽 띠에서 이어가거나 중단한 뒤 쓸 수 있습니다.') : null;
+      disable(fetch, !idle || noRemote, fetchState.auth ? t('자동 fetch 가 계정 문제로 실패했습니다. 눌러서 Fetch 하면 이 레포지토리에 쓸 계정을 고를 수 있습니다.') : noRemote ? t('원격이 없습니다.') : t('원격의 새 커밋을 받아 옵니다(작업 트리는 그대로).'));
       fetch.classList.toggle('problem', fetchState.auth);
       setBadge(fetch, fetchState.auth ? '!' : 0, 'danger');
       // 받을 커밋 수는 마지막 fetch 기준이다. 0 이 "확인했더니 없음" 인지 "아직 안 봄" 인지 알 수 있게 언제 봤는지 붙인다.
       disable(pull, !idle || noRemote || !br.upstream || inProgress,
-        blocked ?? (noRemote ? '원격이 없습니다.' : `원격 커밋을 받아 현재 브랜치에 합칩니다.\n${fetchAgeText(lastFetch)}`));
+        blocked ?? (noRemote ? t('원격이 없습니다.') : t('원격 커밋을 받아 현재 브랜치에 합칩니다.\n{age}', { age: fetchAgeText(lastFetch) })));
       pullCaret.disabled = !idle;
-      disable(push, !idle || inProgress || br.detached || !br.hasCommits, blocked ?? `현재 브랜치를 원격에 올립니다. 올릴 커밋 ${br.ahead}개.`);
+      disable(push, !idle || inProgress || br.detached || !br.hasCommits, blocked ?? t('현재 브랜치를 원격에 올립니다. 올릴 커밋 {n}개.', { n: br.ahead }));
       setBadge(push, br.ahead);
       setBadge(pull, br.behind);
       const stashes = state.refs?.stashes.length ?? 0;
-      disable(pop, !idle || !stashes, `가장 최근 stash 를 작업 트리에 되돌립니다. stash ${stashes}개.`);
+      disable(pop, !idle || !stashes, t('가장 최근 stash 를 작업 트리에 되돌립니다. stash {n}개.', { n: stashes }));
       setBadge(pop, stashes);
       disable(stash, !idle || st.staged.length + st.unstaged.length === 0);
       disable(branch, !idle || !br.hasCommits);

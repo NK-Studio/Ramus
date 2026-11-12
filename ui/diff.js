@@ -10,10 +10,14 @@
 // 고른 줄은 Rust 의 DiffDocument.lines 인덱스 그대로이고 diff 지문(fingerprint)과 함께 보낸다 — 그 사이 파일이 바뀌면 Rust 가 거절한다.
 
 import { el, isComposing } from './util.js';
+import { scoped } from './i18n.js';
 import { icon } from './icons.js';
 import { showMenu } from './dialogs.js';
 import { fileIcon } from './files.js';
 import { languageOf, tokenize, STATE_NORMAL } from './syntax.js';
+
+/** 이 모듈의 글(locales/en/diff.js 를 먼저 본다). */
+const t = scoped('diff');
 
 const ROW = 18;
 const HUNK_ROW = 30;
@@ -323,11 +327,11 @@ export function createDiffView(container) {
     });
     const clamp = (x) => Math.min(b - a, Math.max(0, x - a));
     const total = text.length.toLocaleString('en-US');
-    const tip = `긴 줄이라 ${total}자 중 ${(a + 1).toLocaleString('en-US')}–${b.toLocaleString('en-US')}번째만 보입니다.`;
+    const tip = t('긴 줄이라 {total}자 중 {from}–{to}번째만 보입니다.', { total, from: (a + 1).toLocaleString('en-US'), to: b.toLocaleString('en-US') });
     return [
-      a > 0 ? el('span', { class: 'tx-cut', 'data-tip': tip, text: `…(앞 ${a.toLocaleString('en-US')}자) ` }) : null,
+      a > 0 ? el('span', { class: 'tx-cut', 'data-tip': tip, text: t('…(앞 {n}자) ', { n: a.toLocaleString('en-US') }) }) : null,
       ...lineTextRange(text.slice(a, b), clamp(cFrom), clamp(cTo), state.showWs, spans),
-      b < text.length ? el('span', { class: 'tx-cut', 'data-tip': tip, text: ` …(뒤 ${(text.length - b).toLocaleString('en-US')}자)` }) : null,
+      b < text.length ? el('span', { class: 'tx-cut', 'data-tip': tip, text: t(' …(뒤 {n}자)', { n: (text.length - b).toLocaleString('en-US') }) }) : null,
     ];
   }
 
@@ -439,7 +443,7 @@ export function createDiffView(container) {
       cells.push(el('span', { class: 'gut', 'data-i': change ? i : null },
         change ? el('button', {
           class: `gut-btn${unstage() ? ' unstage' : ''}`, 'data-line': i, text: unstage() ? '−' : '+',
-          'data-tip': many ? `고른 ${state.selected.size}줄 ${unstage() ? 'Unstage' : 'Stage'}` : `이 줄 ${unstage() ? 'Unstage' : 'Stage'}`,
+          'data-tip': many ? t('고른 {n}줄 {verb}', { n: state.selected.size, verb: unstage() ? 'Unstage' : 'Stage' }) : t('이 줄 {verb}', { verb: unstage() ? 'Unstage' : 'Stage' }),
         }) : null));
     }
     if (side !== 'right') cells.push(el('span', { class: 'ln ln-old', 'data-i': change ? i : null, text: line.old || '' }));
@@ -530,8 +534,8 @@ export function createDiffView(container) {
   function hunkButtons(hunk) {
     if (!canPartial()) return [];
     return [
-      canDiscard() ? el('button', { class: 'hunk-btn discard', 'data-tip': '이 변경된 묶음을 작업 사본에서 되돌립니다(되돌릴 수 없음).', text: '변경된 묶음 버리기', onclick: () => run('discard', hunkLines(hunk)) }) : null,
-      el('button', { class: `hunk-btn ${unstage() ? 'unstage' : 'stage'}`, text: unstage() ? '변경된 묶음 Unstage' : '변경된 묶음 Stage', onclick: () => run(unstage() ? 'unstage' : 'stage', hunkLines(hunk)) }),
+      canDiscard() ? el('button', { class: 'hunk-btn discard', 'data-tip': t('이 변경된 묶음을 작업 사본에서 되돌립니다(되돌릴 수 없음).'), text: t('변경된 묶음 버리기'), onclick: () => run('discard', hunkLines(hunk)) }) : null,
+      el('button', { class: `hunk-btn ${unstage() ? 'unstage' : 'stage'}`, text: unstage() ? t('변경된 묶음 Unstage') : t('변경된 묶음 Stage'), onclick: () => run(unstage() ? 'unstage' : 'stage', hunkLines(hunk)) }),
     ];
   }
 
@@ -706,8 +710,8 @@ export function createDiffView(container) {
     const discard = canDiscard();
     actionsBar.classList.toggle('single', !discard);
     actionsBar.replaceChildren(
-      el('button', { class: 'act-stage', 'data-tip': `고른 ${lines.length}줄 ${unstage() ? 'Unstage' : 'Stage'}`, text: unstage() ? 'Unstage' : 'Stage', onclick: () => run(unstage() ? 'unstage' : 'stage', actionLines) }),
-      discard ? el('button', { class: 'act-discard', 'data-tip': '이 변경된 묶음을 작업 사본에서 되돌립니다(되돌릴 수 없음).', text: '되돌리기…', onclick: () => run('discard', actionLines) }) : null);
+      el('button', { class: 'act-stage', 'data-tip': t('고른 {n}줄 {verb}', { n: lines.length, verb: unstage() ? 'Unstage' : 'Stage' }), text: unstage() ? 'Unstage' : 'Stage', onclick: () => run(unstage() ? 'unstage' : 'stage', actionLines) }),
+      discard ? el('button', { class: 'act-discard', 'data-tip': t('이 변경된 묶음을 작업 사본에서 되돌립니다(되돌릴 수 없음).'), text: t('되돌리기…'), onclick: () => run('discard', actionLines) }) : null);
     const barTop = selected ? Math.min(y2 + offsetTop, offsetTop + body.scrollTop + body.clientHeight - 26) + 2 : y1 + offsetTop + 4;
     actionsBar.style.top = `${barTop}px`;
     actionsBar.style.right = `${Math.max(24, origin.right - (right + origin.left) + 8)}px`;
@@ -777,14 +781,14 @@ export function createDiffView(container) {
   function twoSides() {
     const { target } = state;
     const short = (h) => (h ?? '').slice(0, 7);
-    if (target.kind === 'commit') return `${short(target.hash)} 의 부모 ↔ ${short(target.hash)}`;
+    if (target.kind === 'commit') return t('{hash} 의 부모 ↔ {hash}', { hash: short(target.hash) });
     if (target.kind === 'range') {
-      if (target.range) return `${target.from} 와 ${target.to} 의 공통 조상 ↔ ${target.to}`;
-      return target.to ? `${short(target.from)} ↔ ${short(target.to)}` : `${short(target.from)} ↔ 작업 트리`;
+      if (target.range) return t('{from} 와 {to} 의 공통 조상 ↔ {to}', { from: target.from, to: target.to });
+      return target.to ? `${short(target.from)} ↔ ${short(target.to)}` : t('{from} ↔ 작업 트리', { from: short(target.from) });
     }
-    if (target.kind === 'staged') return 'HEAD ↔ Staged(인덱스)';
-    if (target.untracked) return '새 파일 (git 이 아직 모름)';
-    return 'Staged(인덱스) ↔ 작업 사본';
+    if (target.kind === 'staged') return t('HEAD ↔ Staged(인덱스)');
+    if (target.untracked) return t('새 파일 (git 이 아직 모름)');
+    return t('Staged(인덱스) ↔ 작업 사본');
   }
 
   function setView(view) {
@@ -848,8 +852,8 @@ export function createDiffView(container) {
       stats ? el('span', { class: 'diff-stat removed', text: `−${doc.removed}` }) : null,
       el('span', { class: 'diff-revisions', text: twoSides() }),
       el('span', { class: 'spacer' }),
-      el('button', { class: 'diff-head-btn', 'data-tip': '다시 읽기', onclick: () => { state.doc = null; reload(); } }, icon('refresh', 14)),
-      el('button', { class: 'diff-close', 'data-tip': '닫기', text: '×', onclick: () => state.api.close() }));
+      el('button', { class: 'diff-head-btn', 'data-tip': t('다시 읽기'), onclick: () => { state.doc = null; reload(); } }, icon('refresh', 14)),
+      el('button', { class: 'diff-close', 'data-tip': t('닫기'), text: '×', onclick: () => state.api.close() }));
   }
 
   function bar() {
@@ -860,12 +864,12 @@ export function createDiffView(container) {
     // 작업 사본의 글 diff 면 이 자리에서 고치고, 커밋·Staged 등이면 작업 사본 파일을 외부 편집기에서 연다.
     const inPlace = state.mode === 'unstaged' && !!state.api.edit;
     const edit = barButton(() => (inPlace ? state.api.edit(target, currentLine()) : state.api.openEditor?.(target, currentLine())),
-      !exists ? '작업 사본에 이 파일이 없습니다.' : inPlace ? '이 자리에서 작업 사본 파일을 고칩니다. 오른쪽 클릭하면 외부 편집기에서 엽니다.' : '이 판이 아니라 지금 작업 사본의 이 파일을 외부 편집기에서 엽니다. 이 자리에서 고치기는 작업 사본의 변경(Unstaged)을 볼 때만 됩니다.',
-      'DiffEdit', inPlace ? '이 파일 편집' : '작업 사본 열기', { disabled: !exists, cls: 'outlined edit' });
+      !exists ? t('작업 사본에 이 파일이 없습니다.') : inPlace ? t('이 자리에서 작업 사본 파일을 고칩니다. 오른쪽 클릭하면 외부 편집기에서 엽니다.') : t('이 판이 아니라 지금 작업 사본의 이 파일을 외부 편집기에서 엽니다. 이 자리에서 고치기는 작업 사본의 변경(Unstaged)을 볼 때만 됩니다.'),
+      'DiffEdit', inPlace ? t('이 파일 편집') : t('작업 사본 열기'), { disabled: !exists, cls: 'outlined edit' });
     edit.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      showMenu(event.clientX, event.clientY, [{ label: '외부 편집기에서 열기', disabled: !exists || !state.api.openEditor, action: () => state.api.openEditor?.(target, currentLine()) }]);
+      showMenu(event.clientX, event.clientY, [{ label: t('외부 편집기에서 열기'), disabled: !exists || !state.api.openEditor, action: () => state.api.openEditor?.(target, currentLine()) }]);
     });
     const fileView = shownFileView();
     const view = shownView();
@@ -875,24 +879,24 @@ export function createDiffView(container) {
       el('div', { class: 'dbar-side' }, edit),
       el('div', { class: 'dbar-center' },
         isText && viewChoice ? segment('seg-view', [
-          barButton(() => setFileView(true), '바뀐 뒤의 파일 전체를 봅니다(더한 줄은 초록).', null, '파일 보기', { on: fileView }),
-          barButton(() => setFileView(false), '바뀐 내용을 봅니다(보기 방식은 오른쪽 세 버튼).', null, 'Diff 보기', { on: !fileView }),
+          barButton(() => setFileView(true), t('바뀐 뒤의 파일 전체를 봅니다(더한 줄은 초록).'), null, t('파일 보기'), { on: fileView }),
+          barButton(() => setFileView(false), t('바뀐 내용을 봅니다(보기 방식은 오른쪽 세 버튼).'), null, t('Diff 보기'), { on: !fileView }),
         ]) : null),
       el('div', { class: 'dbar-side right' },
         segment('seg-file-tools', [
-          barButton(() => state.api.blame?.(target), committed ? '줄마다 마지막으로 바꾼 커밋을 봅니다.' : '아직 커밋된 적 없는 파일입니다.', null, 'Blame', { disabled: !committed || !isText || !state.api.blame }),
-          barButton(() => state.api.history?.(target), committed ? '이 파일을 바꾼 커밋 목록을 봅니다.' : '아직 커밋된 적 없는 파일입니다.', null, '히스토리', { disabled: !committed || !state.api.history }),
+          barButton(() => state.api.blame?.(target), committed ? t('줄마다 마지막으로 바꾼 커밋을 봅니다.') : t('아직 커밋된 적 없는 파일입니다.'), null, 'Blame', { disabled: !committed || !isText || !state.api.blame }),
+          barButton(() => state.api.history?.(target), committed ? t('이 파일을 바꾼 커밋 목록을 봅니다.') : t('아직 커밋된 적 없는 파일입니다.'), null, t('히스토리'), { disabled: !committed || !state.api.history }),
         ]),
-        isText ? segment('seg-nav', [barButton(() => jump(-1), '이전 변경', 'DiffUp'), barButton(() => jump(1), '다음 변경', 'DiffDown')]) : null,
+        isText ? segment('seg-nav', [barButton(() => jump(-1), t('이전 변경'), 'DiffUp'), barButton(() => jump(1), t('다음 변경'), 'DiffDown')]) : null,
         isText && viewChoice ? segment('seg-layouts', [
-          barButton(() => setView('hunk'), '변경된 묶음 보기(Hunk) — 바뀐 곳과 그 앞뒤 몇 줄만', 'DiffViewHunk', null, { on: !fileView && view === 'hunk', disabled: fileView }),
-          barButton(() => setView('inline'), '통합 보기(Inline) — 바뀐 줄을 한 목록에서 제자리에', 'DiffViewInline', null, { on: !fileView && view === 'inline', disabled: fileView }),
-          barButton(() => setView('split'), '나란히 보기(Split) — 옛 판과 새 판을 양쪽에', 'DiffViewSplit', null, { on: !fileView && view === 'split', disabled: fileView }),
+          barButton(() => setView('hunk'), t('변경된 묶음 보기(Hunk) — 바뀐 곳과 그 앞뒤 몇 줄만'), 'DiffViewHunk', null, { on: !fileView && view === 'hunk', disabled: fileView }),
+          barButton(() => setView('inline'), t('통합 보기(Inline) — 바뀐 줄을 한 목록에서 제자리에'), 'DiffViewInline', null, { on: !fileView && view === 'inline', disabled: fileView }),
+          barButton(() => setView('split'), t('나란히 보기(Split) — 옛 판과 새 판을 양쪽에'), 'DiffViewSplit', null, { on: !fileView && view === 'split', disabled: fileView }),
         ]) : null,
         isText ? contextButtons() : null,
         isText ? segment('seg-display', [
-          barButton(() => toggle('showWs', 'diff.whitespace'), '공백 문자 보이기(· 공백, → 탭)', 'DiffWhitespace', null, { on: state.showWs }),
-          barButton(() => toggle('wrap', 'diff.wrap'), '긴 줄 접어 보기', 'DiffWrap', null, { on: state.wrap }),
+          barButton(() => toggle('showWs', 'diff.whitespace'), t('공백 문자 보이기(· 공백, → 탭)'), 'DiffWhitespace', null, { on: state.showWs }),
+          barButton(() => toggle('wrap', 'diff.wrap'), t('긴 줄 접어 보기'), 'DiffWrap', null, { on: state.wrap }),
         ]) : null));
   }
 
@@ -905,16 +909,16 @@ export function createDiffView(container) {
     const fileView = shownFileView();
     const lines = contextLines();
     const entire = showsEntireFile();
-    const off = fileView ? '파일 보기는 늘 파일 전체를 보입니다. Diff 보기에서 문맥 줄과 파일 전체 보기를 바꿀 수 있습니다.'
-      : '파일 전체를 보이는 중에는 문맥 줄 수가 쓰이지 않습니다. ↕ 를 끄면 바꿀 수 있습니다.';
+    const off = fileView ? t('파일 보기는 늘 파일 전체를 보입니다. Diff 보기에서 문맥 줄과 파일 전체 보기를 바꿀 수 있습니다.')
+      : t('파일 전체를 보이는 중에는 문맥 줄 수가 쓰이지 않습니다. ↕ 를 끄면 바꿀 수 있습니다.');
     return [
       segment('seg-context', [
-        barButton(() => stepContext(-1), entire ? off : `문맥 줄 줄이기 (지금 ${lines}줄)`, 'DiffContextLess', null, { disabled: entire || nextContextStep(lines, -1) === lines }),
-        barButton(() => stepContext(1), entire ? off : `문맥 줄 늘리기 (지금 ${lines}줄)`, 'DiffContextMore', null, { disabled: entire || nextContextStep(lines, 1) === lines }),
+        barButton(() => stepContext(-1), entire ? off : t('문맥 줄 줄이기 (지금 {n}줄)', { n: lines }), 'DiffContextLess', null, { disabled: entire || nextContextStep(lines, -1) === lines }),
+        barButton(() => stepContext(1), entire ? off : t('문맥 줄 늘리기 (지금 {n}줄)', { n: lines }), 'DiffContextMore', null, { disabled: entire || nextContextStep(lines, 1) === lines }),
       ]),
       segment('seg-context', [
-        barButton(toggleEntireFile, fileView ? off : applies ? '파일 전체 보기 — 끄면 바뀐 곳 앞뒤 문맥 줄만 묶음으로 보입니다'
-          : '변경된 묶음(Hunk) 보기는 늘 바뀐 곳만 보입니다. 파일 전체는 통합·나란히 보기에서 볼 수 있습니다.', 'DiffEntireFile', null, { on: applies && state.entire, disabled: !applies }),
+        barButton(toggleEntireFile, fileView ? off : applies ? t('파일 전체 보기 — 끄면 바뀐 곳 앞뒤 문맥 줄만 묶음으로 보입니다')
+          : t('변경된 묶음(Hunk) 보기는 늘 바뀐 곳만 보입니다. 파일 전체는 통합·나란히 보기에서 볼 수 있습니다.'), 'DiffEntireFile', null, { on: applies && state.entire, disabled: !applies }),
       ]),
     ];
   }
@@ -962,7 +966,7 @@ export function createDiffView(container) {
   function binaryCard() {
     const { doc, target } = state;
     const sizes = doc.sizes ?? {};
-    const [status, cls] = sizes.old == null ? ['추가됨', 'created'] : sizes.new == null ? ['삭제됨', 'deleted'] : ['수정됨', 'modified'];
+    const [status, cls] = sizes.old == null ? [t('추가됨'), 'created'] : sizes.new == null ? [t('삭제됨'), 'deleted'] : [t('수정됨'), 'modified'];
     const card = (path, bytes) => {
       const name = path.split('/').pop();
       const ext = /(\.[^.]+)$/.exec(name)?.[1] ?? name;
@@ -983,9 +987,9 @@ export function createDiffView(container) {
     const pointer = state.doc.lines.filter((l) => l.kind !== 'removed').map((l) => /^size (\d+)$/.exec(l.text)?.[1]).find(Boolean);
     const failure = state.lfs.failure;
     const auth = failure && /not found|401|403|auth|credential|permission/i.test(failure);
-    let message = '이 파일의 원본이 이 컴퓨터에 없습니다(Git LFS).\n받지 않았거나, 레포지토리 설정(lfs.fetchexclude)으로 받지 않게 되어 있는 파일입니다.';
-    if (auth) message += "\n\n지금 계정으로는 이 레포지토리의 원본을 받을 수 없습니다(GitHub 가 '없음'으로 답했습니다).\n이 레포지토리에 쓸 계정을 고른 뒤 다시 받으세요.";
-    else if (failure) message += `\n\n받지 못했습니다: ${failure.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('Downloading ')) ?? failure}`;
+    let message = t('이 파일의 원본이 이 컴퓨터에 없습니다(Git LFS).\n받지 않았거나, 레포지토리 설정(lfs.fetchexclude)으로 받지 않게 되어 있는 파일입니다.');
+    if (auth) message += t("\n\n지금 계정으로는 이 레포지토리의 원본을 받을 수 없습니다(GitHub 가 '없음'으로 답했습니다).\n이 레포지토리에 쓸 계정을 고른 뒤 다시 받으세요.");
+    else if (failure) message += `\n\n${t('받지 못했습니다: {reason}', { reason: failure.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('Downloading ')) ?? failure })}`;
     const fetch = async () => {
       state.lfs = { busy: true, failure: null };
       render();
@@ -998,22 +1002,22 @@ export function createDiffView(container) {
     };
     return el('div', { class: 'diff-lfs' },
       el('div', { class: 'lfs-message', text: message }),
-      state.api.lfsPull ? el('button', { class: 'lfs-btn', disabled: state.lfs.busy, text: state.lfs.busy ? '받는 중…' : pointer ? `이 파일 원본 받기 (${formatBytes(Number(pointer))})` : '이 파일 원본 받기', onclick: fetch }) : null,
-      auth && state.api.chooseAccount ? el('button', { class: 'lfs-btn', text: '계정 고르기', onclick: () => state.api.chooseAccount() }) : null);
+      state.api.lfsPull ? el('button', { class: 'lfs-btn', disabled: state.lfs.busy, text: state.lfs.busy ? t('받는 중…') : pointer ? t('이 파일 원본 받기 ({size})', { size: formatBytes(Number(pointer)) }) : t('이 파일 원본 받기'), onclick: fetch }) : null,
+      auth && state.api.chooseAccount ? el('button', { class: 'lfs-btn', text: t('계정 고르기'), onclick: () => state.api.chooseAccount() }) : null);
   }
 
   function render() {
     if (!state || state.image) return;
     const { doc } = state;
     if (doc) lastWasText = !doc.binary;
-    const loading = el('div', { class: 'diff-loading', hidden: true, text: '불러오는 중…' });
+    const loading = el('div', { class: 'diff-loading', hidden: true, text: t('불러오는 중…') });
     let content;
     body = null;
     if (state.error) content = el('div', { class: 'diff-notice error-text', text: state.error });
     else if (!doc) content = el('div', { class: 'diff-notice', text: '' });
     else if (doc.binary) content = binaryCard();
     else if (doc.lfsPointer) content = lfsView();
-    else if (!doc.lines.length) content = el('div', { class: 'diff-notice', text: '내용 차이가 없습니다(공백 무시 설정이나 모드·권한만 바뀐 경우).' });
+    else if (!doc.lines.length) content = el('div', { class: 'diff-notice', text: t('내용 차이가 없습니다(공백 무시 설정이나 모드·권한만 바뀐 경우).') });
     else {
       buildRows();
       const old = doc.lines.some((l) => l.old);
@@ -1141,8 +1145,8 @@ export function createDiffView(container) {
     body.addEventListener('contextmenu', (event) => {
       event.preventDefault();
       showMenu(event.clientX, event.clientY, [
-        { label: '복사', hint: '⌘C', disabled: window.getSelection()?.isCollapsed, action: () => document.execCommand('copy') },
-        { label: '모두 선택', hint: '⌘A', action: () => selectAllText() },
+        { label: t('복사'), hint: '⌘C', disabled: window.getSelection()?.isCollapsed, action: () => document.execCommand('copy') },
+        { label: t('모두 선택'), hint: '⌘A', action: () => selectAllText() },
       ]);
     });
     body.addEventListener('keydown', (event) => {

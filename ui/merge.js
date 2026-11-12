@@ -5,15 +5,19 @@
 // A·B 이름은 작업마다 다르다(원본 inprogress.ours/theirs.{작업}): rebase 에서 A 는 바탕 브랜치, B 는 다시 쌓는 내 커밋이다.
 
 import { el } from './util.js';
+import { scoped } from './i18n.js';
 import { icon } from './icons.js';
 import { confirmDialog } from './dialogs.js';
 
+/** 이 모듈의 글(locales/en/merge.js 를 먼저 본다). */
+const t = scoped('merge');
+
 const ROW = 18;
 const SIDE_NAMES = {
-  merge: ['현재 브랜치', '병합해 오는'],
-  cherryPick: ['현재 브랜치', '가져오는 커밋'],
-  revert: ['현재 브랜치', '되돌리는 변경'],
-  rebase: ['바탕 브랜치', '다시 쌓는 내 커밋'],
+  merge: [t('현재 브랜치'), t('병합해 오는')],
+  cherryPick: [t('현재 브랜치'), t('가져오는 커밋')],
+  revert: [t('현재 브랜치'), t('되돌리는 변경')],
+  rebase: [t('바탕 브랜치'), t('다시 쌓는 내 커밋')],
 };
 const sideTitle = (name, label) => (label ? `${name} · ${label}` : name);
 /** 원본 GitImageDiff.FormatBytes. */
@@ -74,7 +78,7 @@ export function createMergeView(container) {
     container.replaceChildren();
   }
 
-  const names = () => SIDE_NAMES[state.api.operation?.()] ?? ['현재', '상대'];
+  const names = () => SIDE_NAMES[state.api.operation?.()] ?? [t('현재'), t('상대')];
   const segmentsOf = () => state.doc.file.segments.filter((s) => s.kind === 'conflict');
 
   function sideState(index, side) {
@@ -161,19 +165,19 @@ export function createMergeView(container) {
       const block = el('div', { class: 'mblock', 'data-conflict': index });
       if (!lines.length) {
         // 이 쪽은 그 자리를 비웠다(지웠다). 고르면 "아무것도 넣지 않음" 이다.
-        block.append(row({ text: '(이 쪽은 이 줄들을 지웠습니다)', side: chosen ? side : null, conflict: index, placeholder: true, onClick: () => setSide(index, side, !chosen) }));
+        block.append(row({ text: t('(이 쪽은 이 줄들을 지웠습니다)'), side: chosen ? side : null, conflict: index, placeholder: true, onClick: () => setSide(index, side, !chosen) }));
       }
       lines.forEach((line, i) => {
         block.append(row({ text: line, number: number++, side, conflict: index, check: chosen && choice[side][i], onClick: () => toggleLine(index, side, i) }));
       });
       // 덩어리 체크는 띠 밖 칸, 덩어리 가운데에.
-      block.append(el('span', { class: 'mblock-check' }, triCheck(sideState(index, side), () => setSide(index, side, sideState(index, side) !== 'all'), `충돌 ${index + 1}: ${side.toUpperCase()} 쪽 모두 넣기·빼기`)));
+      block.append(el('span', { class: 'mblock-check' }, triCheck(sideState(index, side), () => setSide(index, side, sideState(index, side) !== 'all'), t('충돌 {n}: {side} 쪽 모두 넣기·빼기', { n: index + 1, side: side.toUpperCase() }))));
       rows.push(block);
     }
     const [ours, theirs] = names();
     const title = side === 'a' ? sideTitle(ours, file.aLabel) : sideTitle(theirs, file.bLabel);
     return el('div', { class: `mpane pane-${side}${state.manual ? ' disabled' : ''}` },
-      paneHeader(side, title, headerState(side), () => chooseAll(side), side === 'a' ? '모든 충돌에서 A 쪽을 고릅니다.' : '모든 충돌에서 B 쪽을 고릅니다.'),
+      paneHeader(side, title, headerState(side), () => chooseAll(side), side === 'a' ? t('모든 충돌에서 A 쪽을 고릅니다.') : t('모든 충돌에서 B 쪽을 고릅니다.')),
       el('div', { class: 'mpane-body' }, rows));
   }
 
@@ -206,7 +210,7 @@ export function createMergeView(container) {
       const index = k++;
       const choice = state.choices[index];
       if (!decided(choice)) {
-        rows.push(row({ text: `── 충돌 ${index + 1}: 위에서 A 나 B 를 고르세요 ──`, conflict: index, placeholder: true, unresolved: true, gutter: false }));
+        rows.push(row({ text: t('── 충돌 {n}: 위에서 A 나 B 를 고르세요 ──', { n: index + 1 }), conflict: index, placeholder: true, unresolved: true, gutter: false }));
         continue;
       }
       let any = false;
@@ -217,7 +221,7 @@ export function createMergeView(container) {
           rows.push(row({ text: line, number: number++, side, conflict: index, check: true, gutter: false }));
         });
       }
-      if (!any) rows.push(row({ text: '(지운 쪽을 골라 이 자리는 비웁니다)', side: choice.order[0], conflict: index, placeholder: true, gutter: false }));
+      if (!any) rows.push(row({ text: t('(지운 쪽을 골라 이 자리는 비웁니다)'), side: choice.order[0], conflict: index, placeholder: true, gutter: false }));
     }
     return el('div', { class: 'moutput-list' }, rows);
   }
@@ -229,7 +233,7 @@ export function createMergeView(container) {
       let force = false;
       // 충돌 표시를 남긴 채 저장하면 해결되지 않은 파일이 해결됨으로 올라간다. 한 번 묻는다.
       if (/^(<{7}|>{7})( |$)/m.test(text)) {
-        if (!(await confirmDialog({ title: '저장', glyph: 'warning', tone: 'warning', message: `'${state.path.split('/').pop()}' 에 충돌 표시(<<<<<<< … >>>>>>>)가 아직 남아 있습니다. 그래도 해결됨으로 표시할까요?`, ok: '저장' }))) return;
+        if (!(await confirmDialog({ title: t('저장'), glyph: 'warning', tone: 'warning', message: t("'{name}' 에 충돌 표시(<<<<<<< … >>>>>>>)가 아직 남아 있습니다. 그래도 해결됨으로 표시할까요?", { name: state.path.split('/').pop() }), ok: t('저장') }))) return;
         force = true;
       }
       if (await state.api.save(state.path, text, force)) close();
@@ -278,8 +282,8 @@ export function createMergeView(container) {
       el('span', { class: 'merge-path', text: state.path, 'data-tip': state.path }),
       el('span', { class: 'merge-count', text: count }),
       el('span', { class: 'spacer' }),
-      showSave ? el('button', { class: 'merge-save', text: '저장', disabled: !saveEnabled, 'data-tip': saveTip, onclick: () => (state.images ? saveImage() : save()) }) : null,
-      el('button', { class: 'merge-close', text: '×', 'data-tip': '닫기', onclick: () => state.api.close() }));
+      showSave ? el('button', { class: 'merge-save', text: t('저장'), disabled: !saveEnabled, 'data-tip': saveTip, onclick: () => (state.images ? saveImage() : save()) }) : null,
+      el('button', { class: 'merge-close', text: '×', 'data-tip': t('닫기'), onclick: () => state.api.close() }));
   }
 
   /** 줄 단위로 고칠 수 없는 충돌(바이너리·한쪽이 지운 파일): 한쪽으로 해결하거나 작업 사본 그대로 해결됨 표시. */
@@ -287,11 +291,11 @@ export function createMergeView(container) {
     const [ours, theirs] = names();
     container.replaceChildren(headerBar({ showSave: false }),
       el('div', { class: 'merge-binary' },
-        el('p', { class: 'merge-binary-message', text: '이 파일은 줄 단위로 고칠 수 없는 충돌입니다(바이너리 에셋이거나 한쪽이 파일을 지웠습니다). 한쪽으로 해결하세요.' }),
+        el('p', { class: 'merge-binary-message', text: t('이 파일은 줄 단위로 고칠 수 없는 충돌입니다(바이너리 에셋이거나 한쪽이 파일을 지웠습니다). 한쪽으로 해결하세요.') }),
         el('div', { class: 'merge-binary-buttons' },
-          el('button', { class: 'btn', text: `${ours} 쪽으로 해결 (ours)`, onclick: () => state.api.resolve(state.path, 'ours', false) }),
-          el('button', { class: 'btn', text: `${theirs} 쪽으로 해결 (theirs)`, onclick: () => state.api.resolve(state.path, 'theirs', false) }),
-          el('button', { class: 'btn', text: '충돌 해결됨으로 표시', onclick: () => state.api.markResolved(state.path) }))));
+          el('button', { class: 'btn', text: t('{name} 쪽으로 해결 (ours)', { name: ours }), onclick: () => state.api.resolve(state.path, 'ours', false) }),
+          el('button', { class: 'btn', text: t('{name} 쪽으로 해결 (theirs)', { name: theirs }), onclick: () => state.api.resolve(state.path, 'theirs', false) }),
+          el('button', { class: 'btn', text: t('충돌 해결됨으로 표시'), onclick: () => state.api.markResolved(state.path) }))));
   }
 
   // ── 이미지 충돌(원본 ShowImages·ImagePane): 위 A·B 이미지, 아래 고른 이미지(출력). ──
@@ -324,24 +328,24 @@ export function createMergeView(container) {
     const sidePane = (side) => {
       const info = loaded?.[side];
       const stage = imageStage(info, () => choose(side));
-      const hint = !loaded ? '이미지를 읽는 중…' : info.deleted ? '이 쪽에서는 파일을 지웠습니다' : info.missing ? 'LFS 원본을 받지 않아 이미지를 볼 수 없습니다' : '';
+      const hint = !loaded ? t('이미지를 읽는 중…') : info.deleted ? t('이 쪽에서는 파일을 지웠습니다') : info.missing ? t('LFS 원본을 받지 않아 이미지를 볼 수 없습니다') : '';
       if (hint) stage.append(el('div', { class: 'merge-image-hint', text: hint }));
       const title = sideTitle(side === 'a' ? ours : theirs, side === 'a' ? state.api.oursName?.() : state.api.theirsName?.());
       return el('div', { class: `mpane pane-${side}${state.imageChoice === side ? ' chosen' : ''}` },
-        paneHeader(side, title, state.imageChoice === side ? 'all' : 'none', () => choose(side), side === 'a' ? '이 이미지(A)를 남깁니다' : '이 이미지(B)를 남깁니다'),
+        paneHeader(side, title, state.imageChoice === side ? 'all' : 'none', () => choose(side), side === 'a' ? t('이 이미지(A)를 남깁니다') : t('이 이미지(B)를 남깁니다')),
         stage,
         el('div', { class: 'merge-image-info', text: info?.src ? `${info.width} × ${info.height} · ${formatBytes(info.bytes)}` : '' }));
     };
     const chosen = state.imageChoice ? loaded?.[state.imageChoice] : null;
     const outStage = imageStage(chosen, null);
-    if (!chosen?.src) outStage.append(el('div', { class: 'merge-image-hint', text: !state.imageChoice ? 'A 나 B 중 남길 이미지를 고르세요.' : '파일을 지웁니다' }));
+    if (!chosen?.src) outStage.append(el('div', { class: 'merge-image-hint', text: !state.imageChoice ? t('A 나 B 중 남길 이미지를 고르세요.') : t('파일을 지웁니다') }));
     const top = topSplit(sidePane('a'), sidePane('b'));
     container.replaceChildren(
-      headerBar({ saveEnabled: !!state.imageChoice, saveTip: state.imageChoice ? '고른 쪽 이미지로 파일을 바꾸고 충돌 해결됨으로 표시합니다(git add).' : 'A 나 B 중 남길 이미지를 고르세요.' }),
+      headerBar({ saveEnabled: !!state.imageChoice, saveTip: state.imageChoice ? t('고른 쪽 이미지로 파일을 바꾸고 충돌 해결됨으로 표시합니다(git add).') : t('A 나 B 중 남길 이미지를 고르세요.') }),
       top,
       el('div', { class: 'merge-bottom' },
-        el('div', { class: 'mpane-title out-title' }, el('span', { class: 'mout-title', text: '출력' }), el('span', { class: 'spacer' }),
-          el('button', { class: 'mnav', text: '충돌 해결됨으로 표시', 'data-tip': '작업 사본의 파일을 그대로 두고 해결됨으로 표시합니다. 다른 프로그램(포토샵 등)에서 직접 합쳐 둔 경우에 씁니다.', onclick: () => state.api.markResolved(state.path) })),
+        el('div', { class: 'mpane-title out-title' }, el('span', { class: 'mout-title', text: t('출력') }), el('span', { class: 'spacer' }),
+          el('button', { class: 'mnav', text: t('충돌 해결됨으로 표시'), 'data-tip': t('작업 사본의 파일을 그대로 두고 해결됨으로 표시합니다. 다른 프로그램(포토샵 등)에서 직접 합쳐 둔 경우에 씁니다.'), onclick: () => state.api.markResolved(state.path) })),
         outStage));
   }
 
@@ -352,7 +356,7 @@ export function createMergeView(container) {
 
   /** A | B 칸. 경계를 끌어 비율을 바꾸고 기억한다. 두 번 누르면 반반. */
   function topSplit(a, b) {
-    const splitter = el('div', { class: 'msplit', 'data-tip': '끌어서 비율 바꾸기 · 두 번 누르면 반반' });
+    const splitter = el('div', { class: 'msplit', 'data-tip': t('끌어서 비율 바꾸기 · 두 번 누르면 반반') });
     const top = el('div', { class: 'merge-top', style: { gridTemplateColumns: `${state.ratio}fr 5px ${1 - state.ratio}fr` } }, a, splitter, b);
     splitter.addEventListener('pointerdown', (e) => {
       splitter.setPointerCapture(e.pointerId);
@@ -382,7 +386,7 @@ export function createMergeView(container) {
     const { doc } = state;
     if (state.error || !doc) {
       container.replaceChildren(headerBar({ showSave: false }),
-        el('div', { class: `diff-empty ${state.error ? 'error-text' : 'muted'}`, text: state.error ?? '불러오는 중…' }));
+        el('div', { class: `diff-empty ${state.error ? 'error-text' : 'muted'}`, text: state.error ?? t('불러오는 중…') }));
       return;
     }
     if (!doc.file) {
@@ -399,24 +403,24 @@ export function createMergeView(container) {
     }
     const total = state.choices.length;
     const left = state.choices.filter((c) => !decided(c)).length;
-    const saveTip = state.manual ? '고친 글을 파일에 쓰고 충돌 해결됨으로 표시합니다(git add).'
-      : left ? `아직 고르지 않은 충돌이 ${left}개 있습니다. A 나 B 를 골라 주세요.` : '출력 내용을 파일에 쓰고 충돌 해결됨으로 표시합니다(git add).';
+    const saveTip = state.manual ? t('고친 글을 파일에 쓰고 충돌 해결됨으로 표시합니다(git add).')
+      : left ? t('아직 고르지 않은 충돌이 {n}개 있습니다. A 나 B 를 골라 주세요.', { n: left }) : t('출력 내용을 파일에 쓰고 충돌 해결됨으로 표시합니다(git add).');
     const scrolls = [...container.querySelectorAll('.mpane-body, .moutput-list, .moutput')].map((n) => n.scrollTop);
     const outputHead = el('div', { class: 'mpane-title out-title' },
-      el('span', { class: 'mout-title', text: '출력' }),
+      el('span', { class: 'mout-title', text: t('출력') }),
       el('span', { class: 'spacer' }),
-      total ? el('span', { class: 'mposition', text: `충돌 ${Math.min(state.current + 1, total)} / ${total}` }) : null,
-      el('button', { class: 'mnav', text: '▲', 'data-tip': '이전 충돌', onclick: () => move(-1) }),
-      el('button', { class: 'mnav', text: '▼', 'data-tip': '다음 충돌', onclick: () => move(1) }),
+      total ? el('span', { class: 'mposition', text: t('충돌 {current} / {total}', { current: Math.min(state.current + 1, total), total }) }) : null,
+      el('button', { class: 'mnav', text: '▲', 'data-tip': t('이전 충돌'), onclick: () => move(-1) }),
+      el('button', { class: 'mnav', text: '▼', 'data-tip': t('다음 충돌'), onclick: () => move(1) }),
       el('button', {
-        class: 'mnav wide', text: state.manual ? '고르기로 돌아가기' : '직접 고치기',
-        'data-tip': state.manual ? '고친 글을 버리고 A·B 고르기로 돌아갑니다.' : '출력 글을 손으로 고칩니다. 지금 고른 결과에서 시작하고, 고르지 않은 충돌은 표시 그대로 둡니다.',
+        class: 'mnav wide', text: state.manual ? t('고르기로 돌아가기') : t('직접 고치기'),
+        'data-tip': state.manual ? t('고친 글을 버리고 A·B 고르기로 돌아갑니다.') : t('출력 글을 손으로 고칩니다. 지금 고른 결과에서 시작하고, 고르지 않은 충돌은 표시 그대로 둡니다.'),
         onclick: toggleManual,
       }),
-      el('button', { class: 'mnav wide', text: '처음으로', 'data-tip': '고른 것을 모두 지우고 처음 상태로 돌아갑니다.', onclick: reset }));
+      el('button', { class: 'mnav wide', text: t('처음으로'), 'data-tip': t('고른 것을 모두 지우고 처음 상태로 돌아갑니다.'), onclick: reset }));
     container.replaceChildren(...[
-      headerBar({ count: `(충돌 ${total}개)`, saveEnabled: state.manual || left === 0, saveTip }),
-      doc.recovered ? el('div', { class: 'merge-notice', text: '작업 파일에 충돌 표시가 없어 git 이 기록한 양쪽 판으로 다시 보입니다. 저장하면 지금 파일을 덮어씁니다.' }) : null,
+      headerBar({ count: t('(충돌 {n}개)', { n: total }), saveEnabled: state.manual || left === 0, saveTip }),
+      doc.recovered ? el('div', { class: 'merge-notice', text: t('작업 파일에 충돌 표시가 없어 git 이 기록한 양쪽 판으로 다시 보입니다. 저장하면 지금 파일을 덮어씁니다.') }) : null,
       topSplit(pane('a'), pane('b')),
       el('div', { class: 'merge-bottom' }, outputHead, output())].filter(Boolean));
     [...container.querySelectorAll('.mpane-body, .moutput-list, .moutput')].forEach((n, i) => { n.scrollTop = scrolls[i] ?? 0; });

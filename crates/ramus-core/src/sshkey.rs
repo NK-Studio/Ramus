@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 
 use serde::Serialize;
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Result};
 
 /// 새로 만드는 키의 기본 파일 이름.
@@ -63,14 +64,14 @@ pub fn ssh_keygen() -> Option<PathBuf> {
 }
 
 fn keygen(args: &[&str]) -> Result<String> {
-    let program = ssh_keygen().ok_or_else(|| GitError::new("ssh-keygen 을 찾지 못했습니다. OpenSSH 를 깔아 주세요."))?;
+    let program = ssh_keygen().ok_or_else(|| GitError::new(tr("ssh-keygen 을 찾지 못했습니다. OpenSSH 를 깔아 주세요.", "Couldn't find ssh-keygen. Install OpenSSH.")))?;
     let mut cmd = Command::new(program);
     cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     crate::runner::hide_console(&mut cmd);
-    let out = cmd.output().map_err(|e| GitError::new(format!("ssh-keygen 을 실행하지 못했습니다: {e}")))?;
+    let out = cmd.output().map_err(|e| GitError::new(crate::trf!("ssh-keygen 을 실행하지 못했습니다: {e}", "Couldn't run ssh-keygen: {e}")))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(GitError::new(if err.is_empty() { "ssh-keygen 이 실패했습니다.".to_string() } else { format!("ssh-keygen: {err}") }));
+        return Err(GitError::new(if err.is_empty() { tr("ssh-keygen 이 실패했습니다.", "ssh-keygen failed.").to_string() } else { format!("ssh-keygen: {err}") }));
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
@@ -128,17 +129,17 @@ pub fn list(home: &Path) -> Vec<SshKey> {
 /// 고른 개인 키. 공개 키는 `public`(없으면 옆의 `.pub`, 그것도 없으면 `ssh-keygen -y` 로 꺼낸다 — 암호가 걸렸으면 실패).
 pub fn read(private: &Path, public: Option<&Path>) -> Result<SshKey> {
     if !private.is_file() {
-        return Err(GitError::new("개인 키 파일이 없습니다."));
+        return Err(GitError::new(tr("개인 키 파일이 없습니다.", "The private key file doesn't exist.")));
     }
     let beside = PathBuf::from(format!("{}.pub", private.display()));
     let public = public.map(Path::to_path_buf).or_else(|| beside.is_file().then_some(beside));
     match public {
         Some(p) => {
-            let line = std::fs::read_to_string(&p).map_err(|e| GitError::new(format!("공개 키를 읽지 못했습니다: {e}")))?;
+            let line = std::fs::read_to_string(&p).map_err(|e| GitError::new(crate::trf!("공개 키를 읽지 못했습니다: {e}", "Couldn't read the public key: {e}")))?;
             Ok(describe(private, &line, Some(&p)))
         }
         None => {
-            let line = keygen(&["-y", "-f", &private.display().to_string()]).map_err(|_| GitError::new("공개 키(.pub)를 찾지 못했습니다. 공개 키 파일을 같이 골라 주세요."))?;
+            let line = keygen(&["-y", "-f", &private.display().to_string()]).map_err(|_| GitError::new(tr("공개 키(.pub)를 찾지 못했습니다. 공개 키 파일을 같이 골라 주세요.", "Couldn't find the public key (.pub). Choose the public key file as well.")))?;
             Ok(describe(private, &line, None))
         }
     }
@@ -156,7 +157,7 @@ pub fn free_name(dir: &Path) -> PathBuf {
 pub fn generate(home: &Path, comment: &str) -> Result<SshKey> {
     let dir = ssh_dir(home);
     if !dir.is_dir() {
-        std::fs::create_dir_all(&dir).map_err(|e| GitError::new(format!(".ssh 폴더를 만들지 못했습니다: {e}")))?;
+        std::fs::create_dir_all(&dir).map_err(|e| GitError::new(crate::trf!(".ssh 폴더를 만들지 못했습니다: {e}", "Couldn't create the .ssh folder: {e}")))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

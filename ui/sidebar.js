@@ -5,6 +5,15 @@
 
 import { el, relativeTime } from './util.js';
 import { icon } from './icons.js';
+import { scoped, isEn } from './i18n.js';
+
+/** 이 모듈의 글(locales/en/sidebar.js 를 먼저 본다). */
+const t = scoped('sidebar');
+
+// 구역 제목. '스태시'·'서브모듈' 은 도구 막대의 버튼·이름표(Stash·Submodule)와 원문이 같아 영어 표 하나로는 구역의 복수형을 고를 수 없다 — 여기서 따로 둔다.
+const SECTION_TITLE = isEn
+  ? { local: 'Local', remote: 'Remotes', worktrees: 'Worktrees', stash: 'Stashes', submodules: 'Submodules', tags: 'Tags' }
+  : { local: '로컬', remote: '리모트', worktrees: '워크트리', stash: '스태시', submodules: '서브모듈', tags: '태그' }; // i18n-ignore
 
 const DEFAULT_OPEN = new Set(['local', 'remote', 'prs']);
 
@@ -13,9 +22,11 @@ const DEFAULT_OPEN = new Set(['local', 'remote', 'prs']);
  *        activate(node), add(sectionId), reveal(hash), laneColorOf(hash) }
  */
 export function createSidebar(container, ctx) {
-  const filter = el('input', { class: 'side-filter-input', placeholder: '필터', spellcheck: 'false', autocomplete: 'off' });
+  const filter = el('input', { class: 'side-filter-input', placeholder: t('필터'), spellcheck: 'false', autocomplete: 'off' });
   filter.value = ctx.prefs.get('sidebar.filter') ?? '';
-  const clear = el('button', { class: 'side-filter-clear', 'data-tip': '지우기', onclick: () => { filter.value = ''; onFilter(); filter.focus(); } }, icon('close', 12));
+  // '지우기' 는 다른 화면에서 Remove 로 쓰여 영어 표를 같이 쓰지 않는다.
+  const clearTip = isEn ? 'Clear' : '지우기'; // i18n-ignore
+  const clear = el('button', { class: 'side-filter-clear', 'data-tip': clearTip, onclick: () => { filter.value = ''; onFilter(); filter.focus(); } }, icon('close', 12));
   const tree = el('div', { class: 'side-tree', tabindex: '0', role: 'tree' });
   container.append(el('div', { class: 'side-filter' }, icon('search', 14), filter, clear), tree);
 
@@ -138,7 +149,7 @@ export function createSidebar(container, ctx) {
       activate: () => ctx.activate({ kind: 'local', branch: b }),
       menu: (e) => ctx.menus.local(e, b),
     }));
-    list.push({ id: 'local', title: '로컬', glyph: 'laptop', count: refs.local.length, rows: localRows, empty: '로컬 브랜치가 없습니다' });
+    list.push({ id: 'local', title: SECTION_TITLE.local, glyph: 'laptop', count: refs.local.length, rows: localRows, empty: t('로컬 브랜치가 없습니다') });
 
     // 리모트(원격마다 묶음). 원격 줄도 폴더처럼 늘 펼쳐 둔다. 머리 개수는 원격 브랜치 수.
     const remoteRows = [];
@@ -158,17 +169,17 @@ export function createSidebar(container, ctx) {
         menu: (e) => ctx.menus.remote(e, b),
       }));
     }
-    list.push({ id: 'remote', title: '리모트', glyph: 'cloud', count: refs.remote.length, rows: remoteRows, empty: '원격이 없습니다', add: '원격 레포지토리 추가' });
+    list.push({ id: 'remote', title: SECTION_TITLE.remote, glyph: 'cloud', count: refs.remote.length, rows: remoteRows, empty: t('원격이 없습니다'), add: t('원격 레포지토리 추가') });
 
     // 워크트리: 이름은 폴더 이름, 옆에 브랜치(분리된 HEAD 면 짧은 해시).
     const worktrees = (state.worktrees ?? []).filter((w) => !w.bare);
     const worktreeRows = worktrees.filter((w) => matches(w.path) || matches(w.branch ?? '')).map((w) => ({
       key: `worktree:${w.path}`, depth: 1, label: w.path.replace(/[\\/]+$/, '').split(/[\\/]/).pop(), glyph: 'folder', bold: w.current, check: w.current,
-      tip: `작업 폴더:  ${w.path}`, sub: w.branch ?? w.head.slice(0, 7), more: false,
+      tip: t('작업 폴더:  {path}', { path: w.path }), sub: w.branch ?? w.head.slice(0, 7), more: false,
       activate: () => ctx.activate({ kind: 'worktree', worktree: w }),
       menu: (e) => ctx.menus.worktree(e, w),
     }));
-    list.push({ id: 'worktrees', title: '워크트리', glyph: 'worktree', count: worktrees.length, rows: worktreeRows, empty: '워크트리가 없습니다', add: '새 워크트리 만들기' });
+    list.push({ id: 'worktrees', title: SECTION_TITLE.worktrees, glyph: 'worktree', count: worktrees.length, rows: worktreeRows, empty: t('워크트리가 없습니다'), add: t('새 워크트리 만들기') });
 
     // 스태시
     const stashRows = refs.stashes.filter((s) => matches(s.message)).map((s) => ({
@@ -177,7 +188,7 @@ export function createSidebar(container, ctx) {
       activate: () => ctx.activate({ kind: 'stash', stash: s }),
       menu: (e) => ctx.menus.stash(e, s),
     }));
-    list.push({ id: 'stash', title: '스태시', glyph: 'stash', count: refs.stashes.length, rows: stashRows, empty: '스태시가 없습니다' });
+    list.push({ id: 'stash', title: SECTION_TITLE.stash, glyph: 'stash', count: refs.stashes.length, rows: stashRows, empty: t('스태시가 없습니다') });
 
     // Pull Requests (GitHub 원격이 있을 때만)
     if (ctx.pullRequests) {
@@ -194,7 +205,7 @@ export function createSidebar(container, ctx) {
       activate: () => ctx.activate({ kind: 'submodule', submodule: s }),
       menu: (e) => ctx.menus.submodule(e, s),
     }));
-    list.push({ id: 'submodules', title: '서브모듈', glyph: 'submodule', count: subs.length, rows: subRows, empty: '서브모듈이 없습니다', add: '서브모듈 추가' });
+    list.push({ id: 'submodules', title: SECTION_TITLE.submodules, glyph: 'submodule', count: subs.length, rows: subRows, empty: t('서브모듈이 없습니다'), add: t('서브모듈 추가') });
 
     // 태그
     const tagRows = [];
@@ -204,7 +215,7 @@ export function createSidebar(container, ctx) {
       activate: () => ctx.activate({ kind: 'tag', tag: t }),
       menu: (e) => ctx.menus.tag(e, t),
     }));
-    list.push({ id: 'tags', title: '태그', glyph: 'tag', count: refs.tags.length, rows: tagRows, empty: '태그가 없습니다' });
+    list.push({ id: 'tags', title: SECTION_TITLE.tags, glyph: 'tag', count: refs.tags.length, rows: tagRows, empty: t('태그가 없습니다') });
     return list;
   }
 
@@ -256,7 +267,7 @@ export function createSidebar(container, ctx) {
     row.badge ? el('span', { class: 'side-count side-badge', text: row.badge }) : null,
     // 줄 끝 ⋮ 는 원본처럼 브랜치·PR 줄에만(나머지는 우클릭).
     row.menu && (row.more ?? true) ? el('button', {
-      class: 'side-more', 'data-tip': '메뉴',
+      class: 'side-more', 'data-tip': t('메뉴'),
       onclick: (event) => {
         event.stopPropagation();
         const r = event.currentTarget.getBoundingClientRect();
@@ -314,7 +325,7 @@ export function createSidebar(container, ctx) {
         if (!row.element && !row.info) nodes.push(row);
       }
     });
-    if (filtering && !children.length) children.push(el('div', { class: 'side-empty muted small', text: '걸리는 항목이 없습니다' }));
+    if (filtering && !children.length) children.push(el('div', { class: 'side-empty muted small', text: t('걸리는 항목이 없습니다') }));
     const scroll = tree.scrollTop;
     // 구역 안 입력 칸(PR 검색)에 쓰는 중이면 다시 그린 뒤에도 포커스·커서를 그대로 둔다.
     const active = tree.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement ? document.activeElement : null;

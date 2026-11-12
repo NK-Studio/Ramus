@@ -7,6 +7,7 @@ pub mod gitbin;
 pub mod github;
 pub mod graph;
 pub mod history;
+pub mod i18n;
 pub mod diff;
 pub mod files;
 pub mod log;

@@ -11,6 +11,8 @@ use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::tr;
+
 /// 설정에서 고르는 git.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -120,12 +122,12 @@ pub fn version(path: &Path, env: &HashMap<String, String>) -> Result<String, Str
     let mut cmd = Command::new(path);
     cmd.arg("--version").envs(env).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     crate::runner::hide_console(&mut cmd);
-    let out = cmd.output().map_err(|e| format!("실행하지 못했습니다: {e}"))?;
+    let out = cmd.output().map_err(|e| crate::trf!("실행하지 못했습니다: {e}", "Couldn't run it: {e}"))?;
     let text = String::from_utf8_lossy(&out.stdout);
     match text.trim().strip_prefix("git version ") {
         Some(v) if out.status.success() => Ok(v.trim().to_string()),
         // 다른 프로그램이면 그 프로그램의 사용법 글이 나오므로 그대로 보이지 않는다.
-        _ => Err("git 실행 파일이 아닙니다.".into()),
+        _ => Err(tr("git 실행 파일이 아닙니다.", "Not a git executable.").into()),
     }
 }
 
@@ -134,17 +136,28 @@ pub fn resolve(mode: GitMode, custom_path: &str) -> ResolvedGit {
     let bundled = || bundled_dir().map(|dir| ResolvedGit { source: GitMode::Bundled, path: bundled_binary(&dir), env: bundled_env(&dir), fallback: None });
     let system = || find_system().map(|path| ResolvedGit { source: GitMode::System, path, env: HashMap::new(), fallback: None });
     let with_note = |r: Option<ResolvedGit>, note: &str| r.map(|r| ResolvedGit { fallback: Some(note.to_string()), ..r });
-    let last = || ResolvedGit { source: GitMode::System, path: PathBuf::from("git"), env: HashMap::new(), fallback: Some("쓸 수 있는 git 을 찾지 못했습니다.".into()) };
+    let last = || ResolvedGit { source: GitMode::System, path: PathBuf::from("git"), env: HashMap::new(), fallback: Some(tr("쓸 수 있는 git 을 찾지 못했습니다.", "Couldn't find a usable git.").into()) };
     match mode {
-        GitMode::Bundled => bundled().or_else(|| with_note(system(), "내장 git 이 없어 시스템 git 을 씁니다.")).unwrap_or_else(last),
-        GitMode::System => system().or_else(|| with_note(bundled(), "시스템 git 을 찾지 못해 내장 git 을 씁니다.")).unwrap_or_else(last),
+        GitMode::Bundled => bundled().or_else(|| with_note(system(), tr("내장 git 이 없어 시스템 git 을 씁니다.", "Bundled git is missing, so system git is used."))).unwrap_or_else(last),
+        GitMode::System => system().or_else(|| with_note(bundled(), tr("시스템 git 을 찾지 못해 내장 git 을 씁니다.", "System git wasn't found, so bundled git is used."))).unwrap_or_else(last),
         GitMode::Custom => {
             let path = PathBuf::from(custom_path.trim());
             if !custom_path.trim().is_empty() && path.is_file() {
                 ResolvedGit { source: GitMode::Custom, path, env: HashMap::new(), fallback: None }
             } else {
-                let note = if custom_path.trim().is_empty() { "지정한 git 경로가 비어 있어 내장 git 을 씁니다.".to_string() } else { format!("지정한 git({})을 찾지 못해 내장 git 을 씁니다.", custom_path.trim()) };
-                with_note(bundled(), &note).or_else(|| with_note(system(), &note.replace("내장 git", "시스템 git"))).unwrap_or_else(last)
+                let (to_bundled, to_system) = if custom_path.trim().is_empty() {
+                    (
+                        tr("지정한 git 경로가 비어 있어 내장 git 을 씁니다.", "The custom git path is empty, so bundled git is used.").to_string(),
+                        tr("지정한 git 경로가 비어 있어 시스템 git 을 씁니다.", "The custom git path is empty, so system git is used.").to_string(),
+                    )
+                } else {
+                    let custom = custom_path.trim();
+                    (
+                        crate::trf!("지정한 git({custom})을 찾지 못해 내장 git 을 씁니다.", "The custom git ({custom}) wasn't found, so bundled git is used."),
+                        crate::trf!("지정한 git({custom})을 찾지 못해 시스템 git 을 씁니다.", "The custom git ({custom}) wasn't found, so system git is used."),
+                    )
+                };
+                with_note(bundled(), &to_bundled).or_else(|| with_note(system(), &to_system)).unwrap_or_else(last)
             }
         }
     }

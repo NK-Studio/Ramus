@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::i18n::tr;
 use crate::repo::{GitError, Repository, Result};
 use crate::runner::GitRunner;
 
@@ -16,13 +17,13 @@ pub fn default_clone_name(url: &str) -> String {
 /// `url` 을 `dest` 에 clone 한다. `dest` 는 없거나 빈 폴더여야 한다.
 pub fn clone(git: &GitRunner, url: &str, dest: &Path) -> Result<Repository> {
     if url.trim().is_empty() {
-        return Err(GitError::new("레포지토리 주소를 적어 주세요."));
+        return Err(GitError::new(tr("레포지토리 주소를 적어 주세요.", "Enter the repository URL.")));
     }
     if dest.exists() && std::fs::read_dir(dest).map(|mut d| d.next().is_some()).unwrap_or(true) {
-        return Err(GitError::new(format!("이미 파일이 있는 폴더입니다: {}", dest.display())));
+        return Err(GitError::new(crate::trf!("이미 파일이 있는 폴더입니다: {}", "The folder already has files: {}", dest.display())));
     }
-    let parent = dest.parent().ok_or_else(|| GitError::new("저장할 폴더가 잘못되었습니다."))?;
-    std::fs::create_dir_all(parent).map_err(|e| GitError::new(format!("폴더를 만들지 못했습니다: {e}")))?;
+    let parent = dest.parent().ok_or_else(|| GitError::new(tr("저장할 폴더가 잘못되었습니다.", "The destination folder is invalid.")))?;
+    std::fs::create_dir_all(parent).map_err(|e| GitError::new(crate::trf!("폴더를 만들지 못했습니다: {e}", "Couldn't create the folder: {e}")))?;
     let out = git.run(parent, &["clone", "--progress", "--", url.trim(), &dest.display().to_string()]);
     if !out.success() {
         // 실패하면 git 이 만들다 만 폴더를 지운다(빈 폴더를 미리 고른 경우는 남긴다).
@@ -44,7 +45,7 @@ pub fn test_connection(git: &GitRunner, dir: &Path, url: &str) -> Result<usize> 
 pub fn export_mac_keychain(dest_dir: &Path) -> Result<PathBuf> {
     let security = Path::new("/usr/bin/security");
     if !security.exists() {
-        return Err(GitError::new("이 기능은 macOS 에서만 됩니다."));
+        return Err(GitError::new(tr("이 기능은 macOS 에서만 됩니다.", "This is only available on macOS.")));
     }
     let mut pem = String::new();
     for args in [&["find-certificate", "-a", "-p"][..], &["find-certificate", "-a", "-p", "/System/Library/Keychains/SystemRootCertificates.keychain"][..]] {
@@ -55,7 +56,7 @@ pub fn export_mac_keychain(dest_dir: &Path) -> Result<PathBuf> {
         }
     }
     if !pem.contains("BEGIN CERTIFICATE") {
-        return Err(GitError::new("키체인에서 인증서를 꺼내지 못했습니다."));
+        return Err(GitError::new(tr("키체인에서 인증서를 꺼내지 못했습니다.", "Couldn't export the certificates from the Keychain.")));
     }
     std::fs::create_dir_all(dest_dir).map_err(|e| GitError::new(e.to_string()))?;
     let path = dest_dir.join("ca-bundle.pem");
