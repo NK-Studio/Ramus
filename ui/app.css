@@ -2508,3 +2508,8 @@ body.repo-loading .tab.active .tab-name {
 .titlebar-control:hover { background: var(--git-hover); }
 .titlebar-control.close:hover { background: #c42b1c; color: #fff; }
 .titlebar-control.close:active { background: #b22a1b; color: #fff; }
+/* 키보드로 메뉴 막대에 들어왔을 때 고른 메뉴와, Alt 를 누르는 동안 보이는 접근 키. */
+.titlebar-menu.focused { background: var(--git-hover); box-shadow: inset 0 0 0 1px var(--git-border); }
+.titlebar-key { display: none; margin-left: 1px; }
+.titlebar.show-keys .titlebar-key { display: inline; }
+.titlebar.show-keys .titlebar-key-letter { text-decoration: underline; text-underline-offset: 2px; }

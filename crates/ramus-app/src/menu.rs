@@ -59,9 +59,9 @@ pub struct AppMenu {
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     menu: Menu,
     items: HashMap<&'static str, MenuItem>,
-    /// 맨 위 메뉴들(파일·편집·…) 차례대로. Windows 제목 막대의 메뉴 단추가 번호로 고른다.
+    /// 맨 위 메뉴들(파일·편집·…) 차례대로, 그 접근 키(Alt+글자)와 함께. Windows 제목 막대의 메뉴 단추가 번호로 고른다.
     #[cfg_attr(not(windows), allow(dead_code))]
-    submenus: Vec<Submenu>,
+    submenus: Vec<(Submenu, char)>,
 }
 
 /// 그 항목의 단축키. 표의 글은 테스트가 모두 읽어 본다.
@@ -137,7 +137,7 @@ impl AppMenu {
         file.append_items(&[&sep(), &item("settings", tr("설정…", "Settings…")), &sep(), &item(QUIT, tr("끝내기", "Exit"))])
             .expect("파일 메뉴");
         menu.append(&file).expect("파일 메뉴");
-        submenus.push(file);
+        submenus.push((file, 'F'));
 
         // 실행 취소·다시 실행은 직접 만든 항목: 글 칸이면 화면이 글 편집을 되돌리고, 아니면 git 작업을 되돌린다(undoRedo).
         let edit = Submenu::with_items(
@@ -157,7 +157,7 @@ impl AppMenu {
         )
         .expect("편집 메뉴");
         menu.append(&edit).expect("편집 메뉴");
-        submenus.push(edit);
+        submenus.push((edit, 'E'));
 
         let view = Submenu::with_items(
             tr("보기", "View"),
@@ -178,7 +178,7 @@ impl AppMenu {
         #[cfg(not(target_os = "macos"))]
         view.append(&item(FULLSCREEN, tr("전체 화면", "Full Screen"))).expect("보기 메뉴");
         menu.append(&view).expect("보기 메뉴");
-        submenus.push(view);
+        submenus.push((view, 'V'));
 
         let repo = Submenu::with_items(
             tr("레포지토리", "Repository"),
@@ -201,7 +201,7 @@ impl AppMenu {
         )
         .expect("레포지토리 메뉴");
         menu.append(&repo).expect("레포지토리 메뉴");
-        submenus.push(repo);
+        submenus.push((repo, 'R'));
 
         let window = Submenu::with_items(
             tr("창", "Window"),
@@ -215,7 +215,7 @@ impl AppMenu {
             window.set_as_windows_menu_for_nsapp();
         }
         menu.append(&window).expect("창 메뉴");
-        submenus.push(window);
+        submenus.push((window, 'W'));
 
         let help = Submenu::with_items(tr("도움말", "Help"), true, &[&item("shortcuts", tr("키보드 단축키 보기", "Keyboard Shortcuts"))]).expect("도움말 메뉴");
         #[cfg(not(target_os = "macos"))]
@@ -224,7 +224,7 @@ impl AppMenu {
         #[cfg(target_os = "macos")]
         help.set_as_help_menu_for_nsapp();
         menu.append(&help).expect("도움말 메뉴");
-        submenus.push(help);
+        submenus.push((help, 'H'));
 
         AppMenu { menu, items, submenus }
     }
@@ -235,20 +235,27 @@ impl AppMenu {
         self.menu.init_for_nsapp();
     }
 
-    /// 맨 위 메뉴 이름들(Windows 제목 막대가 단추로 그린다). 차례가 `popup` 의 번호다.
+    /// 맨 위 메뉴 이름과 접근 키들(Windows 제목 막대가 단추로 그린다). 차례가 `popup` 의 번호다.
     #[cfg(windows)]
-    pub fn titles(&self) -> Vec<String> {
-        self.submenus.iter().map(Submenu::text).collect()
+    pub fn titles(&self) -> Vec<(String, char)> {
+        self.submenus.iter().map(|(submenu, key)| (submenu.text(), *key)).collect()
     }
 
     /// Windows: `index` 번째 맨 위 메뉴를 창 안쪽 논리 좌표 (x, y) 에 팝업으로 띄운다. 고를 때까지 돌아오지 않는다.
     /// 고른 항목은 메뉴 막대와 똑같이 `MenuEvent` 로 온다.
+    /// keyboard: 키보드로 열었다 — 운영체제 메뉴 막대처럼 첫 항목을 고른 채로 연다(메뉴가 뜨면 바로 읽을 ↓ 키를 미리 넣어 둔다).
     #[cfg(windows)]
-    pub fn popup(&self, window: &tao::window::Window, index: usize, x: f64, y: f64) {
+    pub fn popup(&self, window: &tao::window::Window, index: usize, x: f64, y: f64, keyboard: bool) {
         use muda::ContextMenu;
         use tao::platform::windows::WindowExtWindows;
-        let Some(submenu) = self.submenus.get(index) else { return };
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_DOWN;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_KEYDOWN};
+        let Some((submenu, _)) = self.submenus.get(index) else { return };
         let position = muda::dpi::LogicalPosition::new(x, y);
+        if keyboard {
+            // SAFETY: tao 가 만든 살아 있는 창의 HWND 다. 메시지는 메뉴의 모달 루프가 꺼내 첫 항목으로 옮긴다.
+            unsafe { PostMessageW(window.hwnd() as _, WM_KEYDOWN, VK_DOWN as usize, 0) };
+        }
         // SAFETY: tao 가 만든 살아 있는 창의 HWND 다.
         unsafe { submenu.show_context_menu_for_hwnd(window.hwnd(), Some(position.into())) };
     }

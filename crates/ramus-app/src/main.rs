@@ -68,9 +68,9 @@ enum UserEvent {
     WindowMinimize,
     /// Windows 제목 막대의 닫기 단추 — 창 닫기와 같다(도는 원격 작업이 있으면 묻는다).
     WindowClose,
-    /// Windows 제목 막대의 메뉴 단추: (요청 id, 메뉴 번호, 띄울 자리 x, y — 화면 CSS 픽셀).
+    /// Windows 제목 막대의 메뉴 단추: (요청 id, 메뉴 번호, 띄울 자리 x, y — 화면 CSS 픽셀, 키보드로 열었나).
     #[cfg_attr(not(windows), allow(dead_code))]
-    MenuPopup(u64, usize, f64, f64),
+    MenuPopup(u64, usize, f64, f64, bool),
     /// Windows 제목 막대가 그릴 메뉴 이름들을 묻는다(요청 id).
     #[cfg_attr(not(windows), allow(dead_code))]
     MenuTitles(u64),
@@ -299,7 +299,8 @@ fn main() -> wry::Result<()> {
                 // 팝업은 고를 때까지 돌아오지 않는다 — 응답은 메뉴가 닫힌 뒤에 보낸다(화면이 단추의 눌린 모양을 그때 거둔다).
                 let arg = |key: &str| request.args.get(key).and_then(Value::as_f64).unwrap_or(0.0);
                 let index = request.args.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
-                let _ = ipc_proxy.send_event(UserEvent::MenuPopup(request.id, index, arg("x"), arg("y")));
+                let keyboard = request.args.get("keyboard").and_then(Value::as_bool).unwrap_or(false);
+                let _ = ipc_proxy.send_event(UserEvent::MenuPopup(request.id, index, arg("x"), arg("y"), keyboard));
             } else if request.cmd == "menuTitles" {
                 let _ = ipc_proxy.send_event(UserEvent::MenuTitles(request.id));
             } else if request.cmd == "quit" {
@@ -385,13 +386,15 @@ fn main() -> wry::Result<()> {
             Event::UserEvent(UserEvent::WindowZoom) => window.set_maximized(!window.is_maximized()),
             Event::UserEvent(UserEvent::WindowMinimize) => window.set_minimized(true),
             #[cfg(windows)]
-            Event::UserEvent(UserEvent::MenuPopup(id, index, x, y)) => {
-                app_menu.popup(&window, index, x * zoom, y * zoom);
+            Event::UserEvent(UserEvent::MenuPopup(id, index, x, y, keyboard)) => {
+                app_menu.popup(&window, index, x * zoom, y * zoom, keyboard);
+                // 팝업이 닫히면 키보드 포커스가 창에 남는다 — 웹뷰로 돌려야 다음 키(Alt 등)가 화면에 간다.
+                let _ = webview.focus();
                 let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(Value::Null))));
             }
             #[cfg(windows)]
             Event::UserEvent(UserEvent::MenuTitles(id)) => {
-                let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(json!(app_menu.titles())))));
+                let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(json!(app_menu.titles().into_iter().map(|(title, key)| json!({ "title": title, "key": key })).collect::<Vec<_>>())))));
             }
             // 전체 화면·최대화가 바뀌면 화면에 알린다(macOS 탭 막대가 신호등 자리 여백을 거두게, Windows 최대화 단추 모양).
             Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {

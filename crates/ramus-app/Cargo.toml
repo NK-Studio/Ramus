@@ -22,6 +22,10 @@ trash = "5"
 # TIFF 는 WebView 가 못 그린다 — 백엔드에서 PNG 로 바꿔 넘긴다.
 image = { version = "0.25", default-features = false, features = ["tiff", "png"] }
 
+# Windows 제목 막대의 메뉴를 키보드로 열 때 첫 항목을 고른다(menu.rs). muda 가 쓰는 판과 같다.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 
