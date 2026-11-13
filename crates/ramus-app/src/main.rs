@@ -187,6 +187,16 @@ fn main() -> wry::Result<()> {
             .with_fullsize_content_view(true)
             .with_traffic_light_inset(tao::dpi::LogicalPosition::new(14.0, 21.0))
     };
+    // Windows: 실행 파일 아이콘만으로는 창 제목 막대·작업 표시줄이 기본 아이콘으로 남는다.
+    // build.rs 가 묻은 아이콘 리소스(id 1)를 창의 작은 아이콘(제목 막대)과 큰 아이콘(작업 표시줄·Alt+Tab)으로 건다.
+    #[cfg(windows)]
+    let builder = {
+        use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
+        use tao::window::Icon;
+        builder
+            .with_window_icon(Icon::from_resource(1, None).ok())
+            .with_taskbar_icon(Icon::from_resource(1, None).ok())
+    };
     let window = builder.build(&event_loop).expect("창을 만들지 못했습니다");
 
     // 메뉴 막대. 항목을 누르면(macOS 는 단축키도) 이벤트 루프로 id 를 보낸다.
