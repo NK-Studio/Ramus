@@ -7,6 +7,9 @@
 //!
 //! 메뉴 막대(menu.rs)를 누르면 `UserEvent::Menu(id)` 로 이벤트 루프에 오고, `window.__gitvcs.menu("<id>")` 로 화면에 넘긴다.
 //! 화면은 상태가 바뀌면 `menuState` 로 항목을 켜고 끈다.
+//!
+//! Windows 는 운영체제 제목 막대를 없앤 창이다: 화면이 맨 위에 메뉴 단추·제목·창 단추를 한 줄로 그리고(ui/titlebar.js),
+//! 메뉴 단추는 `menuPopup` 으로 운영체제 팝업 메뉴를 띄운다.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -59,8 +62,18 @@ enum UserEvent {
     ToggleFullscreen,
     /// 탭 막대 빈 곳을 끌기 시작했다 — 창을 옮긴다(macOS).
     WindowDrag,
-    /// 탭 막대 빈 곳을 두 번 눌렀다 — 창을 키우거나 되돌린다(macOS).
+    /// 탭 막대 빈 곳을 두 번 눌렀다 — 창을 키우거나 되돌린다(macOS·Windows 제목 막대).
     WindowZoom,
+    /// Windows 제목 막대의 최소화 단추.
+    WindowMinimize,
+    /// Windows 제목 막대의 닫기 단추 — 창 닫기와 같다(도는 원격 작업이 있으면 묻는다).
+    WindowClose,
+    /// Windows 제목 막대의 메뉴 단추: (요청 id, 메뉴 번호, 띄울 자리 x, y — 화면 CSS 픽셀).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    MenuPopup(u64, usize, f64, f64),
+    /// Windows 제목 막대가 그릴 메뉴 이름들을 묻는다(요청 id).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    MenuTitles(u64),
     /// 끄기를 물었더니 "계속하기" — 다음 닫기 요청에 다시 묻는다.
     QuitDismissed,
     /// 원격 작업을 정리했다 — 이제 끈다.
@@ -187,13 +200,23 @@ fn main() -> wry::Result<()> {
             .with_fullsize_content_view(true)
             .with_traffic_light_inset(tao::dpi::LogicalPosition::new(14.0, 21.0))
     };
-    // Windows: 실행 파일 아이콘만으로는 창 제목 막대·작업 표시줄이 기본 아이콘으로 남는다.
-    // build.rs 가 묻은 아이콘 리소스(id 1)를 창의 작은 아이콘(제목 막대)과 큰 아이콘(작업 표시줄·Alt+Tab)으로 건다.
+    // Windows: 운영체제 제목 막대를 없애고 화면이 메뉴·제목·창 단추를 한 줄로 그린다(Fork 처럼, 제목 막대에 아이콘 없음).
+    // 그림자를 남기면 운영체제가 창 가장자리 크기 조절을 그대로 해 준다.
+    // 아이콘은 작업 표시줄·Alt+Tab 에 쓴다 — build.rs 가 묻은 아이콘 리소스(id 1).
+    // 테마를 정해 두면 팝업 메뉴도 화면 테마(어둡게·밝게)를 따른다.
     #[cfg(windows)]
     let builder = {
         use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
-        use tao::window::Icon;
+        use tao::window::{Icon, Theme};
+        let window_theme = match theme.as_str() {
+            "light" => Some(Theme::Light),
+            "system" => None,
+            _ => Some(Theme::Dark),
+        };
         builder
+            .with_decorations(false)
+            .with_undecorated_shadow(true)
+            .with_theme(window_theme)
             .with_window_icon(Icon::from_resource(1, None).ok())
             .with_taskbar_icon(Icon::from_resource(1, None).ok())
     };
@@ -205,14 +228,6 @@ fn main() -> wry::Result<()> {
     muda::MenuEvent::set_event_handler(Some(move |event: muda::MenuEvent| {
         let _ = menu_proxy.lock().unwrap().send_event(UserEvent::Menu(event.id().0.clone()));
     }));
-    let menu_theme = match theme.as_str() {
-        "light" => Some(false),
-        "system" => None,
-        _ => Some(true),
-    };
-    // Windows 는 웹뷰를 붙이기 전에 메뉴 막대를 붙인다 — 메뉴 높이만큼 줄어든 창 안쪽에 웹뷰가 맞춰지게.
-    #[cfg(not(target_os = "macos"))]
-    app_menu.attach(&window, menu_theme);
 
     #[cfg(debug_assertions)]
     let dev_pending = devtools::Pending::default();
@@ -271,10 +286,22 @@ fn main() -> wry::Result<()> {
             } else if request.cmd == "toggleFullscreen" {
                 let _ = ipc_proxy.send_event(UserEvent::ToggleFullscreen);
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
-            } else if request.cmd == "windowDrag" || request.cmd == "windowZoom" {
-                let event = if request.cmd == "windowDrag" { UserEvent::WindowDrag } else { UserEvent::WindowZoom };
+            } else if matches!(request.cmd.as_str(), "windowDrag" | "windowZoom" | "windowMinimize" | "windowClose") {
+                let event = match request.cmd.as_str() {
+                    "windowDrag" => UserEvent::WindowDrag,
+                    "windowZoom" => UserEvent::WindowZoom,
+                    "windowMinimize" => UserEvent::WindowMinimize,
+                    _ => UserEvent::WindowClose,
+                };
                 let _ = ipc_proxy.send_event(event);
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "menuPopup" {
+                // 팝업은 고를 때까지 돌아오지 않는다 — 응답은 메뉴가 닫힌 뒤에 보낸다(화면이 단추의 눌린 모양을 그때 거둔다).
+                let arg = |key: &str| request.args.get(key).and_then(Value::as_f64).unwrap_or(0.0);
+                let index = request.args.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+                let _ = ipc_proxy.send_event(UserEvent::MenuPopup(request.id, index, arg("x"), arg("y")));
+            } else if request.cmd == "menuTitles" {
+                let _ = ipc_proxy.send_event(UserEvent::MenuTitles(request.id));
             } else if request.cmd == "quit" {
                 // 끄기 확인에 대한 답. cancel: 끈다 — Clone·Fetch·Push 는 멈추고, Pull 은 끝날 때까지 기다린 뒤 끈다.
                 if request.args.get("cancel").and_then(Value::as_bool).unwrap_or(false) {
@@ -309,6 +336,10 @@ fn main() -> wry::Result<()> {
         .build(&window)?;
 
     let mut was_fullscreen = false;
+    let mut was_maximized = false;
+    // 웹뷰 확대 배율: 화면의 CSS 픽셀 × 이 값 = 창의 논리 픽셀(메뉴 팝업 자리를 맞춘다).
+    #[cfg_attr(not(windows), allow(unused_variables, unused_assignments))]
+    let mut zoom = 1.0;
     // 끄기를 물어본 뒤 답을 기다리는 중. 이때 또 닫으면(화면이 멈췄을 수 있다) 묻지 않고 끈다.
     let mut quit_asked = false;
     event_loop.run(move |event, _, control_flow| {
@@ -316,9 +347,9 @@ fn main() -> wry::Result<()> {
         match event {
             // macOS 는 NSApp 이 다 뜬 뒤에 앱 메뉴를 붙인다.
             #[cfg(target_os = "macos")]
-            Event::NewEvents(tao::event::StartCause::Init) => app_menu.attach(&window, menu_theme),
+            Event::NewEvents(tao::event::StartCause::Init) => app_menu.attach(),
             // 창 닫기·종료 메뉴: 원격 작업(Clone·Fetch·Pull·Push)이 돌면 화면에 묻는다. 끊으면 받다 만 폴더·작업 트리가 남는다.
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(UserEvent::WindowClose) => {
                 if quit_asked || state.running_jobs().is_empty() {
                     *control_flow = ControlFlow::Exit;
                 } else {
@@ -344,21 +375,32 @@ fn main() -> wry::Result<()> {
             Event::UserEvent(UserEvent::MenuState(states)) => app_menu.set_enabled(&states),
             Event::UserEvent(UserEvent::Relabel) => {
                 // 켜고 끈 상태는 화면이 다시 읽으며 menuState 로 다시 알린다.
-                app_menu.detach(&window);
                 app_menu = menu::AppMenu::build();
-                app_menu.attach(&window, menu_theme);
+                app_menu.attach();
             }
             Event::UserEvent(UserEvent::ToggleFullscreen) => toggle_fullscreen(&window),
             Event::UserEvent(UserEvent::WindowDrag) => {
                 let _ = window.drag_window();
             }
             Event::UserEvent(UserEvent::WindowZoom) => window.set_maximized(!window.is_maximized()),
-            // 전체 화면이 바뀌면 화면에 알린다(macOS 탭 막대가 신호등 자리 여백을 거두게).
+            Event::UserEvent(UserEvent::WindowMinimize) => window.set_minimized(true),
+            #[cfg(windows)]
+            Event::UserEvent(UserEvent::MenuPopup(id, index, x, y)) => {
+                app_menu.popup(&window, index, x * zoom, y * zoom);
+                let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(Value::Null))));
+            }
+            #[cfg(windows)]
+            Event::UserEvent(UserEvent::MenuTitles(id)) => {
+                let _ = webview.evaluate_script(&format!("window.__gitvcs.reply({})", reply_json(id, Ok(json!(app_menu.titles())))));
+            }
+            // 전체 화면·최대화가 바뀌면 화면에 알린다(macOS 탭 막대가 신호등 자리 여백을 거두게, Windows 최대화 단추 모양).
             Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
                 let fullscreen = window.fullscreen().is_some();
-                if was_fullscreen != fullscreen {
+                let maximized = window.is_maximized();
+                if was_fullscreen != fullscreen || was_maximized != maximized {
                     was_fullscreen = fullscreen;
-                    let body = json!({ "event": "window", "data": { "fullscreen": fullscreen } });
+                    was_maximized = maximized;
+                    let body = json!({ "event": "window", "data": { "fullscreen": fullscreen, "maximized": maximized } });
                     let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.event({body})"));
                 }
             }
@@ -371,8 +413,14 @@ fn main() -> wry::Result<()> {
                     ramus_core::runner::trace(&format!("reply {}KB marshal+eval", body.len() / 1024), started);
                 }
             }
-            Event::UserEvent(UserEvent::Title(title)) => window.set_title(&title),
+            Event::UserEvent(UserEvent::Title(title)) => {
+                window.set_title(&title);
+                // Windows 는 화면이 제목 막대를 그린다.
+                let body = json!({ "event": "title", "data": title });
+                let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.event({body})"));
+            }
             Event::UserEvent(UserEvent::Zoom(scale)) => {
+                zoom = scale;
                 let _ = webview.zoom(scale);
                 window.set_min_inner_size(Some(LogicalSize::new(MIN_WIDTH * scale, MIN_HEIGHT * scale)));
             }

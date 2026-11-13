@@ -57,7 +57,7 @@ const GLOBAL_COMMANDS = new Set([
   'clone', 'cancelJob', 'quit', 'cloneName', 'githubCloneList', 'githubCloneAccounts', 'githubCloneCache', 'githubCloneCacheSave',
   'avatar', 'exportKeychain', 'remoteLogin', 'forgetSshLogin', 'gitVersion', 'gitInfo', 'checkGit',
   'githubDeviceStart', 'githubDevicePoll', 'githubStatus', 'githubLogout', 'githubAccounts', 'sshKeys', 'sshKeyRead', 'sshKeyGenerate', 'sshKeyUpload', 'openUrl', 'openDefault', 'openFolder', 'trashRepo',
-  'pick', 'pickRepo', 'setZoom', 'menuState', 'toggleFullscreen', 'windowDrag', 'windowZoom', '__devResult',
+  'pick', 'pickRepo', 'setZoom', 'menuState', 'toggleFullscreen', 'windowDrag', 'windowZoom', 'windowMinimize', 'windowClose', 'menuPopup', 'menuTitles', '__devResult',
 ]);
 
 /** 열린 레포지토리에서 실행되는 요청인가(전환 중에는 미루고, 보낼 때 __repo 를 붙인다). */

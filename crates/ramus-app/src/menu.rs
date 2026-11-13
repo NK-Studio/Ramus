@@ -1,4 +1,5 @@
-//! 운영체제 메뉴 막대: macOS 는 화면 맨 위 메뉴, Windows 는 창 위 메뉴 막대.
+//! 운영체제 메뉴: macOS 는 화면 맨 위 메뉴 막대. Windows 는 창에 메뉴 막대를 붙이지 않고, 화면이 그린 제목 막대(ui/titlebar.js)의
+//! 메뉴 단추를 누르면 그 아래에 같은 하위 메뉴를 운영체제 팝업으로 띄운다(Fork 처럼 메뉴와 제목 막대가 한 줄).
 //!
 //! 우리가 만든 항목은 누르면 id 를 화면에 넘기고(`window.__gitvcs.menu("fetch")`), 화면이 도구 막대·키 처리와 같은 함수를 부른다.
 //! 잘라내기·복사·붙여넣기·모두 선택·창 다루기는 운영체제 기본 항목(predefined)이라 글 칸에서 그대로 동작한다.
@@ -55,8 +56,12 @@ pub const QUIT: &str = "quit";
 pub const FULLSCREEN: &str = "fullscreen";
 
 pub struct AppMenu {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     menu: Menu,
     items: HashMap<&'static str, MenuItem>,
+    /// 맨 위 메뉴들(파일·편집·…) 차례대로. Windows 제목 막대의 메뉴 단추가 번호로 고른다.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    submenus: Vec<Submenu>,
 }
 
 /// 그 항목의 단축키. 표의 글은 테스트가 모두 읽어 본다.
@@ -81,6 +86,7 @@ impl AppMenu {
         let reveal_label = if cfg!(windows) { tr("탐색기에서 보기", "Show in Explorer") } else { tr("Finder 에서 보기", "Reveal in Finder") };
 
         let menu = Menu::new();
+        let mut submenus = Vec::new();
 
         #[cfg(target_os = "macos")]
         {
@@ -131,6 +137,7 @@ impl AppMenu {
         file.append_items(&[&sep(), &item("settings", tr("설정…", "Settings…")), &sep(), &item(QUIT, tr("끝내기", "Exit"))])
             .expect("파일 메뉴");
         menu.append(&file).expect("파일 메뉴");
+        submenus.push(file);
 
         // 실행 취소·다시 실행은 직접 만든 항목: 글 칸이면 화면이 글 편집을 되돌리고, 아니면 git 작업을 되돌린다(undoRedo).
         let edit = Submenu::with_items(
@@ -150,6 +157,7 @@ impl AppMenu {
         )
         .expect("편집 메뉴");
         menu.append(&edit).expect("편집 메뉴");
+        submenus.push(edit);
 
         let view = Submenu::with_items(
             tr("보기", "View"),
@@ -170,6 +178,7 @@ impl AppMenu {
         #[cfg(not(target_os = "macos"))]
         view.append(&item(FULLSCREEN, tr("전체 화면", "Full Screen"))).expect("보기 메뉴");
         menu.append(&view).expect("보기 메뉴");
+        submenus.push(view);
 
         let repo = Submenu::with_items(
             tr("레포지토리", "Repository"),
@@ -192,6 +201,7 @@ impl AppMenu {
         )
         .expect("레포지토리 메뉴");
         menu.append(&repo).expect("레포지토리 메뉴");
+        submenus.push(repo);
 
         let window = Submenu::with_items(
             tr("창", "Window"),
@@ -205,6 +215,7 @@ impl AppMenu {
             window.set_as_windows_menu_for_nsapp();
         }
         menu.append(&window).expect("창 메뉴");
+        submenus.push(window);
 
         let help = Submenu::with_items(tr("도움말", "Help"), true, &[&item("shortcuts", tr("키보드 단축키 보기", "Keyboard Shortcuts"))]).expect("도움말 메뉴");
         #[cfg(not(target_os = "macos"))]
@@ -213,39 +224,33 @@ impl AppMenu {
         #[cfg(target_os = "macos")]
         help.set_as_help_menu_for_nsapp();
         menu.append(&help).expect("도움말 메뉴");
+        submenus.push(help);
 
-        AppMenu { menu, items }
+        AppMenu { menu, items, submenus }
     }
 
-    /// 메뉴를 붙인다. macOS 는 앱 전체(NSApp), Windows 는 이 창. 그 밖(리눅스)은 붙이지 않는다.
-    #[allow(unused_variables)]
-    pub fn attach(&self, window: &tao::window::Window, dark: Option<bool>) {
+    /// 메뉴를 붙인다. macOS 는 앱 전체(NSApp). Windows 는 창에 붙이지 않는다(제목 막대 단추가 `popup` 으로 띄운다). 리눅스도 붙이지 않는다.
+    pub fn attach(&self) {
         #[cfg(target_os = "macos")]
         self.menu.init_for_nsapp();
-        #[cfg(target_os = "windows")]
-        {
-            use tao::platform::windows::WindowExtWindows;
-            let theme = match dark {
-                Some(true) => muda::MenuTheme::Dark,
-                Some(false) => muda::MenuTheme::Light,
-                None => muda::MenuTheme::Auto,
-            };
-            // SAFETY: tao 가 만든 살아 있는 창의 HWND 다.
-            if let Err(e) = unsafe { self.menu.init_for_hwnd_with_theme(window.hwnd(), theme) } {
-                eprintln!("메뉴 막대를 붙이지 못했습니다: {e}");
-            }
-        }
     }
 
-    /// 붙인 메뉴를 뗀다(언어를 바꿔 다시 만들기 전에). macOS 는 새 메뉴를 붙이면 바뀌므로 할 일이 없다.
-    #[allow(unused_variables)]
-    pub fn detach(&self, window: &tao::window::Window) {
-        #[cfg(target_os = "windows")]
-        {
-            use tao::platform::windows::WindowExtWindows;
-            // SAFETY: tao 가 만든 살아 있는 창의 HWND 다.
-            let _ = unsafe { self.menu.remove_for_hwnd(window.hwnd()) };
-        }
+    /// 맨 위 메뉴 이름들(Windows 제목 막대가 단추로 그린다). 차례가 `popup` 의 번호다.
+    #[cfg(windows)]
+    pub fn titles(&self) -> Vec<String> {
+        self.submenus.iter().map(Submenu::text).collect()
+    }
+
+    /// Windows: `index` 번째 맨 위 메뉴를 창 안쪽 논리 좌표 (x, y) 에 팝업으로 띄운다. 고를 때까지 돌아오지 않는다.
+    /// 고른 항목은 메뉴 막대와 똑같이 `MenuEvent` 로 온다.
+    #[cfg(windows)]
+    pub fn popup(&self, window: &tao::window::Window, index: usize, x: f64, y: f64) {
+        use muda::ContextMenu;
+        use tao::platform::windows::WindowExtWindows;
+        let Some(submenu) = self.submenus.get(index) else { return };
+        let position = muda::dpi::LogicalPosition::new(x, y);
+        // SAFETY: tao 가 만든 살아 있는 창의 HWND 다.
+        unsafe { submenu.show_context_menu_for_hwnd(window.hwnd(), Some(position.into())) };
     }
 
     /// 화면이 알린 상태로 항목을 켜고 끈다. 모르는 id 는 건너뛴다.

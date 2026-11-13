@@ -15,6 +15,7 @@ import { createSidebar } from './sidebar.js';
 import { createToolbar } from './toolbar.js';
 import { createMergeView } from './merge.js';
 import { cloneDialog, loginDialog, settingsDialog, renderTabs, bindTitlebar } from './screens.js';
+import { createTitlebar } from './titlebar.js';
 import { startOpCard, setOpCardViewing } from './opcard.js';
 import { installTooltips } from './tooltip.js';
 import { createTools } from './tools.js';
@@ -2412,6 +2413,8 @@ function createViewsOnce() {
 (async () => {
   // index.html 에 그대로 쓴 글(시작 화면 등)을 지금 언어로.
   translateStatic(document.body);
+  // Windows 제목 막대는 init 을 기다리지 않는다 — 켜다 실패해도 창을 옮기고 닫을 수 있게.
+  if (window.__boot?.platform === 'windows') createTitlebar($('titlebar'));
   try {
     // 글꼴(IBM Plex Sans KR)을 첫 화면 전에 다 읽어 둔다 — 그래프는 캔버스로 글자 폭을 재므로, 읽기 전에 재면 시스템 글꼴 폭으로 어긋난다.
     const fontsReady = Promise.all([400, 500, 600, 700].map((w) => document.fonts?.load(`${w} 13px "IBM Plex Sans KR"`))).catch(() => {});
