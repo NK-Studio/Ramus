@@ -388,16 +388,25 @@ const DRAWER_SLIDE_MS = 400;
 export function openDrawer({ glyph, title, anchor, build, width = 480 }) {
   const swap = !!openDrawerState;
   openDrawerState?.close(true);
-  const rect = anchor.getBoundingClientRect();
   // 원본은 본문이 서랍을 잘라 사이드바 위로 그려지지 않는다. 같은 자리를 잘라 보이는 틀에 담는다(틀은 포인터를 받지 않는다).
-  const room = Math.max(0, window.innerWidth - rect.right);
-  const clip = el('div', { class: 'drawer-clip', style: { left: `${rect.right}px`, top: `${rect.top}px`, height: `${rect.height}px`, width: `${room}px` } });
-  const panel = el('aside', { class: `drawer${swap ? ' no-anim' : ''}`, style: { width: `${Math.min(width, room)}px` } },
+  const clip = el('div', { class: 'drawer-clip' });
+  const panel = el('aside', { class: `drawer${swap ? ' no-anim' : ''}` },
     el('div', { class: 'drawer-head' }, glyph ? icon(glyph, 20, 'drawer-glyph') : null, el('div', { class: 'drawer-title', text: title }),
       el('button', { class: 'card-close', 'data-tip': t('닫기'), onclick: () => close() }, icon('close', 14))));
   const body = el('div', { class: 'drawer-body' });
   panel.append(body);
   clip.append(panel);
+  // 붙을 자리는 창 크기·사이드바 폭이 바뀔 때마다 다시 잰다 — 연 순간에 한 번만 재면 창을 키울 때 아래가 잘린다.
+  const place = () => {
+    const rect = anchor.getBoundingClientRect();
+    const room = Math.max(0, window.innerWidth - rect.right);
+    Object.assign(clip.style, { left: `${rect.right}px`, top: `${rect.top}px`, height: `${rect.height}px`, width: `${room}px` });
+    panel.style.width = `${Math.min(width, room)}px`;
+  };
+  place();
+  const resized = new ResizeObserver(place);
+  resized.observe(anchor);
+  window.addEventListener('resize', place);
   document.body.append(clip);
   const onKey = (event) => {
     if (event.key === 'Escape' && !document.querySelector('.modal-backdrop, .menu')) {
@@ -412,6 +421,8 @@ export function openDrawer({ glyph, title, anchor, build, width = 480 }) {
     if (openDrawerState?.panel !== panel) return;
     openDrawerState = null;
     document.removeEventListener('keydown', onKey, true);
+    resized.disconnect();
+    window.removeEventListener('resize', place);
     if (immediate) clip.remove();
     else {
       panel.classList.add('closing');

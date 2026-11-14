@@ -186,7 +186,7 @@ const refsUi = createRefs({
   },
   addRemote: () => refsUi.addRemote(),
   showInExplorer: (hash) => showInExplorer(hash),
-  sidebarElement: () => $('sidebar'),
+  sidebarElement: () => drawerAnchor(),
   pull: () => pull(),
   fetch: () => fetchNow(),
   compare: (from, to, options) => toolsUi.compare(from, to, options),
@@ -247,7 +247,7 @@ const github = createGitHub({
   state,
   showError,
   toast,
-  sidebarElement: () => $('sidebar'),
+  sidebarElement: () => drawerAnchor(),
   onChanged: () => {
     sidebar.render();
     renderFooter();
@@ -1963,11 +1963,19 @@ const MAIN_TAB = { gitkraken: ['hierarchy', t('그래프')], fork: ['pencil', t(
  * diff·병합 편집기·도구 화면을 열면 사이드바가 아이콘 레일로 접힌다(원본 SidebarRail):
  * [펼치기] · 보기 탭 4개(고른 탭 강조, 변경 수) · 구역 아이콘과 개수. 탭을 누르면 펼치고 그 탭으로, 구역을 누르면 펼치고 그 구역으로.
  */
+/** 서랍이 붙을 왼쪽 패널: 사이드바, 접혀 있으면 아이콘 막대(숨은 사이드바에 붙으면 크기가 0 이라 보이지 않는다). */
+const drawerAnchor = () => ($('sidebar').hidden ? $('rail') : $('sidebar'));
+let railFolded = false;
+
 function renderRail() {
   const folded = (diffView.isOpen && (views?.usesGraph ?? true)) || mergeView.isOpen || toolOpen();
   $('rail').hidden = !folded;
   $('sidebar').hidden = folded;
   document.querySelector('.splitter[data-split="sidebar"]').hidden = folded;
+  // 서랍(PR 상세 등)은 왼쪽 패널 오른쪽에 붙어 뜬다 — 패널이 접히거나 펼쳐지면 붙던 자리가 사라지니 같이 닫는다
+  // (PR 의 "바뀐 것 보기" 처럼 서랍에서 연 화면을 서랍이 가리지 않게).
+  if (folded !== railFolded) closeDrawer();
+  railFolded = folded;
   if (!folded) return;
   const refs = state.refs ?? { local: [], remote: [], tags: [], stashes: [] };
   const restore = async () => {
