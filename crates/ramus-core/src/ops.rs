@@ -231,6 +231,35 @@ impl Repository {
         })
     }
 
+    /// 브랜치를 `target`(보통 지금 HEAD)까지 앞으로 감는다. 브랜치 끝이 `target` 의 조상이 아니면(갈라졌으면) 하지 않는다.
+    /// 다른 워크트리에서 체크아웃한 브랜치면 그 워크트리 안에서 `merge --ff-only` 해 작업 트리도 함께 옮기고,
+    /// 지금 브랜치면 여기서 같은 일을 한다. 아무 데서도 쓰지 않는 브랜치는 참조만 옮긴다.
+    pub fn fast_forward_to(&self, branch: &str, target: &str) -> Result<()> {
+        let hash = self.git_run(&["rev-parse", "--verify", &format!("{target}^{{commit}}")])?.trim().to_string();
+        let full = format!("refs/heads/{branch}");
+        let old = self.git_run(&["rev-parse", "--verify", &full])?.trim().to_string();
+        if old == hash {
+            return Ok(());
+        }
+        if self.git_run(&["merge-base", "--is-ancestor", &old, &hash]).is_err() {
+            if self.git_run(&["merge-base", "--is-ancestor", &hash, &old]).is_ok() {
+                return Err(GitError::new(crate::trf!(
+                    "'{branch}' 가 이미 '{target}' 보다 앞서 있어 앞으로 감을 것이 없습니다.",
+                    "'{branch}' is already ahead of '{target}', so there's nothing to fast-forward."
+                )));
+            }
+            return Err(GitError::new(crate::trf!(
+                "'{branch}' 가 '{target}' 와 갈라져 앞으로 감을 수 없습니다. 병합하거나 Rebase 해 주세요.",
+                "'{branch}' has diverged from '{target}', so it can't fast-forward. Merge or Rebase instead."
+            )));
+        }
+        match self.worktrees()?.into_iter().find(|w| w.branch.as_deref() == Some(branch)) {
+            Some(w) if w.current => self.git_run(&["merge", "--ff-only", &hash]).map(|_| ()),
+            Some(w) => Repository::open(self.runner().clone(), std::path::Path::new(&w.path))?.git_run(&["merge", "--ff-only", &hash]).map(|_| ()),
+            None => self.git_run(&["update-ref", "-m", &format!("fast-forward: {target}"), &full, &hash, &old]).map(|_| ()),
+        }
+    }
+
     pub fn merge_with(&self, revision: &str, mode: MergeMode) -> Result<String> {
         let mut args = vec!["merge", "--no-edit"];
         match mode {

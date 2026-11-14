@@ -1322,7 +1322,10 @@ impl AppState {
                     "fetchRemote" => done(repo.fetch_remote(a.s("name")?)),
                     "pushBranch" => text(repo.push_branch(a.s("branch")?, a.s("remote")?, a.b("setUpstream"), a.b("force"))),
                     "setUpstream" => done(repo.set_upstream(a.s("branch")?, a.s("upstream").ok())),
-                    "fastForward" => done(repo.fast_forward(a.s("branch")?, a.b("current"))),
+                    "fastForward" => done(match a.s("target") {
+                        Ok(target) => repo.fast_forward_to(a.s("branch")?, target),
+                        Err(_) => repo.fast_forward(a.s("branch")?, a.b("current")),
+                    }),
                     "addWorktree" => done(repo.add_worktree(a.s("path")?, a.s("reference")?, a.s("newBranch").ok())),
                     "removeWorktree" => done(repo.remove_worktree(a.s("path")?, a.b("force"))),
                     "addSubmodule" => done(repo.add_submodule(a.s("url")?, a.s("path")?, a.s("branch").ok())),

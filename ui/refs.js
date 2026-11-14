@@ -107,8 +107,8 @@ export function createRefs(ctx) {
    * 원본 BranchActions.DeleteAsync: 확인 → `branch -d`. 병합되지 않은 커밋이 있어 거부되면 강제 삭제를 한 번 더 묻고,
    * 지운 뒤에는 추적하던 원격 브랜치도 지울지 묻는다.
    */
-  async function deleteBranch(branch) {
-    if (!(await confirmDialog({
+  async function deleteBranch(branch, { confirmed = false } = {}) {
+    if (!confirmed && !(await confirmDialog({
       title: t('브랜치 삭제'), glyph: 'branch', danger: true, ok: t('삭제'),
       message: t("로컬 브랜치 '{name}'을(를) 삭제합니다. 원격 브랜치는 그대로 둡니다.", { name: branch.name }),
     }))) return;
@@ -538,6 +538,21 @@ export function createRefs(ctx) {
     await run(t('워크트리를 제거하는 중…'), 'removeWorktree', { path: w.path, force: false }, t('워크트리를 제거했습니다.'));
   }
 
+  /** 브랜치를 체크아웃해 둔 워크트리를 지우고 그 브랜치도 지운다(한 번 묻는다). 병합되지 않았으면 deleteBranch 가 강제 삭제를 따로 묻는다. */
+  async function removeWorktreeAndBranch(w, branch) {
+    if (!(await confirmDialog({
+      title: t('워크트리와 브랜치 제거'), glyph: 'worktree', danger: true, ok: t('삭제'),
+      message: t("워크트리 {path} 를 제거하고 로컬 브랜치 '{name}' 도 지울까요?\n\n그 폴더가 지워집니다. 커밋하지 않은 변경이 있으면 git 이 거부합니다.", { path: w.path, name: branch.name }),
+    }))) return;
+    const removed = await act(t('워크트리를 제거하는 중…'), () => call('removeWorktree', { path: w.path, force: false }).then(() => true), { success: () => t('워크트리를 제거했습니다.') });
+    if (removed === true) await deleteBranch(branch, { confirmed: true });
+  }
+
+  /** 브랜치를 target(지금 HEAD)까지 앞으로 감는다. 다른 워크트리에서 쓰는 브랜치면 그 워크트리의 작업 트리도 함께 옮긴다(Rust fast_forward_to). */
+  async function fastForwardTo(branch, target, label = target) {
+    await run(t('앞으로 감는 중…'), 'fastForward', { branch: branch.name, target }, t("'{name}' 를 '{target}' 로 앞으로 감았습니다.", { name: branch.name, target: label }));
+  }
+
   /** 주소에서 서브모듈 경로를 짐작한다(원본 GitSubmoduleForm.PathFromUrl): 마지막 / \ : 뒤, ".git" 은 뗀다. */
   function pathFromUrl(url) {
     const trimmed = url.trim().replace(/[\\/]+$/, '');
@@ -687,54 +702,147 @@ export function createRefs(ctx) {
     if (other) ctx.compare?.(other, revision, { title: `${other} ↔ ${label}` });
   }
 
-  /** 브랜치 메뉴 항목(로컬). 커밋 메뉴의 하위 메뉴에도 쓴다. */
-  function localItems(branch) {
+  /** GitHub 원격의 웹 주소(https://github.com/owner/repo). name 을 주면 그 원격만, 아니면 origin 부터 본다. 없으면 null. */
+  function githubBase(name) {
+    const list = [...(ctx.state.remotes ?? [])].filter((r) => !name || r.name === name).sort((a, b) => (b.name === 'origin') - (a.name === 'origin'));
+    for (const r of list) {
+      const m = /github\.com[:/]+([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i.exec(r.fetchUrl ?? '');
+      if (m) return `https://github.com/${m[1]}/${m[2]}`;
+    }
+    return null;
+  }
+
+  /** 원격 브랜치(origin/feat)의 GitHub 주소. GitHub 원격이 아니면 null. */
+  function githubBranchUrl(remoteBranch) {
+    if (!remoteBranch) return null;
+    const remote = remotes().find((r) => remoteBranch.startsWith(`${r}/`)) ?? remoteBranch.split('/')[0];
+    const base = githubBase(remote);
+    return base && `${base}/tree/${remoteBranch.slice(remote.length + 1).split('/').map(encodeURIComponent).join('/')}`;
+  }
+
+  /** 그래프에 읽어 둔 커밋(부모 수를 알아야 하는 Cherry-pick·Revert·고치기에 쓴다). 없으면 null. */
+  const loadedCommit = (hash) => (hash && ctx.state.history?.commits.find((c) => c.hash === hash)) || null;
+
+  function cherryPick(commit) {
+    return run(t('Cherry-pick 하는 중…'), 'cherryPick', { hash: commit.hash, merge: commit.parents.length > 1 }, t('Cherry-pick 했습니다.'));
+  }
+
+  async function revertCommit(commit) {
+    if (await confirmDialog({ title: 'Revert', glyph: 'undo', message: t('{hash} "{subject}" 를 되돌리는 새 커밋을 만듭니다.', { hash: commit.shortHash, subject: commit.subject }), ok: 'Revert' })) {
+      await run(t('Revert 하는 중…'), 'revert', { hash: commit.hash, merge: commit.parents.length > 1 }, t('Revert 했습니다.'));
+    }
+  }
+
+  const resetSubmenu = (hash) => [
+    { label: t('Soft — 바뀐 내용을 Stage 한 채로'), action: () => reset(hash, 'soft') },
+    { label: t('Mixed — 바뀐 내용을 작업 트리에'), action: () => reset(hash, 'mixed') },
+    { label: t('Hard — 모두 버리기'), danger: true, action: () => reset(hash, 'hard') },
+  ];
+
+  /**
+   * 브랜치 메뉴 항목(로컬). 커밋 메뉴의 하위 메뉴에도 쓴다(그때는 withCommit: false — 커밋 작업은 커밋 메뉴에 이미 있다).
+   * 묶음: [전환·Pull·Push·upstream] [지금 브랜치를 이 브랜치로/이 브랜치를 지금 브랜치로 감기·병합·Rebase] [워크트리]
+   *       [끝 커밋: 새 브랜치·태그·Cherry-pick·Reset·Revert·메시지 고치기·빼기] [PR·비교·그래프] [이름 바꾸기·지우기] [복사].
+   * 다른 워크트리에서 체크아웃한 브랜치는 여기서 전환·삭제할 수 없어(git 이 거부한다) 그 워크트리를 열거나 지우는 항목을 대신 둔다.
+   */
+  function localItems(branch, { withCommit = true } = {}) {
     const cur = current();
+    const curName = cur?.name ?? 'HEAD';
     const writable = !busyOp();
     const isCurrent = branch.current;
-    return [
-      { label: t('전환'), disabled: isCurrent || !writable, action: () => checkout(branch.name) },
+    const worktree = isCurrent ? null : (ctx.state.worktrees ?? []).find((w) => w.branch === branch.name && !w.current && !w.bare) ?? null;
+    const tip = loadedCommit(branch.hash);
+    const atHead = !!branch.hash && branch.hash === ctx.state.history?.head;
+    const upstreamUrl = githubBranchUrl(branch.upstream);
+    const commitBase = githubBase();
+    const items = [
+      worktree
+        ? { label: t('워크트리 탭으로 열기'), disabled: worktree.prunable, action: () => openWorktree(worktree) }
+        : { label: t('전환'), disabled: isCurrent || !writable, action: () => checkout(branch.name) },
       { label: t('Pull (앞으로 감기)'), disabled: !branch.upstream || !writable, action: () => (isCurrent ? ctx.pull?.() : run(t('앞으로 감는 중…'), 'fastForward', { branch: branch.name, current: false }, t('{name} 를 앞으로 감았습니다.', { name: branch.name }))) },
       { label: 'Push', disabled: !writable, action: () => pushBranch(branch) },
       { label: t('upstream 설정…'), action: () => setUpstream(branch) },
       { label: t("'{name}' 로 앞으로 감기", { name: branch.upstream ?? 'upstream' }), disabled: !branch.upstream || !branch.behind || !writable, action: () => run(t('앞으로 감는 중…'), 'fastForward', { branch: branch.name, current: isCurrent }, t('{name} 를 앞으로 감았습니다.', { name: branch.name })) },
       '-',
+      // 지금 브랜치를 건드리지 않고 이 브랜치만 지금 HEAD 까지 옮긴다(뒤처진 작업 브랜치·워크트리 브랜치를 따라잡게).
+      isCurrent ? null : { label: t("'{name}' 를 '{target}' 로 앞으로 감기", { name: branch.name, target: curName }), disabled: !writable || atHead || !ctx.state.history?.head, action: () => fastForwardTo(branch, cur ? cur.name : 'HEAD') },
       {
-        label: t("'{name}' 에 병합", { name: cur?.name ?? 'HEAD' }), disabled: isCurrent || !writable,
+        label: t("'{name}' 에 병합", { name: curName }), disabled: isCurrent || !writable,
         submenu: ['default', 'noFf', 'squash', 'ffOnly'].map((mode) => ({ label: MERGE_LABEL[mode], action: () => merge(branch.name, branch.name, mode) })),
       },
-      { label: t("'{name}' 를 여기 위로 Rebase", { name: cur?.name ?? 'HEAD' }), disabled: isCurrent || !writable, action: () => rebase(branch.name) },
+      { label: t("'{name}' 를 여기 위로 Rebase", { name: curName }), disabled: isCurrent || !writable, action: () => rebase(branch.name) },
+      // 지금 브랜치는 여기서 쓰고 있어 워크트리로 또 꺼낼 수 없다.
+      isCurrent ? null : '-',
+      worktree
+        ? { label: t('워크트리 폴더 열기'), action: () => call('openFolder', { path: worktree.path }).catch(ctx.showError) }
+        : isCurrent ? null : { label: t("'{name}' 로 워크트리 만들기…", { name: branch.name }), disabled: busy(), action: () => addWorktree(branch.name) },
       '-',
       { label: t('여기서 새 브랜치…'), action: () => createBranch(branch.name, branch.name) },
       { label: t('새 태그…'), action: () => createTag(branch.hash, branch.name) },
-      { label: t('이름 바꾸기…'), action: () => renameBranch(branch.name) },
-      { label: t('지우기…'), danger: true, disabled: isCurrent, action: () => deleteBranch(branch) },
-      { label: t('원격 브랜치 지우기…'), danger: true, disabled: !branch.upstream, action: () => deleteRemoteBranch(ctx.state.refs.remote.find((r) => r.name === branch.upstream) ?? { name: branch.upstream, remote: branch.upstream.split('/')[0] }) },
+    ];
+    if (withCommit) {
+      items.push(
+        { label: `Cherry-pick → '${curName}'`, disabled: isCurrent || atHead || !tip || !writable, action: () => cherryPick(tip) },
+        { label: t("'{name}' 를 이 커밋으로 Reset", { name: curName }), disabled: isCurrent || atHead || !branch.hash || !writable, submenu: resetSubmenu(branch.hash) },
+        { label: t('끝 커밋 Revert…'), disabled: !tip || !writable, action: () => revertCommit(tip) },
+      );
+      // 히스토리 고치기는 지금 브랜치의 커밋만 된다(Rust rewrite).
+      if (isCurrent) {
+        items.push(
+          { label: t('끝 커밋 메시지 고치기…'), disabled: !tip || !writable, action: () => rewrite(tip, 'reword') },
+          { label: t('끝 커밋 빼기…'), danger: true, disabled: !tip || tip.parents.length !== 1 || !writable, action: () => rewrite(tip, 'drop') },
+        );
+      }
+    }
+    items.push(
       '-',
+      { label: t('Pull Request 만들기…'), disabled: !ctx.createPullRequest, action: () => ctx.createPullRequest?.(branch.name) },
       compareItems(branch.name, branch.name),
       { label: t('그래프에서 보기'), action: () => ctx.reveal(branch.hash) },
-      { label: t('Pull Request 만들기…'), disabled: !ctx.createPullRequest, action: () => ctx.createPullRequest?.(branch.name) },
+      '-',
+      { label: t('이름 바꾸기…'), action: () => renameBranch(branch.name) },
+      { label: t('지우기…'), danger: true, disabled: isCurrent || !!worktree, action: () => deleteBranch(branch) },
+      { label: t('원격 브랜치 지우기…'), danger: true, disabled: !branch.upstream, action: () => deleteRemoteBranch(ctx.state.refs.remote.find((r) => r.name === branch.upstream) ?? { name: branch.upstream, remote: branch.upstream.split('/')[0] }) },
+      worktree ? { label: t('이 워크트리 제거…'), danger: true, disabled: busy(), action: () => removeWorktree(worktree) } : null,
+      worktree ? { label: t('워크트리 제거하고 브랜치 지우기…'), danger: true, disabled: busy(), action: () => removeWorktreeAndBranch(worktree, branch) } : null,
+      '-',
       { label: t('이름 복사'), action: () => copy(branch.name) },
-    ];
+      { label: t('커밋 SHA 복사'), disabled: !branch.hash, action: () => copy(branch.hash) },
+      { label: t('GitHub 브랜치 링크 복사'), disabled: !upstreamUrl, action: () => copy(upstreamUrl) },
+      { label: t('GitHub 커밋 링크 복사'), disabled: !commitBase || !branch.hash, action: () => copy(`${commitBase}/commit/${branch.hash}`) },
+    );
+    return items.filter(Boolean);
   }
 
-  function remoteItems(branch) {
-    const cur = current();
+  function remoteItems(branch, { withCommit = true } = {}) {
+    const curName = current()?.name ?? 'HEAD';
     const writable = !busyOp();
+    const tip = loadedCommit(branch.hash);
+    const atHead = !!branch.hash && branch.hash === ctx.state.history?.head;
+    const branchUrl = githubBranchUrl(branch.name);
+    const commitBase = githubBase();
     return [
       { label: t('로컬 브랜치로 전환'), disabled: !writable, action: () => activate({ kind: 'remote', branch }) },
       '-',
-      { label: t("'{name}' 에 병합", { name: cur?.name ?? 'HEAD' }), disabled: !writable, submenu: ['default', 'noFf', 'squash', 'ffOnly'].map((mode) => ({ label: MERGE_LABEL[mode], action: () => merge(branch.name, branch.name, mode) })) },
-      { label: t("'{name}' 를 여기 위로 Rebase", { name: cur?.name ?? 'HEAD' }), disabled: !writable, action: () => rebase(branch.name) },
+      { label: t("'{name}' 에 병합", { name: curName }), disabled: !writable, submenu: ['default', 'noFf', 'squash', 'ffOnly'].map((mode) => ({ label: MERGE_LABEL[mode], action: () => merge(branch.name, branch.name, mode) })) },
+      { label: t("'{name}' 를 여기 위로 Rebase", { name: curName }), disabled: !writable, action: () => rebase(branch.name) },
       '-',
+      { label: t("'{name}' 로 워크트리 만들기…", { name: branch.name }), disabled: busy(), action: () => addWorktree(branch.name) },
       { label: t('여기서 새 브랜치…'), action: () => createBranch(branch.name, branch.name) },
       { label: t('새 태그…'), action: () => createTag(branch.hash, branch.name) },
+      withCommit ? { label: `Cherry-pick → '${curName}'`, disabled: atHead || !tip || !writable, action: () => cherryPick(tip) } : null,
+      withCommit ? { label: t("'{name}' 를 이 커밋으로 Reset", { name: curName }), disabled: atHead || !branch.hash || !writable, submenu: resetSubmenu(branch.hash) } : null,
+      '-',
       compareItems(branch.name, branch.name),
       { label: t('그래프에서 보기'), action: () => ctx.reveal(branch.hash) },
+      '-',
       { label: t('이름 복사'), action: () => copy(branch.name) },
+      { label: t('커밋 SHA 복사'), disabled: !branch.hash, action: () => copy(branch.hash) },
+      { label: t('GitHub 브랜치 링크 복사'), disabled: !branchUrl, action: () => copy(branchUrl) },
+      { label: t('GitHub 커밋 링크 복사'), disabled: !commitBase || !branch.hash, action: () => copy(`${commitBase}/commit/${branch.hash}`) },
       '-',
       { label: t('원격에서 지우기…'), danger: true, action: () => deleteRemoteBranch(branch) },
-    ];
+    ].filter(Boolean);
   }
 
   const menuAt = (event, items) => showMenu(event.clientX, event.clientY, items);
@@ -928,7 +1036,7 @@ export function createRefs(ctx) {
         const hasLocal = b.remote && refs.local.some((l) => l.name === b.name.slice(b.remote.length + 1));
         if (!b.current && !hasLocal) items.push({ label: t("'{name}' 로 전환", { name: b.name }), disabled: !writable, action: () => activate({ kind: b.remote ? 'remote' : 'local', branch: b }) });
       }
-      for (const b of here) items.push({ label: t("브랜치 '{name}'", { name: b.name }), submenu: b.remote ? remoteItems(b) : localItems(b) });
+      for (const b of here) items.push({ label: t("브랜치 '{name}'", { name: b.name }), submenu: b.remote ? remoteItems(b, { withCommit: false }) : localItems(b, { withCommit: false }) });
       items.push('-');
     }
     items.push(
@@ -945,11 +1053,7 @@ export function createRefs(ctx) {
       },
       {
         label: t("'{name}' 를 여기로 Reset", { name: curName }), disabled: isHead || !writable,
-        submenu: [
-          { label: t('Soft — 바뀐 내용을 Stage 한 채로'), action: () => reset(commit.hash, 'soft') },
-          { label: t('Mixed — 바뀐 내용을 작업 트리에'), action: () => reset(commit.hash, 'mixed') },
-          { label: t('Hard — 모두 버리기'), danger: true, action: () => reset(commit.hash, 'hard') },
-        ],
+        submenu: resetSubmenu(commit.hash),
       },
       '-',
       { label: t('이 커밋으로 전환 (detached)'), disabled: isHead || !writable, action: () => checkoutCommit(commit.hash) },

@@ -111,6 +111,25 @@ fn remotes_worktrees_and_merge_modes() {
     repo.fast_forward("old", false).unwrap();
     assert_eq!(repo.branch_tip("old"), repo.branch_tip("main"));
 
+    // 체크아웃하지 않은 브랜치를 지금 HEAD 까지 앞으로 감기. 갈라진 브랜치는 거부한다.
+    git(&d, &["branch", "-f", "behind", "HEAD~1"]);
+    repo.fast_forward_to("behind", "HEAD").unwrap();
+    assert_eq!(repo.branch_tip("behind"), repo.branch_tip("main"));
+    git(&d, &["branch", "-f", "split", "HEAD~1"]);
+    git(&d, &["checkout", "-q", "split"]);
+    commit(&d, "split.txt", "split");
+    git(&d, &["checkout", "-q", "main"]);
+    assert!(repo.fast_forward_to("split", "HEAD").is_err());
+
+    // 다른 워크트리에서 체크아웃한 브랜치는 그 워크트리 안에서 앞으로 감는다(작업 트리도 따라온다).
+    git(&d, &["branch", "-f", "wt-ff", "HEAD~1"]);
+    let wt2 = tmp.path().join("wt-ff");
+    repo.add_worktree(wt2.to_str().unwrap(), "wt-ff", None).unwrap();
+    repo.fast_forward_to("wt-ff", "main").unwrap();
+    assert_eq!(repo.branch_tip("wt-ff"), repo.branch_tip("main"));
+    assert_eq!(git(&wt2, &["status", "--porcelain"]).trim(), "");
+    repo.remove_worktree(wt2.to_str().unwrap(), false).unwrap();
+
     // 서브모듈 더하기·목록.
     let sub_src = tmp.path().join("lib");
     std::fs::create_dir(&sub_src).unwrap();
