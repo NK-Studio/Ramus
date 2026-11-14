@@ -13,7 +13,8 @@ Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.
 Windows 빌드는 SignPath Foundation 의 무료 인증서로 서명합니다([Code signing policy](#code-signing-policy)).
 
 - macOS(Apple Silicon): `Ramus-<버전>-macos-arm64.dmg` — 열린 창에서 `Ramus` 를 `Applications` 폴더로 끌어다 놓습니다.
-- Windows 10/11(x64): `Ramus-<버전>-windows-x64.zip` — 압축을 풀고 `Ramus.exe` 를 실행합니다(WebView2 런타임 사용).
+- Windows 10/11(x64): `Ramus-<버전>-windows-x64-setup.exe` — 설치 마법사에서 나만 설치(관리자 권한 없이) 또는 모든 사용자 설치를 고릅니다.
+  설치 없이 쓰려면 `Ramus-<버전>-windows-x64.zip` 을 풀고 `Ramus.exe` 를 실행합니다. 둘 다 WebView2 런타임을 씁니다.
 
 git 은 앱에 들어 있어(GitHub Desktop 의 [dugite-native](https://github.com/desktop/dugite-native): git + git-lfs + 자격 증명 도우미) 따로 설치하지 않아도 됩니다.
 설정 > git 에서 **내장 git(기본)** · **시스템 git**(PATH) · **직접 지정** 중에 고릅니다. 고른 git 을 찾지 못하면 쓸 수 있는 다른 git 으로 돌아가고 알려 줍니다.
@@ -36,6 +37,7 @@ node tests/ui/changelog.test.mjs  # ChangeLog.md 맨 위 버전이 Cargo.toml �
 cargo run -p ramus-app
 scripts/bundle-macos.sh release   # target/release/Ramus.app (내장 git 포함, 처음 한 번 vendor/git 에 받음)
 scripts/make-dmg.sh target/release/Ramus.app  # 끌어다 놓아 설치하는 DMG(target/release/Ramus-<버전>-macos-arm64.dmg)
+ISCC /DAppVersion=<버전> /DSourceDir=<Ramus.exe·git 폴더> scripts/windows-installer.iss  # Windows 설치 파일(Inno Setup 6, 기본 출력 target/installer)
 scripts/fetch-git.sh windows-x64  # 내장 git 만 받기(vendor/git/<플랫폼>). git 을 올릴 때는 이 파일의 TAG·SHA256 을 바꿈
 scripts/make-icons.sh             # assets/icon/ramus.svg → Ramus.icns·ramus.ico (아이콘을 고쳤을 때만, macOS 에서)
 swift scripts/make-dmg-background.swift  # DMG 창 배경 assets/dmg/background.tiff (배경을 고쳤을 때만)
@@ -80,7 +82,7 @@ echo 'return document.title' | nc 127.0.0.1 7777
 
 Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
 
-Windows releases (`Ramus.exe`) are signed with this certificate. macOS releases are signed with an Apple Developer ID and notarized by Apple.
+Windows releases (`Ramus.exe` and the setup program) are signed with this certificate. macOS releases are signed with an Apple Developer ID and notarized by Apple.
 
 - Committers and reviewers: [NK Studio](https://github.com/NK-Studio)
 - Approvers: [NK Studio](https://github.com/NK-Studio)

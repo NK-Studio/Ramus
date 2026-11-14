@@ -16,7 +16,11 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+### 추가
+- Windows 설치 파일(`Ramus-<버전>-windows-x64-setup.exe`). 설치 마법사에서 나만 설치(관리자 권한 없이 `%LOCALAPPDATA%\Programs\Ramus`)와 모든 사용자 설치(`Program Files`)를 고르고, 시작 메뉴·바탕 화면 바로가기를 만들며, 새 판을 실행하면 그대로 업그레이드됩니다. 설치 없이 쓰는 zip 도 계속 올립니다.
+
 ### 변경
+- Windows: 탐색기 속성 창의 제품 이름이 `ramus-app` 대신 `Ramus`(NK Studio)로 보입니다.
 - Windows: Fork 처럼 메뉴 막대와 제목 막대를 한 줄로 합쳤습니다. 제목 막대의 아이콘을 없애고, 왼쪽에 메뉴·가운데에 제목·오른쪽에 최소화·최대화·닫기를 둡니다.
 - 녹색·빨강·파랑·노랑 단추의 호버·누름 색을 한 톤(강조색 75%)으로 맞췄습니다. 호버할 때 진한 색으로 튀지 않고, 꽉 채운 주 단추(커밋·확인)도 같은 톤으로 채웁니다. Pull Request 상세에서 고른 병합 방식 단추도 호버하면 밝아집니다.
 - Pull Request 상세의 병합 단추를 `Pull Request 병합` 으로 적습니다(영어 화면은 그대로 `Merge Pull Request`).
