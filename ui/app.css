@@ -100,6 +100,21 @@
   --git-shadow-small: rgba(0,0,0,0.24);
   --git-success-strong: #5fb865;
   --git-success-strong-pressed: #4f9d55;
+  /* 녹색 동작 단추(Stage·승인·서랍 주 단추 등)가 함께 쓰는 호버·누름. 진한 녹색(100%)은 너무 밝게 튀어 75% 로 둔다. */
+  --git-success-hover: color-mix(in srgb, var(--git-success) 75%, transparent);
+  --git-success-pressed: color-mix(in srgb, var(--git-success) 60%, transparent);
+  --git-on-success-hover: #ffffff;
+  /* 빨강·파랑 동작 단추도 같은 비율. */
+  --git-danger-hover: color-mix(in srgb, var(--git-danger) 75%, transparent);
+  --git-danger-pressed: color-mix(in srgb, var(--git-danger) 60%, transparent);
+  --git-on-danger-hover: #ffffff;
+  --git-accent-tint-hover: color-mix(in srgb, var(--git-accent) 75%, transparent);
+  --git-accent-tint-pressed: color-mix(in srgb, var(--git-accent) 60%, transparent);
+  --git-on-accent-tint-hover: #ffffff;
+  /* 노랑 위에는 흰 글씨의 대비가 낮아(3.0:1) 두 테마 모두 검은 글씨. */
+  --git-warning-hover: color-mix(in srgb, var(--git-warning) 75%, transparent);
+  --git-warning-pressed: color-mix(in srgb, var(--git-warning) 60%, transparent);
+  --git-on-warning-hover: #000000;
   --git-danger-strong: #db5c5c;
   --git-danger-strong-pressed: #c24c4c;
   --git-warning-strong: #d6ae58;
@@ -248,6 +263,19 @@
   --git-shadow-small: rgba(0,0,0,0.08);
   --git-success-strong: #208a3c;
   --git-success-strong-pressed: #1b7533;
+  /* 밝은 테마는 75% 녹색 위 흰 글씨의 대비가 낮아(2.9:1) 검은 글씨를 쓴다. 누름은 더 짙게. */
+  --git-success-hover: color-mix(in srgb, var(--git-success) 75%, transparent);
+  --git-success-pressed: color-mix(in srgb, var(--git-success) 90%, transparent);
+  --git-on-success-hover: #000000;
+  --git-danger-hover: color-mix(in srgb, var(--git-danger) 75%, transparent);
+  --git-danger-pressed: color-mix(in srgb, var(--git-danger) 90%, transparent);
+  --git-on-danger-hover: #000000;
+  --git-accent-tint-hover: color-mix(in srgb, var(--git-accent) 75%, transparent);
+  --git-accent-tint-pressed: color-mix(in srgb, var(--git-accent) 90%, transparent);
+  --git-on-accent-tint-hover: #000000;
+  --git-warning-hover: color-mix(in srgb, var(--git-warning) 75%, transparent);
+  --git-warning-pressed: color-mix(in srgb, var(--git-warning) 90%, transparent);
+  --git-on-warning-hover: #000000;
   --git-danger-strong: #db3b4b;
   --git-danger-strong-pressed: #c22f3f;
   --git-warning-strong: #a46704;
@@ -373,8 +401,10 @@ input, textarea { font: inherit; user-select: text; -webkit-user-select: text; }
 }
 .btn:hover:not(:disabled) { background: var(--git-button-hover); }
 .btn:disabled { opacity: 0.45; cursor: default; }
-.btn.primary { background: var(--git-accent); border-color: var(--git-accent); color: #fff; }
-.btn.primary:hover:not(:disabled) { background: var(--git-accent-hover); }
+/* 꽉 채운 주 단추: 동작 단추의 호버와 같은 75% 톤으로 채우고, 호버하면 옅은 색을 한 겹 더 얹는다. */
+.btn.primary { background: var(--git-accent-tint-hover); border-color: var(--git-accent); color: var(--git-on-accent-tint-hover); }
+.btn.primary:hover:not(:disabled) { background: linear-gradient(var(--git-accent-soft), var(--git-accent-soft)), var(--git-accent-tint-hover); border-color: var(--git-accent); }
+.btn.primary:active:not(:disabled) { background: var(--git-accent-tint-pressed); border-color: var(--git-accent); }
 .btn.small { height: 22px; padding: 0 8px; font-size: 11.5px; border-radius: var(--radius-small); }
 .btn.success { color: var(--git-success); border-color: var(--git-success-soft); background: var(--git-success-soft); }
 .btn.danger { color: var(--git-danger); border-color: var(--git-danger-soft); background: var(--git-danger-soft); }
@@ -553,7 +583,8 @@ body.reordering-col, body.reordering-col * { cursor: grab !important; }
 .wip-header.merging .wip-warning { margin-left: auto; margin-right: 6px; display: flex; color: var(--git-warning); }
 .wip-header.merging .wip-title { flex: 0 1 auto; margin: 0 auto 0 0; padding-right: 30px; }
 .wip-discard { flex: none; width: 22px; height: 22px; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--git-danger); border-radius: var(--git-radius); background: var(--git-danger-soft); color: var(--git-text); cursor: pointer; }
-.wip-discard:hover:not(:disabled) { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.wip-discard:hover:not(:disabled) { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
+.wip-discard:active:not(:disabled) { background: var(--git-danger-pressed); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
 .wip-discard:disabled { border-color: var(--git-border); opacity: 0.5; cursor: default; }
 .wip-merge-info { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; padding: 6px 8px; }
 .merge-ref { padding: 1px 6px; margin: 1px 0; border-radius: 3px; font-weight: 700; color: var(--git-on-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -599,14 +630,14 @@ body.reordering-col, body.reordering-col * { cursor: grab !important; }
 /* 머리 줄 버튼(원본 staging__button): Stage 는 초록·Unstage 는 빨강 테두리에 옅은 바탕, 올리면 꽉 채운다. Fork 배치는 무채색. */
 .staging-btn { flex: none; height: 22px; margin-left: 6px; padding: 0 12px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); background: transparent; color: var(--git-text); font-size: 12px; cursor: pointer; white-space: nowrap; }
 .staging-btn.stage { border-color: var(--git-success); background: var(--git-success-soft); }
-.staging-btn.stage:hover:not(:disabled) { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
-.staging-btn.stage:active:not(:disabled) { background: var(--git-success-strong-pressed); border-color: var(--git-success-strong-pressed); }
+.staging-btn.stage:hover:not(:disabled) { background: var(--git-success-hover); border-color: var(--git-success); color: var(--git-on-success-hover); }
+.staging-btn.stage:active:not(:disabled) { background: var(--git-success-pressed); border-color: var(--git-success); color: var(--git-on-success-hover); }
 .staging-btn.unstage { border-color: var(--git-danger); background: var(--git-danger-soft); }
-.staging-btn.unstage:hover:not(:disabled) { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
-.staging-btn.unstage:active:not(:disabled) { background: var(--git-danger-strong-pressed); border-color: var(--git-danger-strong-pressed); }
+.staging-btn.unstage:hover:not(:disabled) { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
+.staging-btn.unstage:active:not(:disabled) { background: var(--git-danger-pressed); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
 .staging-btn.resolve { border-color: var(--git-warning); background: var(--git-warning-soft); }
-.staging-btn.resolve:hover:not(:disabled) { background: var(--git-warning-strong); border-color: var(--git-warning-strong); color: var(--git-on-strong); }
-.staging-btn.resolve:active:not(:disabled) { background: var(--git-warning-strong-pressed); border-color: var(--git-warning-strong-pressed); }
+.staging-btn.resolve:hover:not(:disabled) { background: var(--git-warning-hover); border-color: var(--git-warning); color: var(--git-on-warning-hover); }
+.staging-btn.resolve:active:not(:disabled) { background: var(--git-warning-pressed); border-color: var(--git-warning); color: var(--git-on-warning-hover); }
 .staging-btn:disabled { opacity: 0.5; cursor: default; }
 .staging-btn.fork-head { padding: 0 10px; border-color: var(--git-field-border); background: transparent; }
 .staging-btn.fork-head:hover:not(:disabled) { background: var(--git-hover); border-color: var(--git-field-border); color: var(--git-text); }
@@ -674,14 +705,15 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .hidden-banner { flex: none; display: flex; align-items: center; height: 26px; padding: 0 4px 0 8px; background: var(--git-list-bg); border-bottom: 1px solid var(--git-divider); color: var(--git-text-muted); font-size: 11px; }
 .hidden-banner-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-action.stage, .row-action.success { background: var(--git-success-soft); border-color: var(--git-success); }
-.row-action.stage:hover, .row-action.success:hover { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
+.row-action.stage:hover, .row-action.success:hover { background: var(--git-success-hover); border-color: var(--git-success); color: var(--git-on-success-hover); }
 .row-action.unstage, .row-action.danger { background: var(--git-danger-soft); border-color: var(--git-danger); }
-.row-action.unstage:hover, .row-action.danger:hover { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.row-action.unstage:hover, .row-action.danger:hover { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
 .row-action.resolve { background: var(--git-warning-soft); border-color: var(--git-warning); }
-.row-action.resolve:hover { background: var(--git-warning-strong); border-color: var(--git-warning-strong); color: var(--git-on-strong); }
+.row-action.resolve:hover { background: var(--git-warning-hover); border-color: var(--git-warning); color: var(--git-on-warning-hover); }
 .btn.warning { color: var(--git-warning); border-color: var(--git-warning); background: var(--git-warning-soft); }
-.btn.success:hover:not(:disabled) { background: var(--git-success-strong); color: var(--git-on-strong); }
-.btn.danger:hover:not(:disabled) { background: var(--git-danger-strong); color: var(--git-on-strong); }
+.btn.warning:hover:not(:disabled) { background: var(--git-warning-hover); color: var(--git-on-warning-hover); }
+.btn.success:hover:not(:disabled) { background: var(--git-success-hover); color: var(--git-on-success-hover); }
+.btn.danger:hover:not(:disabled) { background: var(--git-danger-hover); color: var(--git-on-danger-hover); }
 
 /* 커밋 상자(원본 CommitBox.uxml·GitStaging.uss commit-box): 제목 → 설명 → 작성자 경고 → 아래 한 줄. */
 .commit-box { flex: none; display: flex; flex-direction: column; padding: 6px; border-top: 1px solid var(--git-border); background: var(--git-header-bg); }
@@ -700,7 +732,7 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .commit-push:hover:not(:disabled) { background: var(--git-button-hover); }
 .commit-btn { border-color: var(--git-accent); background: var(--git-accent-soft); }
 .commit-btn:hover:not(:disabled) { background: var(--git-accent); color: var(--git-accent-text); }
-.commit-btn:active:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); color: var(--git-accent-text); }
+.commit-btn:active:not(:disabled) { background: var(--git-accent-tint-pressed); border-color: var(--git-accent); color: var(--git-on-accent-tint-hover); }
 .commit-btn:disabled { background: var(--git-button-bg); border-color: var(--git-button-border); color: var(--git-text-muted); cursor: default; }
 .commit-push:disabled { opacity: 0.45; cursor: default; }
 
@@ -782,7 +814,9 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .file-list:focus-visible .file-row.cursor { box-shadow: inset 0 0 0 1px var(--git-accent); }
 .row-action.plain { background: var(--git-badge-bg); color: var(--git-text-secondary); margin-right: 2px; }
 .btn.tiny { height: 19px; padding: 0 7px; font-size: 11px; border-radius: var(--radius-small); }
-.btn.danger-strong { background: var(--git-danger); border-color: var(--git-danger); color: #fff; }
+.btn.danger-strong { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
+.btn.danger-strong:hover:not(:disabled) { background: linear-gradient(var(--git-danger-soft), var(--git-danger-soft)), var(--git-danger-hover); border-color: var(--git-danger); }
+.btn.danger-strong:active:not(:disabled) { background: var(--git-danger-pressed); border-color: var(--git-danger); }
 .icon-btn { width: 26px; height: 26px; border: 0; border-radius: var(--radius); background: none; cursor: pointer; color: var(--git-text-muted); }
 .icon-btn:hover { background: var(--git-hover); color: var(--git-text); }
 
@@ -884,11 +918,11 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 .hunk-actions { display: flex; font-family: var(--font); }
 .hunk-btn { height: 22px; margin-left: 6px; padding: 0 10px; border: 1px solid var(--git-field-border); border-radius: var(--git-radius); color: var(--git-text); font-size: 12px; cursor: pointer; }
 .hunk-btn.stage { border-color: var(--git-success); background: var(--git-success-soft); }
-.hunk-btn.stage:hover { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
-.hunk-btn.stage:active { background: var(--git-success-strong-pressed); border-color: var(--git-success-strong-pressed); color: var(--git-on-strong); }
+.hunk-btn.stage:hover { background: var(--git-success-hover); border-color: var(--git-success); color: var(--git-on-success-hover); }
+.hunk-btn.stage:active { background: var(--git-success-pressed); border-color: var(--git-success); color: var(--git-on-success-hover); }
 .hunk-btn.unstage, .hunk-btn.discard { border-color: var(--git-danger); background: var(--git-danger-soft); }
-.hunk-btn.unstage:hover, .hunk-btn.discard:hover { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
-.hunk-btn.unstage:active, .hunk-btn.discard:active { background: var(--git-danger-strong-pressed); border-color: var(--git-danger-strong-pressed); color: var(--git-on-strong); }
+.hunk-btn.unstage:hover, .hunk-btn.discard:hover { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
+.hunk-btn.unstage:active, .hunk-btn.discard:active { background: var(--git-danger-pressed); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
 .dr-meta .tx { color: var(--git-text-muted); padding-left: calc(var(--ln) * 2 + 40px); }
 .k-added, .k-added .ln, .k-added .gut { background: var(--git-diff-added-line); }
 .k-removed, .k-removed .ln, .k-removed .gut { background: var(--git-diff-removed-line); }
@@ -979,8 +1013,9 @@ select.field { height: 30px; }
 .warn-glyph { display: flex; flex: none; margin-right: 8px; color: var(--git-warning); }
 .merge-path { flex: 0 1 auto; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .merge-count { flex: none; margin-left: 8px; font-size: 11px; color: var(--git-text-muted); }
-.merge-save { height: 22px; min-width: 64px; margin-left: 8px; padding: 0 12px; border: 1px solid var(--git-success); border-radius: 4px; background: rgba(63, 184, 92, 0.25); color: var(--git-text-strong); font-weight: 700; cursor: pointer; }
-.merge-save:hover:not(:disabled) { background: rgba(63, 184, 92, 0.4); }
+.merge-save { height: 22px; min-width: 64px; margin-left: 8px; padding: 0 12px; border: 1px solid var(--git-success); border-radius: 4px; background: var(--git-success-soft); color: var(--git-text-strong); font-weight: 700; cursor: pointer; }
+.merge-save:hover:not(:disabled) { background: var(--git-success-hover); color: var(--git-on-success-hover); }
+.merge-save:active:not(:disabled) { background: var(--git-success-pressed); color: var(--git-on-success-hover); }
 .merge-save:disabled { opacity: 0.45; cursor: default; }
 .merge-close { width: 22px; height: 22px; margin-left: 6px; padding: 0; border: 0; border-radius: 4px; background: none; font-size: 16px; line-height: 1; color: var(--git-text); cursor: pointer; }
 .merge-close:hover { background: var(--git-hover); }
@@ -1355,25 +1390,30 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .btn.card-ok { background: var(--git-accent-soft); border-color: var(--git-accent); color: var(--git-text); font-weight: 700; }
 .btn.card-ok:hover:not(:disabled) { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); }
 .btn.card-ok.danger { background: var(--git-danger-soft); border-color: var(--git-danger); }
-.btn.card-ok.danger:hover:not(:disabled) { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+.btn.card-ok.danger:hover:not(:disabled) { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
 .btn.card-ok:disabled { opacity: 0.5; cursor: default; }
 /* 카드 버튼은 포커스 테두리를 따로 그리지 않는다(원본: 포커스여도 1px 테두리 그대로). Enter 대상은 아래 .default 의 채운 모양으로 보인다. */
 .card .modal-actions .btn:focus, .card .modal-actions .btn:focus-visible { outline: none; box-shadow: none; }
 /* Enter 가 누를 버튼(.default — 기본은 확인, Tab 으로 옮기면 따라간다): 마우스를 올린 것처럼 꽉 채운다(원본 confirm-dialog__button--default). */
-.card .modal-actions .btn.default { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); }
-.card .modal-actions .btn.card-ok.danger.default { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
-.card .modal-actions .btn.card-ok.default:active:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); }
-.card .modal-actions .btn.card-ok.danger.default:active:not(:disabled) { background: var(--git-danger-strong-pressed); border-color: var(--git-danger-strong-pressed); }
+.card .modal-actions .btn.default { background: var(--git-accent-tint-hover); border-color: var(--git-accent); color: var(--git-on-accent-tint-hover); }
+.card .modal-actions .btn.card-ok.danger.default { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
+.card .modal-actions .btn.card-ok.default:active:not(:disabled) { background: var(--git-accent-tint-pressed); border-color: var(--git-accent); }
+.card .modal-actions .btn.card-ok.danger.default:active:not(:disabled) { background: var(--git-danger-pressed); border-color: var(--git-danger); }
 .card .modal-actions .btn.card-cancel { background: var(--git-button-bg); border-color: var(--git-button-border); color: var(--git-text); }
 .card .modal-actions .btn.card-cancel:hover:not(:disabled):not(.default) { background: var(--git-button-hover); }
-.card .modal-actions .btn.card-cancel.default { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); }
-/* macOS 식 버튼(라이트·다크 공통) — 주 버튼은 늘 강조색으로 채우고 흰 글자, 보조 버튼은 버튼 바탕 + 회색 테두리.
+.card .modal-actions .btn.card-cancel.default { background: var(--git-accent-tint-hover); border-color: var(--git-accent); color: var(--git-on-accent-tint-hover); }
+/* macOS 식 버튼(라이트·다크 공통) — 주 버튼은 늘 강조색(75% 톤)으로 채우고, 보조 버튼은 버튼 바탕 + 회색 테두리.
    Enter 대상이 취소로 옮겨 가도 채우지 않고 강조색 테두리로만 알린다. */
 :root .btn.card-ok,
-:root .commit-btn:not(:disabled) { background: var(--git-accent); border-color: var(--git-accent); color: var(--git-accent-text); font-weight: 500; }
+:root .commit-btn:not(:disabled) { background: var(--git-accent-tint-hover); border-color: var(--git-accent); color: var(--git-on-accent-tint-hover); font-weight: 500; }
 :root .btn.card-ok:hover:not(:disabled),
-:root .commit-btn:hover:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); }
-:root .btn.card-ok.danger { background: var(--git-danger-strong); border-color: var(--git-danger-strong); color: var(--git-on-strong); }
+:root .commit-btn:hover:not(:disabled) { background: linear-gradient(var(--git-accent-soft), var(--git-accent-soft)), var(--git-accent-tint-hover); border-color: var(--git-accent); }
+:root .btn.card-ok:active:not(:disabled),
+:root .commit-btn:active:not(:disabled) { background: var(--git-accent-tint-pressed); border-color: var(--git-accent); }
+:root .btn.card-ok.danger { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
+/* 위 파란 호버·누름과 우선순위가 같아 뒤에 다시 적는다 — 없으면 빨간 확인 단추가 호버 때 파래진다. */
+:root .btn.card-ok.danger:hover:not(:disabled) { background: linear-gradient(var(--git-danger-soft), var(--git-danger-soft)), var(--git-danger-hover); border-color: var(--git-danger); }
+:root .btn.card-ok.danger:active:not(:disabled) { background: var(--git-danger-pressed); border-color: var(--git-danger); }
 :root .card .modal-actions .btn.card-cancel.default { background: var(--git-button-bg); border-color: var(--git-accent); color: var(--git-text); box-shadow: 0 0 0 1px var(--git-accent); }
 :root .card .modal-actions .btn.card-cancel.default:hover:not(:disabled) { background: var(--git-button-hover); }
 
@@ -1465,7 +1505,8 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .drawer-problem { margin-top: 6px; font-size: 11px; color: var(--git-danger); white-space: pre-wrap; }
 /* 주 버튼: 폭을 다 쓰는 초록. 보조 버튼: 흰 바탕·얇은 테두리, 왼쪽 정렬. */
 .btn.drawer-primary { width: 100%; height: 30px; margin-top: 16px; border-color: var(--git-success); background: var(--git-success-soft); color: var(--git-text); }
-.btn.drawer-primary:hover:not(:disabled) { background: var(--git-success-strong); border-color: var(--git-success-strong); color: var(--git-on-strong); }
+.btn.drawer-primary:hover:not(:disabled) { background: var(--git-success-hover); border-color: var(--git-success); color: var(--git-on-success-hover); }
+.btn.drawer-primary:active:not(:disabled) { background: var(--git-success-pressed); border-color: var(--git-success); color: var(--git-on-success-hover); }
 .btn.drawer-primary:disabled { opacity: 0.5; cursor: default; }
 .btn.drawer-secondary { height: 26px; margin-top: 10px; padding: 0 12px; align-self: flex-start; }
 .btn.drawer-secondary:disabled { opacity: 0.5; cursor: default; }
@@ -1977,8 +2018,8 @@ body.shift-held .fork-head .lbl-shift { display: inline; }
 .github-connect__step { margin-top: 4px; display: flex; flex-direction: column; }
 .github-connect__step[hidden] { display: none; }
 .github-connect__primary { height: 42px; margin: 0; font-size: 15px; font-weight: 700; color: var(--git-text); background: var(--git-accent-soft); border: 1px solid var(--git-accent); border-radius: 8px; cursor: pointer; font-family: inherit; }
-.github-connect__primary:hover:not(:disabled) { background: var(--git-accent); color: var(--git-accent-text); }
-.github-connect__primary:active:not(:disabled) { background: var(--git-accent-hover); border-color: var(--git-accent-hover); color: var(--git-accent-text); }
+.github-connect__primary:hover:not(:disabled) { background: var(--git-accent-tint-hover); color: var(--git-on-accent-tint-hover); }
+.github-connect__primary:active:not(:disabled) { background: var(--git-accent-tint-pressed); color: var(--git-on-accent-tint-hover); }
 .github-connect__primary[hidden] { display: none; }
 .github-connect__code { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 8px 0 20px; }
 .github-connect__code[hidden] { display: none; }
@@ -2072,7 +2113,9 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .pr-detail-methods { display: flex; }
 .pr-detail-method { flex: 1 1 0; min-width: 0; height: 26px; margin: 0 2px; padding: 0 4px; border: 1px solid var(--git-button-border); border-radius: var(--radius); background: var(--git-button-bg); color: var(--git-text); font-size: 11px; font-family: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pr-detail-method:hover:not(:disabled) { background: var(--git-hover); }
-.pr-detail-method.on, .pr-detail-method.on:hover:not(:disabled) { border-color: var(--git-accent); background: var(--git-selected); color: var(--git-selected-text); }
+.pr-detail-method.on { border-color: var(--git-accent); background: var(--git-selected); color: var(--git-selected-text); }
+/* 고른 방식도 누를 수 있는 단추로 보이게 호버하면 강조색을 한 겹 더 얹는다. */
+.pr-detail-method.on:hover:not(:disabled) { background: linear-gradient(var(--git-accent-soft), var(--git-accent-soft)), var(--git-selected); }
 .pr-detail-method:disabled { opacity: 0.5; cursor: default; }
 .pr-detail-actions { margin-bottom: 4px; }
 .pr-detail-body { margin-top: 4px; padding: 8px; border: 1px solid var(--git-border); border-radius: var(--radius); white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--git-text); user-select: text; -webkit-user-select: text; }
@@ -2091,11 +2134,11 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .pr-detail-reply-buttons { margin-bottom: 12px; }
 /* 색 있는 보조 버튼(닫기·변경 요청은 빨강, 승인은 초록): 평소엔 옅은 바탕 + 테두리, 올리면 채움. */
 .btn.drawer-secondary.pr-detail-danger { border-color: var(--git-danger); background: var(--git-danger-soft); color: var(--git-text); }
-.btn.drawer-secondary.pr-detail-danger:hover:not(:disabled) { border-color: var(--git-danger-strong); background: var(--git-danger-strong); color: var(--git-on-strong); }
-.btn.drawer-secondary.pr-detail-danger:active:not(:disabled) { border-color: var(--git-danger-strong-pressed); background: var(--git-danger-strong-pressed); color: var(--git-on-strong); }
+.btn.drawer-secondary.pr-detail-danger:hover:not(:disabled) { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
+.btn.drawer-secondary.pr-detail-danger:active:not(:disabled) { background: var(--git-danger-pressed); border-color: var(--git-danger); color: var(--git-on-danger-hover); }
 .btn.drawer-secondary.pr-detail-approve { border-color: var(--git-success); background: var(--git-success-soft); color: var(--git-text); }
-.btn.drawer-secondary.pr-detail-approve:hover:not(:disabled) { border-color: var(--git-success-strong); background: var(--git-success-strong); color: var(--git-on-strong); }
-.btn.drawer-secondary.pr-detail-approve:active:not(:disabled) { border-color: var(--git-success-strong-pressed); background: var(--git-success-strong-pressed); color: var(--git-on-strong); }
+.btn.drawer-secondary.pr-detail-approve:hover:not(:disabled) { background: var(--git-success-hover); border-color: var(--git-success); color: var(--git-on-success-hover); }
+.btn.drawer-secondary.pr-detail-approve:active:not(:disabled) { background: var(--git-success-pressed); border-color: var(--git-success); color: var(--git-on-success-hover); }
 .pr-detail-fact { display: flex; align-items: flex-start; min-height: 22px; font-size: 12px; }
 .pr-detail-fact:first-child { margin-top: 10px; }
 .pr-detail-fact-name { flex: none; width: 90px; color: var(--git-text-muted); }
