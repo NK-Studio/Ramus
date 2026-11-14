@@ -80,8 +80,14 @@ fn main() {
     {
         let ico = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/icon/ramus.ico");
         println!("cargo:rerun-if-changed={}", ico.display());
+        // 버전 정보의 이름은 패키지 이름(ramus-app) 대신 앱 이름으로 둔다 — 탐색기 속성 창과 SignPath 서명 규칙이 이 값을 본다.
         winresource::WindowsResource::new()
             .set_icon(ico.to_str().expect("아이콘 경로"))
+            .set("ProductName", "Ramus")
+            .set("FileDescription", "Ramus")
+            .set("CompanyName", "NK Studio")
+            .set("OriginalFilename", "Ramus.exe")
+            .set("LegalCopyright", "Public domain (The Unlicense)")
             .compile()
             .expect("Windows 리소스(아이콘)를 묻지 못했습니다");
     }
