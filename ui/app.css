@@ -2132,6 +2132,50 @@ body.shell-enter #main, body.shell-enter #start, body.shell-enter #tabs { opacit
 .pr-detail-event-time { flex: none; margin-left: 6px; font-size: 11px; color: var(--git-text-muted); }
 .pr-detail-event-body { margin-top: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-word; color: var(--git-text); user-select: text; -webkit-user-select: text; }
 .pr-detail-reply-buttons { margin-bottom: 12px; }
+/* 렌더한 GitHub 마크다운(PR 설명·코멘트). 원문 글일 때만 pre-wrap 으로 줄을 지킨다. */
+.markdown { white-space: normal; line-height: 1.55; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p, .markdown ul, .markdown ol, .markdown pre, .markdown table, .markdown blockquote, .markdown .markdown-alert { margin: 0 0 8px; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { margin: 12px 0 6px; font-weight: 700; line-height: 1.3; color: var(--git-text-strong); }
+.markdown h1 { font-size: 17px; padding-bottom: 4px; border-bottom: 1px solid var(--git-divider); }
+.markdown h2 { font-size: 15px; padding-bottom: 3px; border-bottom: 1px solid var(--git-divider); }
+.markdown h3 { font-size: 13px; }
+.markdown h4, .markdown h5, .markdown h6 { font-size: 12px; }
+.markdown h6 { color: var(--git-text-muted); }
+.markdown ul, .markdown ol { padding-left: 20px; }
+.markdown li + li, .markdown li > ul, .markdown li > ol { margin-top: 2px; }
+.markdown li > ul, .markdown li > ol { margin-bottom: 0; }
+.markdown li.task-list-item { list-style: none; }
+.markdown ul.contains-task-list { padding-left: 4px; }
+.markdown .task-list-item-checkbox { margin: 0 6px 0 0; vertical-align: -2px; }
+.markdown a { color: var(--git-accent-fg); text-decoration: none; cursor: pointer; }
+.markdown a:hover { text-decoration: underline; }
+.markdown strong { font-weight: 700; color: var(--git-text-strong); }
+.markdown code { padding: 1px 4px; border-radius: 4px; background: var(--git-hover); font-family: var(--mono); font-size: 11px; }
+.markdown pre { padding: 8px 10px; border-radius: var(--radius); background: var(--git-hover); overflow-x: auto; }
+.markdown pre code { padding: 0; background: none; white-space: pre; line-height: 1.45; }
+.markdown blockquote { padding: 0 10px; border-left: 3px solid var(--git-border); color: var(--git-text-muted); }
+.markdown hr { height: 0; margin: 12px 0; border: 0; border-top: 1px solid var(--git-border); }
+.markdown table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+.markdown th, .markdown td { padding: 4px 10px; border: 1px solid var(--git-border); }
+.markdown th { font-weight: 700; background: var(--git-hover); }
+.markdown img { max-width: 100%; height: auto; }
+.markdown kbd { display: inline-block; padding: 0 5px; border: 1px solid var(--git-border); border-bottom-width: 2px; border-radius: 4px; background: var(--git-hover); font-family: var(--mono); font-size: 11px; line-height: 16px; }
+.markdown details { margin: 0 0 8px; }
+.markdown details > summary { cursor: pointer; }
+.markdown details[open] > summary { margin-bottom: 6px; }
+.markdown mark { padding: 0 2px; border-radius: 2px; background: var(--git-warning-soft); color: inherit; }
+.markdown del { color: var(--git-text-muted); }
+.markdown .footnotes { margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--git-divider); font-size: 11px; color: var(--git-text-muted); }
+.markdown .markdown-alert { padding: 4px 10px; border-left: 3px solid var(--git-accent); }
+.markdown .markdown-alert-title { margin: 0 0 2px; font-weight: 700; color: var(--git-accent-fg); }
+.markdown .markdown-alert-tip { border-left-color: var(--git-success); }
+.markdown .markdown-alert-tip .markdown-alert-title { color: var(--git-success); }
+.markdown .markdown-alert-warning, .markdown .markdown-alert-important { border-left-color: var(--git-warning); }
+.markdown .markdown-alert-warning .markdown-alert-title, .markdown .markdown-alert-important .markdown-alert-title { color: var(--git-warning); }
+.markdown .markdown-alert-caution { border-left-color: var(--git-danger); }
+.markdown .markdown-alert-caution .markdown-alert-title { color: var(--git-danger); }
 /* 색 있는 보조 버튼(닫기·변경 요청은 빨강, 승인은 초록): 평소엔 옅은 바탕 + 테두리, 올리면 채움. */
 .btn.drawer-secondary.pr-detail-danger { border-color: var(--git-danger); background: var(--git-danger-soft); color: var(--git-text); }
 .btn.drawer-secondary.pr-detail-danger:hover:not(:disabled) { background: var(--git-danger-hover); border-color: var(--git-danger); color: var(--git-on-danger-hover); }

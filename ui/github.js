@@ -104,6 +104,34 @@ export function createGitHub(ctx) {
   let signedIn = null; // 앱 로그인 여부(null = 아직 모름)
 
   const api = (path, { method = 'GET', body } = {}) => ctx.call('githubApi', { method, path, body });
+
+  // ── GitHub 마크다운(PR 설명·코멘트) → HTML. 바꾸기는 백엔드(renderMarkdown)가 한다 ──
+  const markdownSource = new WeakMap(); // 칸 → 지금 보이려는 원문. 그 사이 다른 글로 바뀌었으면 늦게 온 HTML 은 버린다.
+  let markdownQueue = null;
+  /** 원문을 먼저 글로 보이고 HTML 이 오면 바꿔 넣는다. 같은 차례에 부른 칸들은 한 번에 바꾼다. 실패하면 원문을 그대로 둔다. */
+  function showMarkdown(node, text) {
+    showPlain(node, text);
+    markdownSource.set(node, text);
+    if (!markdownQueue) {
+      markdownQueue = [];
+      queueMicrotask(() => {
+        const batch = markdownQueue;
+        markdownQueue = null;
+        ctx.call('renderMarkdown', { texts: batch.map(([, source]) => source) }).then((htmls) => batch.forEach(([n, source], i) => {
+          if (markdownSource.get(n) !== source) return;
+          n.innerHTML = htmls[i] ?? '';
+          n.classList.add('markdown');
+        }), () => {});
+      });
+    }
+    markdownQueue.push([node, text]);
+    return node;
+  }
+  function showPlain(node, text) {
+    markdownSource.delete(node);
+    node.classList.remove('markdown');
+    node.textContent = text;
+  }
   const repoPath = () => `/repos/${info.owner}/${info.repo}`;
   const filters = () => ctx.prefs.get('github.filters') ?? DEFAULT_FILTERS;
   const saveFilters = (list) => {
@@ -1028,6 +1056,20 @@ export function createGitHub(ctx) {
           el('div', { class: 'drawer-section' }, filesCaption, files));
         body.append(el('div', { class: 'drawer-form' }, error, skeleton, content));
         syncMethods();
+        // 마크다운 속 링크는 앱 화면을 옮기지 않는다: https 는 브라우저로 열고, "#각주" 는 그 자리로 굴린다.
+        content.addEventListener('click', (e) => {
+          const a = e.target.closest?.('.markdown a[href]');
+          if (!a) return;
+          e.preventDefault();
+          const href = a.getAttribute('href');
+          if (href.startsWith('#')) {
+            // 글 속 id 는 백엔드가 앞에 "user-content-" 를 붙여 둔다(markdown.rs). 링크는 붙이기 전 이름이다.
+            const box = a.closest('.markdown');
+            const id = decodeURIComponent(href.slice(1));
+            (box.querySelector(`[id="${CSS.escape(`user-content-${id}`)}"]`) ?? box.querySelector(`[id="${CSS.escape(id)}"]`))?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+          else if (a.href.startsWith('https://')) ctx.call('openUrl', { url: a.href }).catch(ctx.showError);
+        });
 
         function hideSkeleton() {
           skeletonShowing = false;
@@ -1070,8 +1112,9 @@ export function createGitHub(ctx) {
           readiness.textContent = READINESS[r];
           readiness.className = `${P}-readiness${canMerge(r) ? ' ok' : ['conflicts', 'blocked', 'behind'].includes(r) ? ' bad' : ''}`;
           const text = (p.body ?? '').replace(/\r\n/g, '\n').trim();
-          descriptionBody.textContent = text || t('설명이 없습니다.');
           descriptionBody.classList.toggle('empty', !text);
+          if (text) showMarkdown(descriptionBody, text);
+          else showPlain(descriptionBody, t('설명이 없습니다.'));
           facts.replaceChildren();
           fact(t('리뷰어'), (p.requested_reviewers ?? []).map((u) => u.login).filter(Boolean));
           fact(t('담당자'), (p.assignees ?? []).map((u) => u.login).filter(Boolean));
@@ -1089,7 +1132,7 @@ export function createGitHub(ctx) {
                 el('span', { class: `${P}-event-author`, text: item.author ?? '?' }),
                 el('span', { class: `${P}-event-action${item.kind === 'review' ? ` ${item.state.toLowerCase().replace(/_/g, '-')}` : ''}`, text: eventAction(item) }),
                 el('span', { class: `${P}-event-time`, text: item.at ? formatDate(Date.parse(item.at) / 1000, true) : '' })),
-              item.body ? el('div', { class: `${P}-event-body`, text: item.body }) : null)),
+              item.body ? showMarkdown(el('div', { class: `${P}-event-body` }), item.body) : null)),
             ...(failure ? [el('div', { class: 'drawer-problem', text: failure })] : []));
         }
 

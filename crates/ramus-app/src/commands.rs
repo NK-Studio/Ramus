@@ -15,7 +15,7 @@ use ramus_core::rewrite::RewriteKind;
 use ramus_core::undo::{self, Journal, UndoEntry, UndoKind};
 use ramus_core::runner::trace;
 use ramus_core::i18n::tr;
-use ramus_core::{GitError, GitGlobals, GitRunner, Repository, Settings, gitbin, login, newrepo, remote, ssl, trf};
+use ramus_core::{GitError, GitGlobals, GitRunner, Repository, Settings, gitbin, login, markdown, newrepo, remote, ssl, trf};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -1055,6 +1055,11 @@ impl AppState {
                 let a = Args(&args);
                 let token = self.github_api_token().map(|(_, t)| t);
                 github::api(a.s("method").unwrap_or("GET"), a.s("path")?, args.get("body").filter(|b| !b.is_null()), token.as_deref())
+            }
+            // 화면에 넣을 HTML 로 바꾼 GitHub 마크다운. 여러 글(설명·코멘트들)을 한 번에 받아 같은 차례로 돌려준다.
+            "renderMarkdown" => {
+                let texts = args.get("texts").and_then(Value::as_array).ok_or_else(|| GitError::new(tr("요청 인자 'texts' 가 없습니다.", "The request argument 'texts' is missing.")))?;
+                Ok(Value::Array(texts.iter().map(|t| json!(markdown::to_html(t.as_str().unwrap_or("")))).collect()))
             }
             "githubGraphql" => {
                 let token = self.github_api_token().map(|(_, t)| t).ok_or_else(|| GitError::new(tr("GitHub 에 로그인해 주세요.", "Sign in to GitHub.")))?;

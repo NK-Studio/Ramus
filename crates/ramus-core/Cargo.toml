@@ -12,6 +12,9 @@ regex = "1"
 ureq = { version = "2.12.1", features = ["native-certs"] }
 md5 = "0.8.1"
 sha1_smol = "1.0.1"
+# PR 설명·코멘트의 GitHub 마크다운(표·체크 목록·자동 링크)을 HTML 로 바꾸고(comrak), 글 속 HTML 은 안전한 태그만 남긴다(ammonia). markdown.rs.
+comrak = { version = "0.59", default-features = false }
+ammonia = "4.2"
 
 [dev-dependencies]
 tempfile = "3"

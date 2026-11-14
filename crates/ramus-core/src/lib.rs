@@ -13,6 +13,7 @@ pub mod files;
 pub mod log;
 pub mod newrepo;
 pub mod login;
+pub mod markdown;
 pub mod ops;
 pub mod patch;
 pub mod refs;
