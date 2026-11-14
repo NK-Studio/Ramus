@@ -174,6 +174,7 @@ export default {
   '#{number} {title}\n\nGitHub 에서 이 Pull Request 를 병합하지 않고 닫습니다. 나중에 다시 열 수 있습니다.': '#{number} {title}\n\nClose this pull request on GitHub without merging. You can reopen it later.',
   'Pull Request #{number} 다시 열기 실패': "Couldn't Reopen Pull Request #{number}",
   'Pull Request #{number} 닫기 실패': "Couldn't Close Pull Request #{number}",
+  'Pull Request 병합': 'Merge Pull Request',
   'Pull Request #{number} 병합': 'Merge Pull Request #{number}',
   "#{number} {title}\n\n{head} → {base}을(를) '{method}' 방식으로 GitHub({repo})에서 병합합니다. 되돌리려면 GitHub 에서 Revert 해야 합니다.":
     "#{number} {title}\n\nMerge {head} into {base} on GitHub ({repo}) using '{method}'. To undo it, you'll need to revert on GitHub.",

@@ -990,7 +990,7 @@ export function createGitHub(ctx) {
           onclick: () => { mergeMethod = method; syncMethods(); },
         }));
         const syncMethods = () => methodButtons.forEach((b) => b.classList.toggle('on', b.dataset.method === mergeMethod));
-        const mergeButton = el('button', { class: 'btn drawer-primary', text: 'Merge Pull Request', onclick: () => merge() });
+        const mergeButton = el('button', { class: 'btn drawer-primary', text: t('Pull Request 병합'), onclick: () => merge() });
 
         // 작업 버튼 줄.
         const secondary = (text, onclick) => el('button', { class: 'btn drawer-secondary', text, onclick });
@@ -1148,7 +1148,7 @@ export function createGitHub(ctx) {
           const r = current ? readinessOf(current) : 'checking';
           const open = current?.state === 'open';
           mergeButton.disabled = merging || !canMerge(r);
-          mergeButton.textContent = merging ? t('병합하는 중…') : 'Merge Pull Request';
+          mergeButton.textContent = merging ? t('병합하는 중…') : t('Pull Request 병합');
           methodButtons.forEach((b) => { b.disabled = !open || merging; });
           const h = current ? head() : null;
           viewChangesButton.disabled = !h;
@@ -1244,7 +1244,7 @@ export function createGitHub(ctx) {
           if (!p || merging) return;
           const method = MERGE_METHODS.find(([m]) => m === mergeMethod)?.[1];
           const ok = await confirmDialog({
-            title: t('Pull Request #{number} 병합', { number }), glyph: 'pullRequest', ok: 'Merge Pull Request',
+            title: t('Pull Request #{number} 병합', { number }), glyph: 'pullRequest', ok: t('Pull Request 병합'),
             message: t("#{number} {title}\n\n{head} → {base}을(를) '{method}' 방식으로 GitHub({repo})에서 병합합니다. 되돌리려면 GitHub 에서 Revert 해야 합니다.", { number, title: p.title, head: headLabel(p), base: p.base?.ref, method, repo: `${info.owner}/${info.repo}` }),
           });
           if (!ok || p !== current || stale()) return;
