@@ -9,7 +9,8 @@ Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.
 
 ## 내려받기
 
-[Releases](https://github.com/NK-Studio/gitvcs-desktop/releases/latest) 에서 받습니다.
+[Releases](https://github.com/NK-Studio/Ramus/releases/latest) 에서 받습니다.
+Windows 빌드는 SignPath Foundation 의 무료 인증서로 서명합니다([Code signing policy](#code-signing-policy)).
 
 - macOS(Apple Silicon): `Ramus-<버전>-macos-arm64.dmg` — 열린 창에서 `Ramus` 를 `Applications` 폴더로 끌어다 놓습니다.
 - Windows 10/11(x64): `Ramus-<버전>-windows-x64.zip` — 압축을 풀고 `Ramus.exe` 를 실행합니다(WebView2 런타임 사용).
@@ -74,6 +75,28 @@ swift scripts/make-dmg-background.swift  # DMG 창 배경 assets/dmg/background.
 ```bash
 echo 'return document.title' | nc 127.0.0.1 7777
 ```
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+Windows releases (`Ramus.exe`) are signed with this certificate. macOS releases are signed with an Apple Developer ID and notarized by Apple.
+
+- Committers and reviewers: [NK Studio](https://github.com/NK-Studio)
+- Approvers: [NK Studio](https://github.com/NK-Studio)
+
+Only binaries built by GitHub Actions from this repository ([release workflow](.github/workflows/release.yml)) are signed, and an approver approves each release before it is signed.
+The bundled `git` folder is taken unchanged from [dugite-native](https://github.com/desktop/dugite-native) and is not re-signed.
+
+### Privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with these exceptions:
+
+- Git operations connect to the remotes configured in the opened repository. This includes automatic fetch, which runs every 10 minutes by default and can be turned off in Settings.
+- Author avatars in the commit graph are looked up from GitHub and Gravatar. GitHub (`avatars.githubusercontent.com`, `github.com`) receives the commit author's email address, and for repositories hosted on GitHub, `api.github.com` receives the repository name and commit hash. Gravatar (`www.gravatar.com`) receives an MD5 hash of the email address.
+- Other GitHub features (pull requests, repository lists, creating repositories) call `api.github.com` only after the user signs in to GitHub.
+
+Ramus does not collect telemetry or send data to NK Studio.
 
 ## 라이선스
 
