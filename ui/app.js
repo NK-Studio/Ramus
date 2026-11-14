@@ -794,7 +794,9 @@ function beginEnter(repo) {
 /** 레포지토리 화면을 다 그린 뒤: 마지막 페치 시각, PR 목록. */
 function afterEnter() {
   updateFetchInfo();
-  github.load();
+  // 다시 읽는다 — 첫 snapshot 전에 사이드바가 그려지면 PR 목록이 먼저 읽히는데, 그때는 백엔드가 아직 GitHub 원격을
+  // 모르니 "GitHub 원격이 없습니다" 로 굳는다(같은 레포지토리라 다시 읽지 않는다). 지금은 snapshot 이 끝나 원격을 안다.
+  github.load(true);
 }
 
 /**
