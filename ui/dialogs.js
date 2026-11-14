@@ -436,7 +436,11 @@ export function openDrawer({ glyph, title, anchor, build, width = 480 }) {
   return close;
 }
 
-export const closeDrawer = () => openDrawerState?.close();
+/**
+ * 열린 서랍을 닫는다. immediate: 미끄러지지 않고 바로 지운다 — 서랍 뒤 화면이 바뀌며 닫을 때(사이드바가 접힘, 다른 레포지토리)
+ * 미끄러지면 0.4초 동안 사라진 사이드바 자리에서 새 화면 위를 쓸고 지나가 잔상처럼 보인다.
+ */
+export const closeDrawer = (immediate = false) => openDrawerState?.close(immediate);
 
 /** 드로어의 주 버튼: 폭을 다 쓰는 초록 버튼(원본 side-drawer__primary). 드로어에는 취소 버튼을 두지 않는다(✕·Esc). */
 export const drawerPrimary = (text, onclick) => el('button', { class: 'btn drawer-primary', text, onclick });

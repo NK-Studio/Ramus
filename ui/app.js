@@ -294,7 +294,7 @@ let connectSkipped = false;
 function showConnect(after) {
   const shown = { main: !$('main').hidden, start: !$('start').hidden };
   for (const id of ['main', 'start', 'tabs']) $(id).hidden = true;
-  closeDrawer();
+  closeDrawer(true);
   github.connectScreen($('connect'), async (signedIn) => {
     if (!signedIn) connectSkipped = true;
     $('tabs').hidden = false;
@@ -777,7 +777,7 @@ function beginEnter(repo) {
   graph.select(null, false);
   closeDiff();
   closeMerge();
-  closeDrawer();
+  closeDrawer(true);
   toolbar.setFetch({ error: null, auth: false, fetching: false });
   lastFetchError = null;
   github.reset();
@@ -1976,7 +1976,7 @@ function renderRail() {
   document.querySelector('.splitter[data-split="sidebar"]').hidden = folded;
   // 서랍(PR 상세 등)은 왼쪽 패널 오른쪽에 붙어 뜬다 — 패널이 접히거나 펼쳐지면 붙던 자리가 사라지니 같이 닫는다
   // (PR 의 "바뀐 것 보기" 처럼 서랍에서 연 화면을 서랍이 가리지 않게).
-  if (folded !== railFolded) closeDrawer();
+  if (folded !== railFolded) closeDrawer(true);
   railFolded = folded;
   if (!folded) return;
   const refs = state.refs ?? { local: [], remote: [], tags: [], stashes: [] };
