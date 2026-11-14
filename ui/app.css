@@ -2577,7 +2577,7 @@ body.repo-loading .tab.active .tab-name {
   #main.switch-in { animation: none; }
 }
 
-/* Windows 제목 막대(titlebar.js): 운영체제 제목 막대 대신 메뉴 단추·제목·창 단추를 한 줄로(Fork 처럼 아이콘 없이).
+/* Windows 제목 막대(titlebar.js): 운영체제 제목 막대 대신 메뉴 단추·창 단추를 한 줄로(Fork 처럼 아이콘 없이).
    켜는 화면·GitHub 연결 화면(창 전체를 덮는 층)보다 위에 둬서, 그때도 창을 옮기고 닫을 수 있다. */
 .titlebar { flex: none; position: relative; z-index: 300; display: flex; align-items: stretch; height: 32px; background: var(--git-titlebar-bg); color: var(--git-text); user-select: none; -webkit-user-select: none; }
 :root:not([data-platform="windows"]) .titlebar, body.fullscreen .titlebar { display: none; }
@@ -2587,8 +2587,6 @@ body.repo-loading .tab.active .tab-name {
 .titlebar-menu { height: 26px; padding: 0 9px; border: 0; border-radius: 4px; background: none; color: var(--git-text); font-size: 12.5px; cursor: default; }
 .titlebar-menu:hover, .titlebar-menu.open { background: var(--git-hover); }
 .titlebar-drag { flex: 1; min-width: 16px; }
-/* 제목은 창 가운데(메뉴 길이와 상관없이). 글을 눌러도 끌기가 되도록 막대 쪽 판정은 titlebar.js 가 한다. */
-.titlebar-title { position: absolute; left: 50%; top: 0; bottom: 0; transform: translateX(-50%); max-width: 40%; display: flex; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--git-text-muted); font-size: 12.5px; }
 .titlebar-controls { flex: none; display: flex; margin-left: auto; }
 .titlebar-control { width: 46px; border: 0; border-radius: 0; background: none; color: var(--git-text); display: flex; align-items: center; justify-content: center; cursor: default; }
 .titlebar-control svg { fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }

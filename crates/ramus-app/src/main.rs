@@ -8,7 +8,7 @@
 //! 메뉴 막대(menu.rs)를 누르면 `UserEvent::Menu(id)` 로 이벤트 루프에 오고, `window.__gitvcs.menu("<id>")` 로 화면에 넘긴다.
 //! 화면은 상태가 바뀌면 `menuState` 로 항목을 켜고 끈다.
 //!
-//! Windows 는 운영체제 제목 막대를 없앤 창이다: 화면이 맨 위에 메뉴 단추·제목·창 단추를 한 줄로 그리고(ui/titlebar.js),
+//! Windows 는 운영체제 제목 막대를 없앤 창이다: 화면이 맨 위에 메뉴 단추·창 단추를 한 줄로 그리고(ui/titlebar.js),
 //! 메뉴 단추는 `menuPopup` 으로 운영체제 팝업 메뉴를 띄운다.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -200,7 +200,7 @@ fn main() -> wry::Result<()> {
             .with_fullsize_content_view(true)
             .with_traffic_light_inset(tao::dpi::LogicalPosition::new(14.0, 21.0))
     };
-    // Windows: 운영체제 제목 막대를 없애고 화면이 메뉴·제목·창 단추를 한 줄로 그린다(Fork 처럼, 제목 막대에 아이콘 없음).
+    // Windows: 운영체제 제목 막대를 없애고 화면이 메뉴·창 단추를 한 줄로 그린다(Fork 처럼, 제목 막대에 아이콘 없음).
     // 그림자를 남기면 운영체제가 창 가장자리 크기 조절을 그대로 해 준다.
     // 아이콘은 작업 표시줄·Alt+Tab 에 쓴다 — build.rs 가 묻은 아이콘 리소스(id 1).
     // 테마를 정해 두면 팝업 메뉴도 화면 테마(어둡게·밝게)를 따른다.
@@ -417,10 +417,8 @@ fn main() -> wry::Result<()> {
                 }
             }
             Event::UserEvent(UserEvent::Title(title)) => {
+                // 운영체제 창 제목(작업 표시줄·Alt+Tab). Windows 의 화면 제목 막대에는 제목을 그리지 않는다.
                 window.set_title(&title);
-                // Windows 는 화면이 제목 막대를 그린다.
-                let body = json!({ "event": "title", "data": title });
-                let _ = webview.evaluate_script(&format!("window.__gitvcs && window.__gitvcs.event({body})"));
             }
             Event::UserEvent(UserEvent::Zoom(scale)) => {
                 zoom = scale;

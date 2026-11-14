@@ -50,13 +50,12 @@ function accessLabel(name, key) {
 /** 제목 막대를 채우고 움직이게 한다. container 는 index.html 의 #titlebar. */
 export function createTitlebar(container) {
   const menus = el('div', { class: 'titlebar-menus' });
-  const title = el('div', { class: 'titlebar-title', text: document.title || 'Ramus' });
   const maximize = el('button', { class: 'titlebar-control', 'aria-label': t('최대화'), onclick: () => call('windowZoom').catch(() => {}) }, glyph('maximize'));
   const controls = el('div', { class: 'titlebar-controls' },
     el('button', { class: 'titlebar-control', 'aria-label': t('최소화'), onclick: () => call('windowMinimize').catch(() => {}) }, glyph('minimize')),
     maximize,
     el('button', { class: 'titlebar-control close', 'aria-label': t('닫기'), onclick: () => call('windowClose').catch(() => {}) }, glyph('close')));
-  container.replaceChildren(menus, el('div', { class: 'titlebar-drag' }), title, controls);
+  container.replaceChildren(menus, el('div', { class: 'titlebar-drag' }), controls);
   container.hidden = false;
 
   // 메뉴 단추: 누르는 순간(mousedown) 연다 — 운영체제 메뉴 막대처럼. 팝업이 닫히면 응답이 온다.
@@ -181,9 +180,9 @@ export function createTitlebar(container) {
   window.addEventListener('mousedown', () => { altAlone = false; leaveKeyboard(); }, true);
   window.addEventListener('blur', () => { altAlone = false; leaveKeyboard(); });
 
-  // 빈 곳(막대 자체·끌기 여백·제목 글)을 끌면 창을 옮기고, 두 번 누르면 키우거나 되돌린다.
+  // 빈 곳(막대 자체·끌기 여백)을 끌면 창을 옮기고, 두 번 누르면 키우거나 되돌린다.
   // 끌기는 누른 채 실제로 움직였을 때 시작한다 — 누르자마자 시작하면 운영체제의 창 옮기기가 두 번째 누름을 가져가 dblclick 이 오지 않는다.
-  const empty = (event) => event.target === container || event.target === title || event.target.classList?.contains('titlebar-drag');
+  const empty = (event) => event.target === container || event.target.classList?.contains('titlebar-drag');
   let pressed = null;
   container.addEventListener('mousedown', (event) => {
     pressed = event.button === 0 && event.detail === 1 && empty(event) ? { x: event.screenX, y: event.screenY } : null;
@@ -200,7 +199,6 @@ export function createTitlebar(container) {
     if (empty(event)) call('windowZoom').catch(() => {});
   });
 
-  on('title', (text) => { title.textContent = text || 'Ramus'; });
   on('window', (data) => {
     const maximized = !!data?.maximized;
     maximize.replaceChildren(glyph(maximized ? 'restore' : 'maximize'));
