@@ -55,8 +55,8 @@ pub fn check() -> Result<Value> {
     let value = match newer.first() {
         None => json!({ "available": false, "current": CURRENT }),
         Some(latest) => {
-            let releases: Vec<Value> =
-                newer.iter().map(|r| json!({ "version": r.version, "date": r.date, "html": markdown::to_html(&r.notes) })).collect();
+            // 몇 판을 건너뛰었더라도 바뀐 내용은 가장 새 판의 것만 보인다.
+            let releases = [json!({ "version": latest.version, "date": latest.date, "html": markdown::to_html(&latest.notes) })];
             let can_install = update::asset_key().is_some_and(|key| latest.assets.contains_key(key)) && install_target().is_ok();
             json!({
                 "available": true,

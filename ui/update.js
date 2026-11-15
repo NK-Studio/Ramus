@@ -1,5 +1,5 @@
 // 앱 업데이트 창. Rust(updater.rs)가 새 판을 찾으면 updateAvailable 로 알리고, 메뉴의 "업데이트 확인…" 은 updateCheck 로 묻는다.
-// 창에는 새 판 번호와 지금 판 사이에 바뀐 내용(ChangeLog.md 항목)을 보이고, [업데이트]를 누르면 앱이 받아서 바꿔 넣고 다시 켠다
+// 창에는 새 판 번호와 그 판에서 바뀐 내용(ChangeLog.md 항목, 건너뛴 사이 판은 빼고 가장 새 판만)을 보이고, [업데이트]를 누르면 앱이 받아서 바꿔 넣고 다시 켠다
 // (진행 막대 → "다시 시작합니다"). 앱 안에서 바꿀 수 없는 경우(zip 판·쓸 수 없는 폴더)는 내려받기 페이지를 연다.
 import { el } from './util.js';
 import { call, on } from './bridge.js';
