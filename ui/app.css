@@ -492,9 +492,11 @@ body.resizing-col, body.resizing-col * { cursor: col-resize !important; }
 body.reordering-col, body.reordering-col * { cursor: grab !important; }
 
 .graph-scroll { flex: 1; overflow: auto; position: relative; outline: none; }
-.graph-sizer { position: relative; min-height: 100%; }
-/* 선·원 canvas 는 보이는 칸에 붙어 있다(스크롤해도 제자리, graph.js 가 scrollTop 만큼 옮겨 그린다). Fork 탐색기 목록도 같다. */
-.graph-sizer > canvas { position: sticky; top: 0; left: 0; display: block; pointer-events: none; z-index: 1; }
+/* 선·원 canvas 가 위아래로 내용 밖까지 뻗어도 스크롤 길이를 늘리지 않게 세로로 자른다. */
+.graph-sizer { position: relative; min-height: 100%; overflow-y: clip; }
+/* 선·원 canvas 는 줄과 함께 스크롤되는 내용 안에 있다. graph.js 가 보이는 칸 위아래 여유까지 덮도록 top 을 옮겨 다시 그린다 —
+   sticky 로 화면에 붙여 두면 빠르게 스크롤할 때 줄만 먼저 움직이고 선·원은 늦게 따라와 어긋났다. Fork 탐색기 목록도 같다. */
+.graph-sizer > canvas { position: absolute; top: 0; left: 0; display: block; pointer-events: none; z-index: 1; }
 .graph-rows { position: absolute; inset: 0; }
 .graph-empty { position: absolute; top: 120px; left: 0; right: 0; text-align: center; color: var(--git-graph-empty); pointer-events: none; }
 

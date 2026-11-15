@@ -306,6 +306,7 @@ export function createGraph(opts) {
   let selected = null;
   let truncatedHistory = false;
   let frame = 0;
+  let canvasTop = 0; // 선·원 canvas 의 위쪽 끝(내용 좌표). draw 가 정한다.
   let wipSubject = '';
   let branchInput = null; // {hash, element, validate, submit}
   let searchMatches = null; // Set of row indexes (커밋 번호) — 검색 중이면 안 맞는 줄을 흐린다
@@ -425,7 +426,7 @@ export function createGraph(opts) {
 
   const X = (column) => layout.start.graph + laneOffset(column);
   const edgeX = (column) => layout.start.graph + firstLaneOffset() + column * spacing();
-  const Y = (row) => row * ROW_HEIGHT + ROW_HEIGHT / 2 - scroll.scrollTop;
+  const Y = (row) => row * ROW_HEIGHT + ROW_HEIGHT / 2 - canvasTop;
 
   /** 선의 진하기: 오른쪽 벽이 그 선에 열 간격 절반만큼 다가오면 흐려지기 시작해 닿으면 사라진다. */
   function edgeAlpha(maxColumn) {
@@ -809,12 +810,15 @@ export function createGraph(opts) {
     return row;
   }
 
+  /** 보이는 칸 위아래로 미리 만들어 두는 줄 수(줄 요소와 선·원 canvas 가 같은 범위를 덮는다). 빠르게 휙 넘겨도 빈칸이 안 보이게 화면 절반. */
+  const overscanRows = () => Math.max(OVERSCAN, Math.ceil(scroll.clientHeight / 2 / ROW_HEIGHT));
+
   function render() {
     cancelAnimationFrame(frame);
     const top = scroll.scrollTop;
     const height = scroll.clientHeight;
-    const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN);
-    const last = Math.min(rowCount() - 1, Math.ceil((top + height) / ROW_HEIGHT) + OVERSCAN);
+    const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - overscanRows());
+    const last = Math.min(rowCount() - 1, Math.ceil((top + height) / ROW_HEIGHT) + overscanRows());
     const wanted = new Set();
     for (let row = first; row <= last; row++) {
       const key = keyOf(row);
@@ -1112,7 +1116,12 @@ export function createGraph(opts) {
   function draw() {
     const dpr = window.devicePixelRatio || 1;
     const width = scroll.clientWidth;
-    const height = scroll.clientHeight;
+    // canvas 는 줄과 함께 스크롤되는 내용 안에 있고, 보이는 칸 위아래로 overscan 만큼 더 그린다. 브라우저(WebView2)는 스크롤을
+    // 합성 단계에서 먼저 옮기고 다시 그리기는 한두 프레임 늦게 오는데, 그동안 선·원이 줄과 함께 움직여 어긋나지 않는다.
+    const margin = overscanRows() * ROW_HEIGHT;
+    const height = scroll.clientHeight + margin * 2;
+    canvasTop = Math.round(scroll.scrollTop) - margin;
+    canvas.style.top = `${canvasTop}px`;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
@@ -1123,8 +1132,8 @@ export function createGraph(opts) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
     if (!commits.length && !hasWip) return;
-    const first = Math.floor(scroll.scrollTop / ROW_HEIGHT) - offset() - 1;
-    const last = Math.ceil((scroll.scrollTop + height) / ROW_HEIGHT) - offset() + 1;
+    const first = Math.floor(canvasTop / ROW_HEIGHT) - offset() - 1;
+    const last = Math.ceil((canvasTop + height) / ROW_HEIGHT) - offset() + 1;
     const spans = refSpans();
     // 선·원은 그래프 칸(과 바로 왼쪽 이름표 칸) 안에만 그린다.
     const refsLeftOfGraph = order.indexOf('refs') === order.indexOf('graph') - 1;
