@@ -26,12 +26,30 @@ export function createUpdater({ prefs, toast, version }) {
     prefs.set('update.lastVersion', version);
   }
 
-  on('updateAvailable', (info) => {
-    if (!info?.available || prefs.get('update.skip') === info.version) return;
+  // 자동 확인으로 찾은 판은 첫 화면을 다 그린 뒤에 띄운다(켜는 중에 창이 끼어들지 않게). 같은 판은 한 번만.
+  let started = false;
+  let waiting = null;
+  let shown = null;
+  const offer = (info) => {
+    if (!info?.available || prefs.get('update.skip') === info.version || shown === info.version) return;
+    if (!started) {
+      waiting = info;
+      return;
+    }
+    shown = info.version;
     showUpdate(info, prefs);
-  });
+  };
+  on('updateAvailable', offer);
 
   return {
+    /** 첫 화면을 다 그렸다. 그 전에 온 알림이나, 화면이 뜨기 전에 Rust 가 찾아 둔 판(updatePending)을 띄운다. */
+    async start() {
+      if (started) return;
+      started = true;
+      const info = waiting ?? (await call('updatePending').catch(() => null));
+      waiting = null;
+      offer(info);
+    },
     async check() {
       try {
         const info = await call('updateCheck');

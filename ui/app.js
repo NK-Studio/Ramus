@@ -2462,6 +2462,8 @@ let updater = null;
   } finally {
     // 첫 화면을 다 그렸다 — 켜는 동안의 스켈레톤(boot.js)을 걷어 낸다.
     window.__bootDone?.();
+    // 켜는 동안 찾은 새 판이 있으면 이제 알린다.
+    updater?.start();
     // 설정에서 시스템·직접 지정 git 을 골랐는데 못 써서 다른 git 으로 돌아갔으면 한 번 알린다(내장 git 이 없는 개발 빌드는 조용히).
     call('gitInfo').then((info) => {
       if (info.mode !== 'bundled' && info.active?.fallback) toast(info.active.fallback, 'info');

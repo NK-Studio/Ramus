@@ -178,14 +178,14 @@ fn main() -> wry::Result<()> {
         }
     });
 
-    // 켜고 조금 뒤, 그 뒤로는 6시간마다 새 판이 있는지 본다(설정 > 일반 의 "업데이트 자동 확인", 화면의 ui 값 update.auto).
-    // 같은 판은 한 번만 알린다. 건너뛴 판인지는 화면이 본다.
+    // 켜자마자, 그 뒤로는 6시간마다 새 판이 있는지 본다(설정 > 일반 의 "업데이트 자동 확인", 화면의 ui 값 update.auto).
+    // 같은 판은 한 번만 알린다. 건너뛴 판인지는 화면이 본다. 첫 확인은 화면이 뜨는 동안 끝날 수 있어 찾은 판을 updater 에 남겨 두고,
+    // 화면은 첫 화면을 다 그린 뒤 updatePending 으로 가져간다(그 전에 보낸 updateAvailable 은 받을 곳이 없어 사라진다).
     if updater::manifest_url().is_some() {
         let update_state = Arc::downgrade(&state);
         let update_proxy = proxy.clone();
         thread::spawn(move || {
             let mut told = String::new();
-            thread::sleep(Duration::from_secs(8));
             loop {
                 let Some(state) = update_state.upgrade() else { break };
                 let auto = state.settings.lock().unwrap().ui.get("update.auto").and_then(Value::as_bool).unwrap_or(true);
@@ -196,6 +196,7 @@ fn main() -> wry::Result<()> {
                     && info["version"].as_str() != Some(told.as_str())
                 {
                     told = info["version"].as_str().unwrap_or_default().to_string();
+                    updater::remember(&info);
                     let _ = update_proxy.send_event(UserEvent::Emit(json!({ "event": "updateAvailable", "data": info }).to_string()));
                 }
                 thread::sleep(Duration::from_secs(6 * 60 * 60));
@@ -354,6 +355,8 @@ fn main() -> wry::Result<()> {
                     let _ = ipc_proxy.send_event(UserEvent::QuitDismissed);
                 }
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "updatePending" {
+                let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(updater::pending()))));
             } else if request.cmd == "updateCheck" {
                 let proxy = ipc_proxy.clone();
                 thread::spawn(move || {

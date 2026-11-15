@@ -24,6 +24,18 @@ const CURRENT: &str = env!("CARGO_PKG_VERSION");
 static LAST: Mutex<Option<Manifest>> = Mutex::new(None);
 /// 설치를 한 번에 하나만.
 static INSTALLING: AtomicBool = AtomicBool::new(false);
+/// 자동 확인이 마지막으로 찾은 새 판(check() 가 돌려준 값). 화면이 뜨기 전에 찾았을 때를 위해 남겨 둔다.
+static FOUND: Mutex<Option<Value>> = Mutex::new(None);
+
+/// 자동 확인이 찾은 새 판을 남겨 둔다.
+pub fn remember(info: &Value) {
+    *FOUND.lock().unwrap() = Some(info.clone());
+}
+
+/// 자동 확인이 찾아 둔 새 판. 아직 없으면 null.
+pub fn pending() -> Value {
+    FOUND.lock().unwrap().clone().unwrap_or(Value::Null)
+}
 
 /// 매니페스트 주소. 개발 빌드는 환경 변수 RAMUS_UPDATE_URL 로 바꿔 시험할 수 있다.
 pub fn manifest_url() -> Option<String> {
