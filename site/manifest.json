@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.8",
+      "date": "2026-11-15",
+      "notes": "### 변경\n- 새 버전 창에는 건너뛴 사이 버전들은 빼고 가장 새 버전에서 바뀐 내용만 보입니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.8/Ramus-v1.6.8-macos-arm64.dmg",
+          "sha256": "72b38e127fb904b7b5811f76a5d42c9d73fe8d444535fd17f2c8e5b38c1ea3a4",
+          "size": 71220892
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.8/Ramus-v1.6.8-windows-x64-setup.exe",
+          "sha256": "52a8ef219102fe52c73bf86181d99b82bf22fb9247af44aab0b1dd95907aaae9",
+          "size": 36564486
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.8/Ramus-v1.6.8-windows-x64.zip",
+          "sha256": "495557286258d3ee011a045355fe81d651f0d0b1bafad37609b65395c480c53d",
+          "size": 55347381
+        }
+      }
+    },
+    {
       "version": "1.6.7",
       "date": "2026-11-15",
       "notes": "### 고침\n- 새 버전 알림이 앱을 켜고 한참 뒤에 뜨던 것을, 켜는 동안 확인해 두었다가 첫 화면이 뜨자마자 띄웁니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.6/Ramus-v1.6.6-windows-x64.zip",
           "sha256": "7c3df122c0ad05480d95c1ee620d9dbc794c9d68503ef20e0c811f82fb48e7b6",
           "size": 55346142
-        }
-      }
-    },
-    {
-      "version": "1.6.5",
-      "date": "2026-11-15",
-      "notes": "### 변경\n- Windows 설치 파일·zip 을 코드 서명 없이 배포합니다. 처음 실행할 때 SmartScreen 경고가 뜨면 **추가 정보 → 실행** 을 누르세요(앱 안 업데이트는 그대로 됩니다).",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.5/Ramus-v1.6.5-macos-arm64.dmg",
-          "sha256": "044135e6f6ff555f268d6cb3de35ae61ccda68624cb09d7414f303965522ed6a",
-          "size": 71218850
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.5/Ramus-v1.6.5-windows-x64-setup.exe",
-          "sha256": "02109ccd862ed85a62befa2f47ba7326b145590710a946d045398f89fd0b76b4",
-          "size": 36564244
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.5/Ramus-v1.6.5-windows-x64.zip",
-          "sha256": "4321615799ae2bf45dad272e4b4a462e0e957b934144cb6a3749a01a783656fb",
-          "size": 55345516
         }
       }
     }
