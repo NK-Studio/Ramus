@@ -196,16 +196,18 @@ export function createRefs(ctx) {
     await run(t('upstream 을 바꾸는 중…'), 'setUpstream', picked ? { branch: branch.name, upstream: picked } : { branch: branch.name }, picked ? `${branch.name} → ${picked}` : t('추적을 끊었습니다.'));
   }
 
-  async function createTag(hash, label) {
+  /** annotated: 주석 태그로 만든다(메시지를 꼭 적게 한다). 아니면 메시지를 적었을 때만 주석 태그. */
+  async function createTag(hash, label, { annotated = false } = {}) {
     const values = await formDialog({
-      title: t('새 태그'), glyph: 'tag',
+      title: annotated ? t('새 주석 태그') : t('새 태그'), glyph: 'tag',
       message: t('{name} 에 태그를 붙입니다.', { name: label ?? hash.slice(0, 7) }),
       fields: [
         { name: 'name', placeholder: 'v1.0.0', icon: 'tag' },
-        { name: 'message', type: 'textarea', label: t('메시지 (적으면 주석 태그)'), rows: 3 },
+        { name: 'message', type: 'textarea', label: annotated ? t('메시지') : t('메시지 (적으면 주석 태그)'), rows: 3 },
       ],
       ok: t('만들기'),
-      validate: (v) => (!v.name.trim() ? t('이름을 적어 주세요.') : (ctx.state.refs?.tags ?? []).some((tag) => tag.name === v.name.trim()) ? t('같은 이름의 태그가 있습니다.') : /[\s~^:?*[\\]/.test(v.name) ? t('공백과 ~ ^ : ? * [ \\ 는 쓸 수 없습니다.') : null),
+      validate: (v) => (!v.name.trim() ? t('이름을 적어 주세요.') : (ctx.state.refs?.tags ?? []).some((tag) => tag.name === v.name.trim()) ? t('같은 이름의 태그가 있습니다.') : /[\s~^:?*[\\]/.test(v.name) ? t('공백과 ~ ^ : ? * [ \\ 는 쓸 수 없습니다.')
+        : annotated && !v.message.trim() ? t('주석 태그는 메시지를 적어야 합니다.') : null),
     });
     if (values) await run(t('태그를 만드는 중…'), 'createTag', { name: values.name.trim(), hash, message: values.message }, t("태그 '{name}' 를 만들었습니다.", { name: values.name.trim() }));
   }
@@ -961,12 +963,62 @@ export function createRefs(ctx) {
     else ctx.sectionAdd?.(sectionId);
   }
 
-  /** 그래프 이름표 우클릭: 그 참조의 메뉴. */
+  /**
+   * 그래프의 로컬 브랜치 이름표 우클릭(GitKraken 모양): 브랜치 작업과 그 끝 커밋 작업을 한 메뉴에 둔다.
+   * 묶음: [Pull·Push·upstream] [지금 브랜치에 병합·Rebase] [체크아웃(다른 워크트리면 그 워크트리 열기)·커밋 체크아웃] [커밋으로 워크트리]
+   *       [새 브랜치·Cherry-pick·Reset·Revert] [이름 바꾸기·지우기(워크트리 제거)] [복사·패치] [작업 폴더와 비교] [태그].
+   */
+  function branchPillMenu(event, branch, commit) {
+    const cur = current();
+    const curName = cur?.name ?? 'HEAD';
+    const writable = !busyOp();
+    const isCurrent = branch.current;
+    const worktree = isCurrent ? null : (ctx.state.worktrees ?? []).find((w) => w.branch === branch.name && !w.current && !w.bare) ?? null;
+    const tip = loadedCommit(branch.hash) ?? commit;
+    const atHead = !!branch.hash && branch.hash === ctx.state.history?.head;
+    menuAt(event, [
+      { label: t('Pull (가능하면 앞으로 감기)'), disabled: !branch.upstream || !writable, action: () => (isCurrent ? ctx.pull?.() : run(t('앞으로 감는 중…'), 'fastForward', { branch: branch.name, current: false }, t('{name} 를 앞으로 감았습니다.', { name: branch.name }))) },
+      { label: 'Push', disabled: !writable, action: () => pushBranch(branch) },
+      { label: t('upstream 설정…'), action: () => setUpstream(branch) },
+      isCurrent ? null : '-',
+      isCurrent ? null : { label: t("'{name}' 를 '{target}' 에 병합", { name: branch.name, target: curName }), disabled: !writable, action: () => merge(branch.name) },
+      isCurrent ? null : { label: t("'{target}' 를 '{name}' 위로 Rebase", { name: branch.name, target: curName }), disabled: !writable, action: () => rebase(branch.name) },
+      '-',
+      worktree
+        ? { label: t("'{name}' 워크트리 열기", { name: branch.name }), disabled: worktree.prunable, action: () => openWorktree(worktree) }
+        : isCurrent ? null : { label: t("'{name}' 체크아웃", { name: branch.name }), disabled: !writable, action: () => checkout(branch.name) },
+      { label: t('이 커밋 체크아웃'), disabled: atHead || !branch.hash || !writable, action: () => checkoutCommit(branch.hash) },
+      '-',
+      { label: t('이 커밋으로 워크트리 만들기…'), disabled: busy(), action: () => addWorktree(branch.name) },
+      '-',
+      { label: t('여기서 새 브랜치…'), disabled: !writable, action: () => createBranch(branch.name, branch.name) },
+      { label: t('커밋 Cherry-pick'), disabled: isCurrent || atHead || !tip || !writable, action: () => cherryPick(tip) },
+      { label: t("'{name}' 를 이 커밋으로 Reset", { name: curName }), disabled: isCurrent || atHead || !branch.hash || !writable, submenu: resetSubmenu(branch.hash) },
+      { label: t('커밋 Revert…'), disabled: !tip || !writable, action: () => revertCommit(tip) },
+      '-',
+      { label: t("'{name}' 이름 바꾸기…", { name: branch.name }), action: () => renameBranch(branch.name) },
+      worktree ? { label: t('이 워크트리 제거…'), danger: true, disabled: busy(), action: () => removeWorktree(worktree) } : null,
+      worktree
+        ? { label: t('워크트리 제거하고 브랜치 지우기…'), danger: true, disabled: busy(), action: () => removeWorktreeAndBranch(worktree, branch) }
+        : { label: t("'{name}' 지우기…", { name: branch.name }), danger: true, disabled: isCurrent, action: () => deleteBranch(branch) },
+      '-',
+      { label: t('브랜치 이름 복사'), action: () => copy(branch.name) },
+      { label: t('커밋 SHA 복사'), disabled: !branch.hash, action: () => copy(branch.hash) },
+      { label: t('커밋으로 패치 만들기…'), disabled: !tip, action: () => savePatch(tip) },
+      '-',
+      { label: t('커밋을 작업 폴더와 비교'), disabled: !ctx.compare || !branch.hash, action: () => ctx.compare?.(branch.hash, null, { title: t('{label} ↔ 작업 사본', { label: branch.name }) }) },
+      '-',
+      { label: t('여기에 태그 만들기…'), disabled: !branch.hash, action: () => createTag(branch.hash, branch.name) },
+      { label: t('여기에 주석 태그 만들기…'), disabled: !branch.hash, action: () => createTag(branch.hash, branch.name, { annotated: true }) },
+    ].filter(Boolean));
+  }
+
+  /** 그래프 이름표 우클릭: 그 참조의 메뉴. 로컬 브랜치는 GitKraken 모양(branchPillMenu), 나머지는 사이드바와 같은 메뉴. */
   function refMenu(event, ref, commit) {
     const refs = ctx.state.refs;
     if (ref.kind === 'local' || ref.kind === 'current') {
       const branch = refs?.local.find((b) => b.name === ref.name);
-      if (branch) return menus.local(event, branch);
+      if (branch) return branchPillMenu(event, branch, commit);
     } else if (ref.kind === 'remote') {
       const branch = refs?.remote.find((b) => b.name === ref.name);
       if (branch) return menus.remote(event, branch);
