@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.10",
+      "date": "2026-11-15",
+      "notes": "### 변경\n- 그래프에서 로컬 브랜치 이름표를 우클릭하면 GitKraken 처럼 브랜치 작업(Pull·Push·병합·Rebase·체크아웃·워크트리)과 그 끝 커밋 작업(Cherry-pick·Reset·Revert·패치·비교·태그)을 한 메뉴에 보입니다. 주석 태그를 바로 만드는 항목도 생겼습니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.10/Ramus-v1.6.10-macos-arm64.dmg",
+          "sha256": "ee5b390eb635a721b86c162addf16b5322f88b2d358469026a644e48cc0a9e22",
+          "size": 71222017
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.10/Ramus-v1.6.10-windows-x64-setup.exe",
+          "sha256": "4fb21abd5cd749934134d07b88c599847572c6fb854a520de428daf1801485cd",
+          "size": 36561835
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.10/Ramus-v1.6.10-windows-x64.zip",
+          "sha256": "61f3fbb8287a1eb0be3a2ae8d73c27de0097547a265edd1a38903163bb019fc6",
+          "size": 55348725
+        }
+      }
+    },
+    {
       "version": "1.6.9",
       "date": "2026-11-15",
       "notes": "### 고침\n- 브랜치 탐색기·그래프 목록을 위아래로 빠르게 스크롤하면 선·원이 줄보다 늦게 따라와 어긋나 보이던 것을 고쳤습니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.8/Ramus-v1.6.8-windows-x64.zip",
           "sha256": "495557286258d3ee011a045355fe81d651f0d0b1bafad37609b65395c480c53d",
           "size": 55347381
-        }
-      }
-    },
-    {
-      "version": "1.6.7",
-      "date": "2026-11-15",
-      "notes": "### 고침\n- 새 버전 알림이 앱을 켜고 한참 뒤에 뜨던 것을, 켜는 동안 확인해 두었다가 첫 화면이 뜨자마자 띄웁니다.",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.7/Ramus-v1.6.7-macos-arm64.dmg",
-          "sha256": "afccc8d49329e667d95405c131acb5b24cef0749e32b0c569c8181d48449ed30",
-          "size": 71223323
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.7/Ramus-v1.6.7-windows-x64-setup.exe",
-          "sha256": "65f00e0ef3be334445d5ca4ae295c0708b35c0c56aa3cceaa4247c86f516078d",
-          "size": 36563226
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.7/Ramus-v1.6.7-windows-x64.zip",
-          "sha256": "3da8ba21e7767d4d29674b20b26a432d4468a22137abeacef45350b09e8afce8",
-          "size": 55349155
         }
       }
     }
