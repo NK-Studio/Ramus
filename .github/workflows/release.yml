@@ -165,11 +165,12 @@ jobs:
           # PR 빌드의 ref_name(123/merge)에는 / 가 있어 파일 이름에 쓸 수 없다.
           $name = "Ramus-$('${{ github.ref_name }}' -replace '[\\/]', '-')-windows-x64"
           $stage = "target/stage/$name"
+          # target/ 는 rust-cache 가 캐시한다 — 지난 빌드의 stage 가 남아 있으면 git 이 그 안의 하위 폴더로 복사된다. 비우고 시작한다.
+          Remove-Item -Recurse -Force -ErrorAction Ignore $stage, target/installer
           New-Item -ItemType Directory -Force -Path $stage, dist | Out-Null
           Copy-Item target/x86_64-pc-windows-msvc/release/ramus.exe "$stage/Ramus.exe"
-          # -Force: 숨김 속성 파일까지 복사한다. 받은 판 표식(.ramus-git)은 배포본에 넣지 않는다 — 없으면 그냥 넘어간다.
-          Copy-Item -Recurse -Force vendor/git/windows-x64 "$stage/git"
-          Remove-Item -Force -ErrorAction Ignore "$stage/git/.ramus-git"
+          Copy-Item -Recurse vendor/git/windows-x64 "$stage/git"
+          Remove-Item -Force "$stage/git/.ramus-git"
           $git = "$stage/git/cmd/git.exe"
           & $git --version
           # Git for Windows 처럼 자격 증명은 GCM(Windows 자격 증명 관리자)에 둔다 — 앱 GitHub 로그인도 여기에 들어간다.
