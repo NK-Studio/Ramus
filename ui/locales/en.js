@@ -33,6 +33,7 @@ import m_icons from './en/icons.js';
 import m_bridge from './en/bridge.js';
 import m_sheet from './en/sheet.js';
 import m_titlebar from './en/titlebar.js';
+import m_update from './en/update.js';
 
 export const BY_MODULE = Object.freeze({
   app: m_app,
@@ -68,6 +69,7 @@ export const BY_MODULE = Object.freeze({
   bridge: m_bridge,
   sheet: m_sheet,
   titlebar: m_titlebar,
+  update: m_update,
 });
 
 export default Object.freeze(Object.assign({}, ...Object.values(BY_MODULE)));

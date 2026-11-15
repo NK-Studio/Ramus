@@ -1,5 +1,6 @@
 // ui/screens.js 의 영어. 키는 t() 에 넘기는 한국어 원문 그대로.
 export default {
+  '새 버전이 나오면 알리기': 'Notify me when a new version is available',
   // git 고르기
   'git 실행 파일 경로': 'Path to git executable',
   '찾아보기…': 'Browse…',

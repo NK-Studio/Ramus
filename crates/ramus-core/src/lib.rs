@@ -26,6 +26,7 @@ pub mod ssl;
 pub mod sshkey;
 pub mod status;
 pub mod undo;
+pub mod update;
 
 pub use repo::{GitError, Repository};
 pub use runner::{GitGlobals, GitRunner, Progress, cancel_job, set_progress_sink, with_job};

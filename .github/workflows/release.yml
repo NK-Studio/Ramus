@@ -18,6 +18,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # 앱이 새 판을 확인하는 매니페스트 주소(예: https://ramus.pages.dev/manifest.json). 비어 있으면 앱은 업데이트를 확인하지 않는다.
+  # 빌드에 묻히고(crates/ramus-app/src/updater.rs), 릴리스 작업이 이 주소의 사이트에 manifest.json 을 올린다.
+  RAMUS_UPDATE_URL: ${{ vars.RAMUS_UPDATE_URL }}
 
 jobs:
   test:
@@ -41,6 +44,7 @@ jobs:
       - run: node tests/ui/hidden.test.mjs
       - run: node tests/ui/changelog.test.mjs
       - run: node tests/ui/i18n.test.mjs
+      - run: node tests/ui/update-manifest.test.mjs
 
   build-macos:
     name: Build macOS (Apple Silicon)
@@ -301,3 +305,85 @@ jobs:
 
             ### Windows 처음 실행
             SmartScreen 경고가 뜨면 **추가 정보 → 실행** 을 누르세요.
+
+  # 앱 업데이트: 매니페스트(최신 + 아래 두 판)를 site/manifest.json 으로 만들어 main 에 커밋한다. Cloudflare Workers Builds 가
+  # 이 저장소(GitHub 연결)의 main 을 보고 있다가 site/ 를 배포한다(wrangler.jsonc). 그 뒤 매니페스트에서 빠진 옛 GitHub 릴리스를
+  # 지운다(태그는 남긴다). 저장소 변수 RAMUS_UPDATE_URL 이 있을 때만 돈다.
+  update-site:
+    name: Publish update manifest
+    if: startsWith(github.ref, 'refs/tags/v') && vars.RAMUS_UPDATE_URL != ''
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 매니페스트 커밋·옛 릴리스 지우기
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: "{macos-arm64,windows-x64}"
+          merge-multiple: true
+      - name: Build manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PREV="$RUNNER_TEMP/previous.json"
+          # 변경 기록은 태그 시점의 ChangeLog.md 에서 뽑는다(main 이 그 뒤로 더 나갔을 수 있다).
+          git fetch --depth=1 origin "refs/tags/$GITHUB_REF_NAME"
+          git show "FETCH_HEAD:ChangeLog.md" > "$RUNNER_TEMP/ChangeLog.md"
+          notes() { awk -v v="$1" '/^## \[/ { if (on) exit; on = index($0, "## [" v "]") == 1; next } on { print }' "$RUNNER_TEMP/ChangeLog.md" | sed '/./,$!d'; }
+          notes "$VERSION" > "$RUNNER_TEMP/notes.md"
+          # 저장소에 있는 매니페스트에서 이전 판들을 이어 받는다.
+          if [ -f site/manifest.json ]; then cp site/manifest.json "$PREV"; else echo '{}' > "$PREV"; fi
+          # 처음 올릴 때는 매니페스트가 없다 — 직전 두 릴리스의 설치 파일을 받아 해시를 재고 먼저 넣는다(안 그러면 아래 단계가 그 릴리스들을 지운다).
+          if ! node -e "const m=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.exit((m.releases||[]).length?0:1)" "$PREV"; then
+            for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName' | grep '^v' | grep -vx "$GITHUB_REF_NAME" | sort -V -r | head -2 | sort -V); do
+              old="$RUNNER_TEMP/old/$tag"
+              mkdir -p "$old"
+              gh release download "$tag" --repo "$GITHUB_REPOSITORY" -D "$old" -p '*-macos-arm64.dmg' -p '*-windows-x64-setup.exe' -p '*-windows-x64.zip' || continue
+              notes "${tag#v}" > "$old.md"
+              date=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json publishedAt --jq '.publishedAt[0:10]')
+              node scripts/update-manifest.mjs --version "${tag#v}" --date "$date" --repo "$GITHUB_REPOSITORY" --dist "$old" --notes "$old.md" --previous "$PREV" --keep 3 --out "$RUNNER_TEMP/seed/manifest.json" || continue
+              cp "$RUNNER_TEMP/seed/manifest.json" "$PREV"
+            done
+          fi
+          node scripts/update-manifest.mjs \
+            --version "$VERSION" --repo "$GITHUB_REPOSITORY" --dist dist \
+            --notes "$RUNNER_TEMP/notes.md" --previous "$PREV" \
+            --page "${RAMUS_UPDATE_URL%manifest.json}" --keep 3 \
+            --out "$RUNNER_TEMP/manifest/manifest.json"
+          cp "$RUNNER_TEMP/manifest/manifest.json" site/manifest.json
+          cat site/manifest.json
+      # 이 커밋을 Cloudflare 가 받아 배포한다. GITHUB_TOKEN 으로 푸시한 커밋은 워크플로를 다시 돌리지 않는다.
+      - name: Commit manifest to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/manifest.json
+          git diff --cached --quiet && { echo "바뀐 것 없음"; exit 0; }
+          git commit -m "Publish update manifest for $GITHUB_REF_NAME"
+          for i in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase origin main
+          done
+          exit 1
+      # 매니페스트에 남은 판(최신 + 아래 두 판)의 릴리스만 둔다. git 태그는 지우지 않는다.
+      - name: Remove older GitHub releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          KEEP="$RUNNER_TEMP/manifest/keep.txt"
+          cat "$KEEP"
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName' | while read -r tag; do
+            case "$tag" in v*) ;; *) continue ;; esac
+            if ! grep -qx "$tag" "$KEEP"; then
+              echo "지움: $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+            fi
+          done

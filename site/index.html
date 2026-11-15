@@ -1,0 +1,106 @@
+<!doctype html>
+<!-- Ramus 내려받기 페이지. Cloudflare Workers(GitHub 연결, wrangler.jsonc)가 이 폴더를 배포하고, manifest.json 은 릴리스 워크플로가 커밋한다(scripts/update-manifest.mjs).
+     페이지는 manifest.json 을 읽어 최신판과 그 아래 두 판을 그린다(설치 파일은 GitHub 릴리스). -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ramus 내려받기</title>
+<meta name="description" content="Ramus — PC 에 설치된 git 으로 동작하는 Git 클라이언트">
+<style>
+  :root { --bg: #ffffff; --fg: #1d1f23; --muted: #6c707e; --line: #e4e5ea; --card: #f7f8fa; --accent: #3574f0; --accent-fg: #ffffff; --code: #eceef2; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #191a1c; --fg: #e6e7ea; --muted: #8b8e96; --line: #2c2e33; --card: #212226; --accent: #4c8bf5; --accent-fg: #ffffff; --code: #2b2d31; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 16px 80px; }
+  header { display: flex; align-items: center; gap: 16px; margin-bottom: 36px; }
+  header svg { width: 56px; height: 56px; flex: none; }
+  h1 { margin: 0; font-size: 28px; line-height: 1.2; }
+  .tagline { margin: 2px 0 0; color: var(--muted); }
+  .latest { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  .latest h2 { margin: 0 0 4px; font-size: 20px; }
+  .date { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 6px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 6px; }
+  .buttons a { display: inline-flex; flex-direction: column; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); color: var(--fg); text-decoration: none; min-width: 180px; }
+  .buttons a.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .buttons a small { opacity: 0.75; font-size: 12px; }
+  .buttons a:hover { filter: brightness(1.08); }
+  .notes { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .notes h3 { margin: 12px 0 4px; font-size: 14px; color: var(--muted); }
+  .notes ul { margin: 4px 0; padding-left: 20px; }
+  .notes li + li { margin-top: 4px; }
+  code { padding: 1px 5px; border-radius: 4px; background: var(--code); font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  a { color: var(--accent); }
+  section.older { margin-top: 40px; }
+  section.older > h2 { font-size: 16px; margin: 0 0 8px; }
+  details { border-top: 1px solid var(--line); padding: 12px 0; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details .buttons a { min-width: 0; padding: 6px 12px; font-size: 13px; }
+  .foot { margin-top: 48px; color: var(--muted); font-size: 13px; }
+  .error { color: #e5534b; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg viewBox="0 0 200 200" aria-hidden="true"><path d="M44 0H156C192 0 200 8 200 44V156C200 192 192 200 156 200H44C8 200 0 192 0 156V44C0 8 8 0 44 0Z" fill="#fff" stroke="rgba(0,0,0,.12)" stroke-width="2"/><g transform="translate(20.8 20.8) scale(3.3)" fill="none" stroke="#111" stroke-width="3.2" stroke-linecap="round"><path d="M17 14.5V33.5"/><path d="M17 30c0-8 14-6 14-13.5"/><circle cx="17" cy="10" r="4.5"/><circle cx="17" cy="38" r="4.5"/><circle cx="31" cy="12" r="4.5"/></g></svg>
+    <div>
+      <h1>Ramus</h1>
+      <p class="tagline">PC 에 설치된 git 으로 동작하는 Git 클라이언트</p>
+    </div>
+  </header>
+  <div id="content"><p class="tagline">불러오는 중…</p></div>
+  <p class="foot">설치한 Ramus 는 새 판이 나오면 앱 안에서 알려 주고 바로 업데이트합니다. 여기에는 최신판과 그 아래 두 판만 둡니다.
+    · <a href="https://github.com/NK-Studio/Ramus">GitHub</a></p>
+</main>
+<script>
+  const LABELS = {
+    'macos-arm64': ['macOS', 'Apple Silicon · DMG'],
+    'windows-x64-setup': ['Windows', 'x64 · 설치 파일'],
+    'windows-x64-zip': ['Windows (압축)', 'x64 · 설치 없이 zip'],
+  };
+  const escape = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // ChangeLog.md 항목만 그리면 된다: ### 제목, - 목록, `코드`, **굵게**, [글](https://…).
+  function inline(text) {
+    return escape(text)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+  }
+  function markdown(text) {
+    let html = '';
+    let list = false;
+    for (const line of String(text || '').split('\n')) {
+      const item = /^\s*[-*] (.*)$/.exec(line);
+      if (item) { if (!list) { html += '<ul>'; list = true; } html += `<li>${inline(item[1])}</li>`; continue; }
+      if (list) { html += '</ul>'; list = false; }
+      const head = /^#{1,6} (.*)$/.exec(line);
+      if (head) html += `<h3>${inline(head[1])}</h3>`;
+      else if (line.trim()) html += `<p>${inline(line)}</p>`;
+    }
+    return list ? `${html}</ul>` : html;
+  }
+  const megabytes = (n) => (n ? `${(n / 1048576).toFixed(0)} MB` : '');
+  function buttons(release, primaryKey) {
+    return '<div class="buttons">' + Object.entries(LABELS).filter(([key]) => release.assets?.[key]).map(([key, [name, kind]]) => {
+      const asset = release.assets[key];
+      return `<a class="${key === primaryKey ? 'primary' : ''}" href="${escape(asset.url)}"><span>${escape(name)}</span><small>${escape(kind)} ${megabytes(asset.size)}</small></a>`;
+    }).join('') + '</div>';
+  }
+  const guess = /Mac/i.test(navigator.platform || navigator.userAgent) ? 'macos-arm64' : 'windows-x64-setup';
+  fetch('manifest.json', { cache: 'no-cache' }).then((r) => r.json()).then((m) => {
+    const [latest, ...older] = m.releases || [];
+    if (!latest) throw new Error('no releases');
+    let html = `<section class="latest"><h2>Ramus ${escape(latest.version)}<span class="date">${escape(latest.date || '')}</span></h2>`
+      + buttons(latest, guess) + (latest.notes ? `<div class="notes">${markdown(latest.notes)}</div>` : '') + '</section>';
+    if (older.length) {
+      html += '<section class="older"><h2>이전 버전</h2>' + older.map((r) => `<details><summary>Ramus ${escape(r.version)}<span class="date">${escape(r.date || '')}</span></summary>`
+        + buttons(r, null) + (r.notes ? `<div class="notes">${markdown(r.notes)}</div>` : '') + '</details>').join('') + '</section>';
+    }
+    document.getElementById('content').innerHTML = html;
+  }).catch(() => {
+    document.getElementById('content').innerHTML = '<p class="error">판 정보를 불러오지 못했습니다. <a href="https://github.com/NK-Studio/Ramus/releases">GitHub 릴리스</a>에서 받아 주세요.</p>';
+  });
+</script>
+</body>
+</html>

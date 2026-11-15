@@ -1,0 +1,9 @@
+// Cloudflare Workers Builds(GitHub 연결)가 main 에 커밋이 올라올 때마다 site/ 를 정적 사이트로 배포한다:
+// 내려받기 페이지(site/index.html)와 앱 업데이트 매니페스트(site/manifest.json, 릴리스 워크플로가 커밋한다).
+{
+  "name": "ramus",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site"
+  }
+}

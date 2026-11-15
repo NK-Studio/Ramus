@@ -76,3 +76,29 @@ Name: "{autodesktop}\Ramus"; Filename: "{app}\Ramus.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\Ramus.exe"; Description: "{cm:LaunchProgram,Ramus}"; Flags: nowait postinstall skipifsilent
+; 앱 안 업데이트(/UPDATE=1, 조용히 설치)는 끝나면 Ramus 를 다시 띄운다. 모든 사용자 설치로 권한을 올렸어도 앱은 원래 사용자로 띄운다.
+Filename: "{app}\Ramus.exe"; Flags: nowait runasoriginaluser; Check: IsAppUpdate
+
+[Code]
+{ 앱 안 업데이트(crates/ramus-app/src/updater.rs)가 /VERYSILENT /UPDATE=1 로 띄운다. }
+function IsAppUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATE|0}') = '1';
+end;
+
+{ 업데이트를 띄운 Ramus 가 곧 끝난다 — 실행 파일을 덮어쓰기 전에 끝나기를(앱이 잡은 뮤텍스가 풀리기를) 최대 60초 기다린다. }
+function InitializeSetup: Boolean;
+var
+  Waited: Integer;
+begin
+  Result := True;
+  if IsAppUpdate then
+  begin
+    Waited := 0;
+    while CheckForMutexes('RamusAppRunning') and (Waited < 60000) do
+    begin
+      Sleep(250);
+      Waited := Waited + 250;
+    end;
+  end;
+end;

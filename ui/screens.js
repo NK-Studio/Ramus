@@ -355,6 +355,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     const language = select(LANGUAGES, p('language', 'ko'));
     const scale = select([60, 70, 80, 90, 100, 110, 125, 150, 175, 200].map((n) => ({ value: String(n / 100), label: `${n}%` })), String(p('ui.scale', 1)));
     const fontSize = select([12, 13, 14, 15, 16].map((n) => ({ value: String(n), label: `${n}px` })), String(p('ui.fontSize', 13)));
+    const autoUpdate = checkbox(p('update.auto', true), t('새 버전이 나오면 알리기'));
 
     // ── 동기화
     const autoFetchOn = checkbox(s.autoFetchMinutes > 0, t('자동 페치'));
@@ -593,7 +594,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
         });
         const values = {
           layout: layout.value, explorer: explorer.value, language: language.value, 'ui.scale': Number(scale.value), 'ui.fontSize': Number(fontSize.value),
-          'sync.focusRefresh': focusRefresh.box.checked, 'sync.watch': watch.box.checked,
+          'update.auto': autoUpdate.box.checked, 'sync.focusRefresh': focusRefresh.box.checked, 'sync.watch': watch.box.checked,
           'diff.view': diffView.value, 'diff.context': Math.max(0, Math.min(100, Number.isNaN(parseInt(context.value, 10)) ? 3 : parseInt(context.value, 10))), 'diff.ignoreWhitespace': ignoreWs.box.checked,
           'diff.algorithm': algorithm.value, editor: editor.value.trim(), difftool: difftool.value.trim(),
           'graph.avatars': avatars.box.checked, 'graph.count': Math.max(500, parseInt(count.value, 10) || 5000), 'rebase.stop': stopRebase.box.checked, 'error.mode': errorMode.value,
@@ -609,7 +610,7 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
 
     const sectionEl = (id, title, ...children) => el('section', { class: 'settings-section', 'data-section': id }, el('h3', { text: title }), children);
     const sections = [
-      sectionEl('general', t('일반'), field(t('테마'), theme), field(t('배치'), layout), field(t('탐색기 모양'), explorer), field(t('언어'), language), el('div', { class: 'row' }, field(t('UI 배율'), scale), field(t('글꼴 크기'), fontSize))),
+      sectionEl('general', t('일반'), field(t('테마'), theme), field(t('배치'), layout), field(t('탐색기 모양'), explorer), field(t('언어'), language), el('div', { class: 'row' }, field(t('UI 배율'), scale), field(t('글꼴 크기'), fontSize)), autoUpdate.row),
       sectionEl('sync', t('동기화'), autoFetchOn.row, field(t('자동 페치 간격 (분)'), autoFetch, t('자동 fetch 사이의 시간(1~120분). 손으로 Fetch 하면 그때부터 다시 셉니다.')), field(t('풀 방식'), pullMode), focusRefresh.row, watch.row),
       sectionEl('diff', 'diff', field(t('기본 보기'), diffView), field(t('Hunk 보기의 문맥 줄 수'), context), ignoreWs.row, field(t('diff 알고리즘'), algorithm), field(t('외부 편집기'), editor, t('{file} 과 {line} 은 파일 경로와 줄 번호로 바뀝니다.')), field(t('외부 diff 도구'), difftool)),
       sectionEl('graph', t('그래프'), avatars.row, field(t('처음 읽는 커밋 수'), count, t('끝에 닿으면 더 읽습니다.')), stopRebase.row),

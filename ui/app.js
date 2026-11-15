@@ -2,6 +2,7 @@
 
 import { call, on, onMenu, beginRepoSwitch, setRepoPath } from './bridge.js';
 import { showAbout } from './about.js';
+import { createUpdater } from './update.js';
 import { createRepoCache } from './repocache.js';
 import { createSwitchHud } from './switchhud.js';
 import { el, relativeTime, josa, isComposing } from './util.js';
@@ -2140,6 +2141,7 @@ const MENU = {
   newWorktree: { label: t('새 워크트리'), repo: true, run: () => refsUi.addWorktree() },
   shortcuts: { label: t('키보드 단축키 보기'), run: () => showShortcuts() },
   about: { label: t('Ramus 정보'), run: () => showAbout() },
+  checkUpdate: { label: t('업데이트 확인'), run: () => updater?.check() },
 };
 
 /** 메뉴 항목 하나를 실행한다. 카드가 떠 있거나 연결 화면이면 크기·편집 말고는 무시한다(카드 뒤 화면을 바꾸지 않게). */
@@ -2420,6 +2422,9 @@ function createViewsOnce() {
 
 // ── 시작 ─────────────────────────────────────────────
 
+/** 앱 업데이트(update.js). init 뒤에 만든다 — 지금 판을 알아야 해서. */
+let updater = null;
+
 (async () => {
   // index.html 에 그대로 쓴 글(시작 화면 등)을 지금 언어로.
   translateStatic(document.body);
@@ -2432,6 +2437,7 @@ function createViewsOnce() {
     state.settings = init.settings;
     state.platform = init.platform;
     state.version = init.version;
+    updater = createUpdater({ prefs, toast, version: init.version });
     document.documentElement.dataset.platform = init.platform;
     if (init.platform === 'macos') bindTitlebar($('tabs'), call);
     // 개발 빌드: 점검 통로(RAMUS_DEV_PORT)에서 탭 전환을 일으키고 시간을 읽는 손잡이.

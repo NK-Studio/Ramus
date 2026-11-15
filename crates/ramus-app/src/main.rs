@@ -18,6 +18,7 @@ mod commands;
 #[cfg(debug_assertions)]
 mod devtools;
 mod menu;
+mod updater;
 mod watcher;
 
 use std::path::Path;
@@ -144,6 +145,9 @@ fn toggle_fullscreen(window: &tao::window::Window) {
 }
 
 fn main() -> wry::Result<()> {
+    // 업데이트 설치 파일이 이 앱이 끝나기를 기다리는 표식(updater.rs).
+    #[cfg(windows)]
+    updater::hold_running_mutex();
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
     // git 진행 줄(받는 중 45% 등)을 화면에 알린다 — 오래 걸리는 Pull·Push 가 멈춘 것처럼 보이지 않게.
@@ -173,6 +177,31 @@ fn main() -> wry::Result<()> {
             }
         }
     });
+
+    // 켜고 조금 뒤, 그 뒤로는 6시간마다 새 판이 있는지 본다(설정 > 일반 의 "업데이트 자동 확인", 화면의 ui 값 update.auto).
+    // 같은 판은 한 번만 알린다. 건너뛴 판인지는 화면이 본다.
+    if updater::manifest_url().is_some() {
+        let update_state = Arc::downgrade(&state);
+        let update_proxy = proxy.clone();
+        thread::spawn(move || {
+            let mut told = String::new();
+            thread::sleep(Duration::from_secs(8));
+            loop {
+                let Some(state) = update_state.upgrade() else { break };
+                let auto = state.settings.lock().unwrap().ui.get("update.auto").and_then(Value::as_bool).unwrap_or(true);
+                drop(state);
+                if auto
+                    && let Ok(info) = updater::check()
+                    && info["available"] == true
+                    && info["version"].as_str() != Some(told.as_str())
+                {
+                    told = info["version"].as_str().unwrap_or_default().to_string();
+                    let _ = update_proxy.send_event(UserEvent::Emit(json!({ "event": "updateAvailable", "data": info }).to_string()));
+                }
+                thread::sleep(Duration::from_secs(6 * 60 * 60));
+            }
+        });
+    }
 
     let theme = state.settings.lock().unwrap().theme.clone();
     // 시작 화면(boot.js)이 쓸 힌트: 화면이 그려지기 전에 window.__boot 로 넘긴다(첫 그림부터 맞는 테마 바탕색으로).
@@ -325,6 +354,39 @@ fn main() -> wry::Result<()> {
                     let _ = ipc_proxy.send_event(UserEvent::QuitDismissed);
                 }
                 let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Ok(Value::Null))));
+            } else if request.cmd == "updateCheck" {
+                let proxy = ipc_proxy.clone();
+                thread::spawn(move || {
+                    let _ = proxy.send_event(UserEvent::Reply(reply_json(request.id, updater::check())));
+                });
+            } else if request.cmd == "updateInstall" {
+                // 내려받아 설치를 시작하면 앱을 끈다 — 설치 파일(Windows)·도우미(macOS)가 끝나기를 기다렸다가 바꿔 넣고 다시 띄운다.
+                // 원격 작업이 돌면 끊지 않고 거절한다(화면이 끝난 뒤 다시 하라고 알린다).
+                let running = ipc_state.running_jobs();
+                if !running.is_empty() {
+                    let error = ramus_core::repo::GitError::new(ramus_core::i18n::tr(
+                        "진행 중인 작업이 끝난 뒤에 업데이트해 주세요.",
+                        "Please update after the running tasks finish.",
+                    ));
+                    let _ = ipc_proxy.send_event(UserEvent::Reply(reply_json(request.id, Err(error))));
+                    return;
+                }
+                let version = request.args.get("version").and_then(Value::as_str).unwrap_or_default().to_string();
+                let proxy = ipc_proxy.clone();
+                thread::spawn(move || {
+                    let progress_proxy = proxy.clone();
+                    let result = updater::install(&version, move |received, total| {
+                        let body = json!({ "event": "updateProgress", "data": { "received": received, "total": total } });
+                        let _ = progress_proxy.send_event(UserEvent::Emit(body.to_string()));
+                    });
+                    let done = result.is_ok();
+                    let _ = proxy.send_event(UserEvent::Reply(reply_json(request.id, result.map(|_| Value::Null))));
+                    if done {
+                        // 화면이 "다시 시작합니다" 를 그릴 틈을 조금 준다.
+                        thread::sleep(Duration::from_millis(600));
+                        let _ = proxy.send_event(UserEvent::Quit);
+                    }
+                });
             } else if request.cmd == "pickRepo" {
                 let _ = ipc_proxy.send_event(UserEvent::PickRepo(request.id));
             } else if request.cmd == "pick" {

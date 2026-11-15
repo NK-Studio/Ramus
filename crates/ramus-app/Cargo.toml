@@ -24,7 +24,8 @@ image = { version = "0.25", default-features = false, features = ["tiff", "png"]
 
 # Windows 제목 막대의 메뉴를 키보드로 열 때 첫 항목을 고른다(menu.rs). muda 가 쓰는 판과 같다.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+# 업데이트 설치 파일이 앱이 끝나기를 기다리는 뮤텍스(updater.rs)도 만든다.
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Threading", "Win32_Security"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"

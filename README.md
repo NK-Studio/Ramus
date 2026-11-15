@@ -20,6 +20,21 @@ git 은 앱에 들어 있어(GitHub Desktop 의 [dugite-native](https://github.c
 설정 > git 에서 **내장 git(기본)** · **시스템 git**(PATH) · **직접 지정** 중에 고릅니다. 고른 git 을 찾지 못하면 쓸 수 있는 다른 git 으로 돌아가고 알려 줍니다.
 Windows 는 `Ramus.exe` 옆의 `git` 폴더가 내장 git 이니 둘을 함께 두세요.
 
+## 업데이트
+
+설치한 Ramus 는 켜고 조금 뒤와 그 뒤 6시간마다 새 판이 있는지 보고, 있으면 바뀐 내용과 함께 알립니다.
+**업데이트하고 다시 시작** 을 누르면 앱이 새 판을 받아(SHA-256 확인) 그 자리에 바꿔 넣고 다시 켭니다 — Windows 는 설치 파일을 조용히 돌리고,
+macOS 는 DMG 안의 앱을 꺼내 서명(같은 Developer ID 팀)을 확인한 뒤 번들을 바꿉니다. 메뉴의 **업데이트 확인…** 으로 직접 볼 수 있고,
+설정 > 일반 의 **새 버전이 나오면 알리기** 로 끕니다. 압축(zip)판과 쓸 수 없는 폴더의 macOS 앱은 내려받기 페이지를 엽니다.
+
+릴리스 워크플로가 `v*` 태그 릴리스 뒤에 `site/manifest.json`(최신판과 아래 두 판, `scripts/update-manifest.mjs`)을 만들어 main 에 커밋하고,
+매니페스트에서 빠진 옛 GitHub 릴리스를 지웁니다(git 태그는 남깁니다). 설치 파일은 GitHub 릴리스에 둡니다.
+Cloudflare Workers(이 저장소에 GitHub 연결)가 main 에 커밋이 올라올 때마다 `site/`(내려받기 페이지 + 매니페스트)를 배포합니다(`wrangler.jsonc`).
+켜려면 저장소 변수 `RAMUS_UPDATE_URL` 에 매니페스트 주소(예: `https://ramus.<계정>.workers.dev/manifest.json`)를 둡니다 — 빌드에 묻힙니다.
+릴리스 뒤에는 워크플로가 main 에 커밋을 하나 더 올리니, 로컬 main 은 pull 해서 맞춥니다.
+
+`RAMUS_UPDATE_URL` 이 없는 빌드는 업데이트를 확인하지 않습니다. 개발 빌드는 같은 이름의 환경 변수로 다른 매니페스트를 시험할 수 있습니다.
+
 ## 구성
 
 - `crates/ramus-core` — git 실행·파싱(status·log·그래프 열 배치), SSL `-c` 설정, 설정·최근 레포지토리. 화면과 상관없어 테스트로 확인합니다.
@@ -34,6 +49,7 @@ cargo test
 node tests/ui/syntax.test.mjs     # 문법 색(원본 GitTextEditorTests 의 Tokenize 시험)
 node tests/ui/hidden.test.mjs     # 변경 목록 숨기기 규칙
 node tests/ui/changelog.test.mjs  # ChangeLog.md 맨 위 버전이 Cargo.toml 과 같은지
+node tests/ui/update-manifest.test.mjs  # 업데이트 매니페스트 만들기
 cargo run -p ramus-app
 scripts/bundle-macos.sh release   # target/release/Ramus.app (내장 git 포함, 처음 한 번 vendor/git 에 받음)
 scripts/make-dmg.sh target/release/Ramus.app  # 끌어다 놓아 설치하는 DMG(target/release/Ramus-<버전>-macos-arm64.dmg)
@@ -97,6 +113,7 @@ This program will not transfer any information to other networked systems unless
 - Git operations connect to the remotes configured in the opened repository. This includes automatic fetch, which runs every 10 minutes by default and can be turned off in Settings.
 - Author avatars in the commit graph are looked up from GitHub and Gravatar. GitHub (`avatars.githubusercontent.com`, `github.com`) receives the commit author's email address, and for repositories hosted on GitHub, `api.github.com` receives the repository name and commit hash. Gravatar (`www.gravatar.com`) receives an MD5 hash of the email address.
 - Other GitHub features (pull requests, repository lists, creating repositories) call `api.github.com` only after the user signs in to GitHub.
+- Release builds check for a new version shortly after start and every 6 hours by downloading the update manifest from the Ramus download site (Cloudflare Workers). The request carries only the app version in the User-Agent. Installers are downloaded from GitHub Releases only when the user chooses to update. This check can be turned off in Settings.
 
 Ramus does not collect telemetry or send data to NK Studio.
 

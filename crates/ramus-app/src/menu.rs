@@ -96,6 +96,7 @@ impl AppMenu {
                 true,
                 &[
                     &item("about", tr("Ramus 정보", "About Ramus")),
+                    &item("checkUpdate", tr("업데이트 확인…", "Check for Updates…")),
                     &sep(),
                     &item("settings", tr("설정…", "Settings…")),
                     &sep(),
@@ -219,7 +220,8 @@ impl AppMenu {
 
         let help = Submenu::with_items(tr("도움말", "Help"), true, &[&item("shortcuts", tr("키보드 단축키 보기", "Keyboard Shortcuts"))]).expect("도움말 메뉴");
         #[cfg(not(target_os = "macos"))]
-        help.append_items(&[&sep(), &item("about", tr("Ramus 정보", "About Ramus"))]).expect("도움말 메뉴");
+        help.append_items(&[&sep(), &item("checkUpdate", tr("업데이트 확인…", "Check for Updates…")), &item("about", tr("Ramus 정보", "About Ramus"))])
+            .expect("도움말 메뉴");
         // macOS 가 도움말 메뉴 맨 위에 검색 칸을 넣는다.
         #[cfg(target_os = "macos")]
         help.set_as_help_menu_for_nsapp();

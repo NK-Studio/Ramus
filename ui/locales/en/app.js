@@ -1,5 +1,6 @@
 // ui/app.js 의 영어. 키는 t() 에 넘기는 한국어 원문 그대로.
 export default {
+  '업데이트 확인': 'Check for Updates',
   // 알림·공통
   '닫기': 'Close',
   '취소': 'Cancel',
