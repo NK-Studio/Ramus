@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.7",
+      "date": "2026-11-15",
+      "notes": "### 고침\n- 새 버전 알림이 앱을 켜고 한참 뒤에 뜨던 것을, 켜는 동안 확인해 두었다가 첫 화면이 뜨자마자 띄웁니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.7/Ramus-v1.6.7-macos-arm64.dmg",
+          "sha256": "afccc8d49329e667d95405c131acb5b24cef0749e32b0c569c8181d48449ed30",
+          "size": 71223323
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.7/Ramus-v1.6.7-windows-x64-setup.exe",
+          "sha256": "65f00e0ef3be334445d5ca4ae295c0708b35c0c56aa3cceaa4247c86f516078d",
+          "size": 36563226
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.7/Ramus-v1.6.7-windows-x64.zip",
+          "sha256": "3da8ba21e7767d4d29674b20b26a432d4468a22137abeacef45350b09e8afce8",
+          "size": 55349155
+        }
+      }
+    },
+    {
       "version": "1.6.6",
       "date": "2026-11-15",
       "notes": "### 변경\n- 그래프의 브랜치·태그 이름표를 우클릭하면 커밋 메뉴 대신 사이드바와 같은 그 브랜치(태그) 메뉴가 뜹니다. 줄의 다른 곳은 그대로 커밋 메뉴입니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.5/Ramus-v1.6.5-windows-x64.zip",
           "sha256": "4321615799ae2bf45dad272e4b4a462e0e957b934144cb6a3749a01a783656fb",
           "size": 55345516
-        }
-      }
-    },
-    {
-      "version": "1.6.4",
-      "date": "2026-11-15",
-      "notes": "### 추가\n- 앱 안 업데이트. 새 판이 나오면 바뀐 내용과 함께 알리고, **업데이트하고 다시 시작** 을 누르면 받아서 그 자리에 바꿔 넣고 다시 켭니다(Windows 설치판·macOS). `이 버전 건너뛰기`·`나중에` 를 고를 수 있고, 메뉴의 `업데이트 확인…` 으로 직접 볼 수 있으며, 설정 > 일반 의 `새 버전이 나오면 알리기` 로 끕니다. 업데이트한 뒤 처음 켜면 한 번 알립니다.\n- 내려받기 페이지: 최신판과 그 아래 두 판의 설치 파일·바뀐 내용. 그보다 오래된 GitHub 릴리스는 릴리스 때 지웁니다.",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.4/Ramus-v1.6.4-macos-arm64.dmg",
-          "sha256": "774a68dd36a99e34301d6f70c0a7795c93ac4e6173919cf014134be421b23dd6",
-          "size": 71219171
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.4/Ramus-v1.6.4-windows-x64-setup.exe",
-          "sha256": "e73b44fed0455aff5ce95f03e422983425ac2d6c8d7ef1aacf45220940ca9626",
-          "size": 36559822
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.4/Ramus-v1.6.4-windows-x64.zip",
-          "sha256": "7bc691776ce8c7c11655beba5e0a07057c3fd96f493314682f3a277b982a498e",
-          "size": 55345181
         }
       }
     }
