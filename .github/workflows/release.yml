@@ -146,12 +146,7 @@ jobs:
   build-windows:
     name: Build Windows (x64)
     runs-on: windows-latest
-    permissions:
-      contents: read
-      actions: read # SignPath 가 이 실행의 정보를 읽고 서명할 artifact 를 받아 간다
-    env:
-      # 태그 빌드와 수동 실행에서, 저장소 변수에 SignPath 설정이 있을 때만 서명한다(PR·main 빌드와 설정 전에는 서명 없이 그대로).
-      SIGN_WINDOWS: ${{ (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+    # Windows 빌드는 서명하지 않는다(처음 실행할 때 SmartScreen 경고가 뜰 수 있다).
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -160,37 +155,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build ramus.exe
         run: cargo build --release -p ramus-app --target x86_64-pc-windows-msvc
-      # SignPath 는 GitHub artifact 로 올린 파일만 받아 서명한다. 서명 전 파일은 릴리즈에 섞이지 않게 이름을 달리하고 하루만 둔다.
-      - name: Upload unsigned ramus.exe
-        id: unsigned
-        if: env.SIGN_WINDOWS == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: unsigned-windows-x64
-          path: target/x86_64-pc-windows-msvc/release/ramus.exe
-          retention-days: 1
-      # release-signing 정책은 SignPath 에서 승인자가 승인해야 끝나므로 승인을 기다릴 시간을 넉넉히 둔다.
-      # SignPath 프로젝트에는 artifact configuration 두 개를 둔다: exe(ramus.exe) 와 installer(설치 파일).
-      - name: Sign ramus.exe (SignPath)
-        if: env.SIGN_WINDOWS == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: exe
-          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: target/signed
-      - name: Check signature
-        if: env.SIGN_WINDOWS == 'true'
-        shell: pwsh
-        run: |
-          $sig = Get-AuthenticodeSignature target/signed/ramus.exe
-          $sig | Format-List Status, StatusMessage, SignerCertificate, TimeStamperCertificate
-          if ($sig.Status -ne 'Valid') { throw "ramus.exe 서명이 올바르지 않습니다: $($sig.Status)" }
       - name: Fetch bundled git
         shell: bash
         run: sh scripts/fetch-git.sh windows-x64
@@ -202,8 +166,7 @@ jobs:
           $name = "Ramus-$('${{ github.ref_name }}' -replace '[\\/]', '-')-windows-x64"
           $stage = "target/stage/$name"
           New-Item -ItemType Directory -Force -Path $stage, dist | Out-Null
-          $exe = if ($env:SIGN_WINDOWS -eq 'true') { "target/signed/ramus.exe" } else { "target/x86_64-pc-windows-msvc/release/ramus.exe" }
-          Copy-Item $exe "$stage/Ramus.exe"
+          Copy-Item target/x86_64-pc-windows-msvc/release/ramus.exe "$stage/Ramus.exe"
           Copy-Item -Recurse vendor/git/windows-x64 "$stage/git"
           Remove-Item -Force "$stage/git/.ramus-git"
           $git = "$stage/git/cmd/git.exe"
@@ -227,40 +190,10 @@ jobs:
           & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$env:WIN_STAGE" "/DOutputDir=$((Resolve-Path target/installer).Path)" "/DOutputName=$env:WIN_NAME-setup" scripts/windows-installer.iss
           if ($LASTEXITCODE -ne 0) { throw "설치 파일을 만들지 못했습니다(ISCC $LASTEXITCODE)" }
           Get-ChildItem target/installer
-      # 설치 파일은 이미 서명된 Ramus.exe 를 담은 채로 한 번 더 서명한다.
-      - name: Upload unsigned installer
-        id: unsigned-setup
-        if: env.SIGN_WINDOWS == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: unsigned-windows-x64-setup
-          path: target/installer/*.exe
-          retention-days: 1
-      - name: Sign installer (SignPath)
-        if: env.SIGN_WINDOWS == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: installer
-          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: target/signed-setup
       - name: Collect installer
         shell: pwsh
         run: |
-          $setup = "$env:WIN_NAME-setup.exe"
-          if ($env:SIGN_WINDOWS -eq 'true') {
-            $sig = Get-AuthenticodeSignature "target/signed-setup/$setup"
-            $sig | Format-List Status, StatusMessage, SignerCertificate, TimeStamperCertificate
-            if ($sig.Status -ne 'Valid') { throw "설치 파일 서명이 올바르지 않습니다: $($sig.Status)" }
-            Copy-Item "target/signed-setup/$setup" dist/
-          } else {
-            Copy-Item "target/installer/$setup" dist/
-          }
+          Copy-Item "target/installer/$env:WIN_NAME-setup.exe" dist/
           Get-ChildItem dist
       - uses: actions/upload-artifact@v7
         with:
@@ -278,7 +211,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: "{macos-arm64,windows-x64}" # 서명 전 unsigned-* 는 올리지 않는다
+          pattern: "{macos-arm64,windows-x64}"
           merge-multiple: true
       - run: ls -la dist
       - uses: softprops/action-gh-release@v3

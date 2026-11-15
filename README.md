@@ -10,7 +10,7 @@ Unity 패키지 [com.nkstudio.gitvcs](https://github.com/NK-Studio/com.nkstudio.
 ## 내려받기
 
 [Releases](https://github.com/NK-Studio/Ramus/releases/latest) 에서 받습니다.
-Windows 빌드는 SignPath Foundation 의 무료 인증서로 서명합니다([Code signing policy](#code-signing-policy)).
+macOS 빌드는 Apple Developer ID 로 서명·공증합니다. Windows 빌드는 서명하지 않아 처음 실행할 때 SmartScreen 경고가 뜰 수 있습니다(**추가 정보 → 실행**).
 
 - macOS(Apple Silicon): `Ramus-<버전>-macos-arm64.dmg` — 열린 창에서 `Ramus` 를 `Applications` 폴더로 끌어다 놓습니다.
 - Windows 10/11(x64): `Ramus-<버전>-windows-x64-setup.exe` — 설치 마법사에서 나만 설치(관리자 권한 없이) 또는 모든 사용자 설치를 고릅니다.
@@ -94,19 +94,7 @@ swift scripts/make-dmg-background.swift  # DMG 창 배경 assets/dmg/background.
 echo 'return document.title' | nc 127.0.0.1 7777
 ```
 
-## Code signing policy
-
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
-Windows releases (`Ramus.exe` and the setup program) are signed with this certificate. macOS releases are signed with an Apple Developer ID and notarized by Apple.
-
-- Committers and reviewers: [NK Studio](https://github.com/NK-Studio)
-- Approvers: [NK Studio](https://github.com/NK-Studio)
-
-Only binaries built by GitHub Actions from this repository ([release workflow](.github/workflows/release.yml)) are signed, and an approver approves each release before it is signed.
-The bundled `git` folder is taken unchanged from [dugite-native](https://github.com/desktop/dugite-native) and is not re-signed.
-
-### Privacy
+## Privacy
 
 This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it, with these exceptions:
 
