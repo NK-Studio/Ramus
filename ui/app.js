@@ -142,10 +142,11 @@ const graph = createGraph({
     if (key == null) wipShown = false;
     showDetail(key);
   },
-  // 줄·이름표 어디를 우클릭하든 커밋 메뉴(브랜치 작업은 그 안의 "브랜치 'x'" 하위 메뉴, 원본 CommitGraphList). stash 줄은 stash 메뉴.
-  onContextMenu: (key, event, commit) => {
+  // 이름표를 우클릭하면 그 브랜치·태그의 메뉴(사이드바와 같은 항목), 줄의 다른 곳은 커밋 메뉴. stash 줄은 stash 메뉴.
+  onContextMenu: (key, event, commit, ref) => {
     const stash = commit?.stash ? state.refs?.stashes.find((s) => s.hash === commit.hash) : null;
     if (stash) refsUi.menus.stash(event, stash);
+    else if (commit && ref) refsUi.refMenu(event, ref, commit);
     else if (commit) refsUi.commitMenu(event, commit);
   },
   onRefActivate: (ref, commit) => refsUi.activateRef(ref, commit),
