@@ -1049,14 +1049,27 @@ async function act(label, work, { success, done, onError, remote } = {}) {
   }
 }
 
-/** "푸시하는 중…" → "푸시 실패", "브랜치를 만드는 중…" → "브랜치를 만드는 중 실패"(원본 runner.failed "{작업} 실패"). */
-/** "풀 하는 중… (앞으로 감기만)" → "풀 (앞으로 감기만) 실패". 진행 글의 "하는 중…" 을 빼고 뒤에 붙은 설명은 남긴다. */
+/**
+ * 진행 글에서 실패 제목을 만든다.
+ * "원격 브랜치를 지우는 중…" → "원격 브랜치를 지우지 못했습니다", "풀 하는 중… (앞으로 감기만)" → "풀 하지 못했습니다 (앞으로 감기만)".
+ * "-는" 꼴이 아니면(예: "확인 중…") "{앞말} 실패". 뒤에 붙은 진행 숫자("3 / 10")는 버리고 설명은 남긴다.
+ * 영어는 "…" 를 떼고 "{head} failed".
+ */
 function failedTitle(label) {
   const text = String(label ?? '').trim();
   if (!text) return undefined;
-  const m = isEn ? null : /^(.+?)\s*(?:하는\s*)?중…?\s*(.*)$/.exec(text);
-  const head = (m ? `${m[1].trim()} ${m[2].trim()}` : isEn ? text.replace(/…/g, '').replace(/\s+/g, ' ') : text.replace(/…$/, '')).trim();
-  return t('{head} 실패', { head });
+  if (isEn) return t('{head} 실패', { head: text.replace(/…/g, '').replace(/\s+/g, ' ').trim() });
+  const m = /^(.*\S)\s*중…\s*(.*)$/.exec(text);
+  if (!m) return t('{head} 실패', { head: text.replace(/…$/, '').trim() });
+  const tail = /^[\d\s/%.]*$/.test(m[2]) ? '' : m[2].trim();
+  const verb = /^(.*?)는$/.exec(m[1].trim());
+  if (!verb) return t('{head} 실패', { head: `${m[1].trim()} ${tail}`.trim() });
+  return `${t('{stem}지 못했습니다', { stem: restoreRieul(verb[1]) })} ${tail}`.trim();
+}
+
+/** "-는" 앞에서 ㄹ 이 빠진 줄기를 되살린다(만드는 → 만들, 푸는 → 풀). 진행 글에 쓰는 말만 둔다. */
+function restoreRieul(stem) {
+  return stem.replace(/(^|\s)(만드|푸|여)$/, (_, sp, w) => sp + { 만드: '만들', 푸: '풀', 여: '열' }[w]); // i18n-ignore 한국어 활용 고치기라 번역하지 않는다
 }
 
 /** 레포지토리 경로 → 그 탭에서 도는 작업 {label, job}(시작한 차례). job: 원격 작업의 이름(없으면 null). */

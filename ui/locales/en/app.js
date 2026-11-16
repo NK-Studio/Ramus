@@ -8,6 +8,7 @@ export default {
   '작업': 'Operation',
   '작업 실패': 'Operation Failed',
   '{head} 실패': '{head} failed',
+  '{stem}지 못했습니다': '{stem} failed',
   '설정을 저장했습니다.': 'Settings saved.',
 
   // 테마·배치·UI 크기
