@@ -341,11 +341,20 @@ function uiScale() {
   return prefs.get('ui.scale') ?? 1;
 }
 
+/**
+ * 웹뷰를 확대하고 배율을 CSS(--ui-scale)에도 알린다. 상단바(탭 막대·Windows 제목 막대)는 이 값으로 확대를 되돌려
+ * 늘 같은 크기로 남는다 — 운영체제가 그리는 신호등·창 단추는 배율을 따르지 않으니 막대도 따르지 않아야 둘이 맞는다.
+ */
+function applyScale(scale) {
+  document.documentElement.style.setProperty('--ui-scale', String(scale));
+  call('setZoom', { scale });
+}
+
 function setScale(scale) {
   const next = Math.round(Math.min(2, Math.max(0.6, scale)) * 10) / 10;
   const changed = next !== uiScale();
   prefs.set('ui.scale', next);
-  call('setZoom', { scale: next });
+  applyScale(next);
   renderFooter();
   if (changed) showScaleIndicator(next);
 }
@@ -2445,7 +2454,7 @@ let updater = null;
     if (window.__boot?.dev) window.__ramus = { switchHud, openRepo, closeTab, refresh, call, state, graph, measures: () => performance.getEntriesByType('measure').map((m) => [m.name, Math.round(m.duration)]), clearMeasures: () => performance.clearMeasures() };
     document.body.dataset.layout = prefs.get('layout') ?? 'gitkraken';
     for (const name of ['sidebar', 'detail']) applySplit(name, prefs.get(`split.${name}`) ?? SPLIT_DEFAULT[name]);
-    if (uiScale() !== 1) call('setZoom', { scale: uiScale() });
+    if (uiScale() !== 1) applyScale(uiScale());
     document.documentElement.style.setProperty('--base-size', `${prefs.get('ui.fontSize') ?? 13}px`);
     applyTheme(init.settings.theme);
     createViewsOnce();

@@ -220,7 +220,7 @@ fn main() -> wry::Result<()> {
         .with_inner_size(LogicalSize::new(1440.0, 900.0))
         .with_min_inner_size(LogicalSize::new(MIN_WIDTH, MIN_HEIGHT));
     // macOS 는 화면의 탭 막대가 제목 막대를 겸한다(GitKraken 처럼): 제목 막대를 비우고 웹뷰를 창 꼭대기까지 펴며,
-    // 신호등 버튼은 38px 높이 탭 막대의 가운데에 오게 내린다.
+    // 신호등 버튼은 38px 높이 탭 막대의 가운데에 오게 내린다. 탭 막대는 UI 배율을 받지 않아(app.css `.tabs` zoom) 어느 배율에서든 맞는다.
     #[cfg(target_os = "macos")]
     let builder = {
         use tao::platform::macos::WindowBuilderExtMacOS;

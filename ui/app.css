@@ -1092,6 +1092,8 @@ body { display: flex; flex-direction: column; }
 .tabs::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--git-border); pointer-events: none; }
 :root[data-platform="macos"] .tabs { padding-left: 80px; }
 :root[data-platform="macos"] body.fullscreen .tabs { padding-left: 8px; }
+/* 상단바는 UI 배율을 받지 않는다: 웹뷰 확대(--ui-scale)를 되돌려 늘 화면 픽셀로 같은 크기. 신호등(운영체제가 그림)이 38px 막대 가운데·80px 여백 안에 늘 맞는다. */
+.tabs, .titlebar { zoom: calc(1 / var(--ui-scale, 1)); }
 .tabs-drag { flex: 1; align-self: stretch; min-width: 24px; }
 .tab-folder, .tab-new { flex: none; align-self: center; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--git-text-muted); cursor: pointer; }
 .tab-folder { margin-right: 6px; }
@@ -2601,7 +2603,7 @@ body.repo-loading .tab.active .tab-name {
    켜는 화면·GitHub 연결 화면(창 전체를 덮는 층)보다 위에 둬서, 그때도 창을 옮기고 닫을 수 있다. */
 .titlebar { flex: none; position: relative; z-index: 300; display: flex; align-items: stretch; height: 32px; background: var(--git-titlebar-bg); color: var(--git-text); user-select: none; -webkit-user-select: none; }
 :root:not([data-platform="windows"]) .titlebar, body.fullscreen .titlebar { display: none; }
-:root[data-platform="windows"] .boot, :root[data-platform="windows"] .github-connect { top: 32px; }
+:root[data-platform="windows"] .boot, :root[data-platform="windows"] .github-connect { top: calc(32px / var(--ui-scale, 1)); }
 :root[data-platform="windows"] body.fullscreen .boot, :root[data-platform="windows"] body.fullscreen .github-connect { top: 0; }
 .titlebar-menus { flex: none; display: flex; align-items: center; padding-left: 4px; }
 .titlebar-menu { height: 26px; padding: 0 9px; border: 0; border-radius: 4px; background: none; color: var(--git-text); font-size: 12.5px; cursor: default; }
