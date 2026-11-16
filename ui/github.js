@@ -554,8 +554,13 @@ export function createGitHub(ctx) {
         const name = `${repo.owner}/${repo.repo}`;
         list.replaceChildren(el('div', { class: 'account-empty muted', text: t('이 PC 의 계정과 접근 권한을 확인하는 중…') }));
         const accounts = await ctx.call('githubAccounts').catch((e) => { status.textContent = e?.message ?? String(e); status.hidden = false; return []; });
-        const current = accounts.find((a) => a.inUse)?.login;
+        const inUse = accounts.find((a) => a.inUse);
+        const current = inUse?.login;
+        // 지금 계정이 API 로는 이 레포지토리를 읽을 수 있다: 거부된 게 아니라 잠깐의 문제였거나 계정과 상관없는 실패다.
+        const currentWorks = failure != null && inUse?.canAccess === true;
+        const detail = firstLines(failure);
         message.textContent = failure == null ? t('{name} 에 쓸 계정을 고릅니다. 이 레포지토리에만 적용됩니다(다른 레포지토리는 그대로).', { name })
+          : currentWorks ? `${t('{current} 계정은 지금 {name} 에 접근할 수 있습니다. 방금 실패는 계정 권한 문제가 아니었거나 잠깐의 문제였을 수 있으니 같은 계정으로 다시 시도해 보세요.', { current, name })}${detail ? `\n\n${detail}` : ''}`
           : current ? t('{current} 계정으로 {name} 에 접속했지만 거부됐습니다. GitHub 는 권한 없는 계정에게 비공개 레포지토리를 "없다" 고 답합니다.\n이 레포지토리에 접근할 수 있는 계정을 고르면 이 레포지토리에만 적용하고 다시 시도합니다.', { current, name })
             : t('{name} 에 접속할 계정을 찾지 못했습니다(로그인이 없거나 만료됨). 접근할 수 있는 계정을 고르거나 로그인하세요.', { name });
         if (!accounts.length) {
@@ -571,10 +576,14 @@ export function createGitHub(ctx) {
           el('div', { class: `account-access ${a.canAccess === true ? 'yes' : a.canAccess === false ? 'no' : 'unknown'}` },
             a.canAccess === true ? icon('check', 13) : null,
             el('span', { text: a.canAccess === true ? t('접근 가능') : a.canAccess === false ? t('✗ 권한 없음') : t('? 확인 못 함') })),
+          // 실패 뒤에 지금 계정이 접근할 수 있으면 계정은 그대로 두고 다시 시도하게 한다.
           el('button', {
-            class: `btn small${a.canAccess === true ? ' primary' : ''}`, text: failure != null ? t('이 계정으로 다시') : t('이 계정 쓰기'), disabled: a.inUse,
+            class: `btn small${a.canAccess === true ? ' primary' : ''}`,
+            text: failure != null && a.inUse && a.canAccess !== false ? t('다시 시도') : failure != null ? t('이 계정으로 다시') : t('이 계정 쓰기'),
+            disabled: a.inUse && (failure == null || a.canAccess === false),
             onclick: async () => {
               if (busy) return;
+              if (a.inUse) return finish(true);
               busy = true;
               try {
                 await ctx.call('githubChoose', { source: a.source, login: a.login });
