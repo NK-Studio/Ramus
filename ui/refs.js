@@ -756,6 +756,8 @@ export function createRefs(ctx) {
     const tip = loadedCommit(branch.hash);
     const atHead = !!branch.hash && branch.hash === ctx.state.history?.head;
     const upstreamUrl = githubBranchUrl(branch.upstream);
+    // upstream 이 설정돼 있어도 원격에서 지워졌으면(`[gone]`, 또는 받아 둔 원격 브랜치에 없으면) 지울 것이 없다.
+    const upstreamRef = branch.upstream && !branch.gone ? (ctx.state.refs?.remote ?? []).find((r) => r.name === branch.upstream) ?? null : null;
     const commitBase = githubBase();
     const items = [
       worktree
@@ -804,7 +806,7 @@ export function createRefs(ctx) {
       '-',
       { label: t('이름 바꾸기…'), action: () => renameBranch(branch.name) },
       { label: t('지우기…'), danger: true, disabled: isCurrent || !!worktree, action: () => deleteBranch(branch) },
-      { label: t('원격 브랜치 지우기…'), danger: true, disabled: !branch.upstream, action: () => deleteRemoteBranch(ctx.state.refs.remote.find((r) => r.name === branch.upstream) ?? { name: branch.upstream, remote: branch.upstream.split('/')[0] }) },
+      { label: t('원격 브랜치 지우기…'), danger: true, disabled: !upstreamRef || !writable, action: () => deleteRemoteBranch(upstreamRef) },
       worktree ? { label: t('이 워크트리 제거…'), danger: true, disabled: busy(), action: () => removeWorktree(worktree) } : null,
       worktree ? { label: t('워크트리 제거하고 브랜치 지우기…'), danger: true, disabled: busy(), action: () => removeWorktreeAndBranch(worktree, branch) } : null,
       '-',
