@@ -76,10 +76,31 @@ export function createRefs(ctx) {
     await run(t('브랜치를 만드는 중…'), 'createBranch', { name: values.name.trim(), start, checkout: values.checkout }, t("브랜치 '{name}' 를 만들었습니다.", { name: values.name.trim() }));
   }
 
+  /**
+   * 브랜치로 전환한다. 그 브랜치(원격이면 같은 이름 로컬)가 다른 워크트리에 체크아웃돼 있으면 git 이 거부하므로, 전환 대신 그 워크트리를 탭으로 연다.
+   * 도구 막대 브랜치 목록·메뉴·PR 체크아웃·두 번 누르기가 모두 여기를 지난다. 워크트리 목록이 낡아 git 이 거부하면 오류에 적힌 경로를 연다.
+   */
   async function checkout(name, remote = false) {
+    const local = remote ? name.replace(/^[^/]+\//, '') : name;
+    if (openOwningWorktree(local)) return;
     // 전환은 LFS 파일을 서버에서 받느라 오래 걸릴 수 있어 작업 목록에 보인다(remote: 'checkout').
-    const done = t('{name} 로 바꿨습니다.', { name: remote ? name.replace(/^[^/]+\//, '') : name });
-    await act(t('{name} 로 전환하는 중…', { name }), (job) => call('checkout', { name, remote, job }), { success: () => done, remote: 'checkout' });
+    const done = t('{name} 로 바꿨습니다.', { name: local });
+    let owner = null;
+    await act(t('{name} 로 전환하는 중…', { name }), (job) => call('checkout', { name, remote, job }), {
+      success: () => done,
+      remote: 'checkout',
+      onError: (error) => {
+        owner = worktreePathIn(error?.message);
+        return !!owner;
+      },
+    });
+    if (owner) ctx.openRepo(owner, { beside: true });
+  }
+
+  /** git 의 "'x' is already used by worktree at '<path>'"(옛 git: "is already checked out at '<path>'") 에서 경로를 꺼낸다. */
+  function worktreePathIn(message) {
+    const m = /already (?:used by worktree|checked out) at '([^']+)'/.exec(String(message ?? ''));
+    return m ? m[1] : null;
   }
 
   async function checkoutCommit(hash, label) {
@@ -295,11 +316,11 @@ export function createRefs(ctx) {
     }
     switch (target.kind) {
       case 'local':
-        if (!target.branch.current && !openOwningWorktree(target.branch.name)) checkout(target.branch.name);
+        if (!target.branch.current) checkout(target.branch.name);
         break;
       case 'remote': {
         const local = target.branch.name.slice((target.branch.remote ?? '').length + 1);
-        if (current()?.name !== local && !openOwningWorktree(local)) checkout(target.branch.name, true);
+        if (current()?.name !== local) checkout(target.branch.name, true);
         break;
       }
       case 'tag':
@@ -331,7 +352,6 @@ export function createRefs(ctx) {
     ctx.openRepo(w.path, { beside: true });
   }
 
-  /** 그래프 이름표를 두 번 눌렀을 때. */
   /** 이 브랜치를 체크아웃해 둔 다른 워크트리(지금 워크트리·bare 는 빼고). git 은 한 브랜치를 두 워크트리에 동시에 체크아웃하지 못한다. */
   function worktreeOf(name) {
     return (ctx.state.worktrees ?? []).find((w) => w.branch === name && !w.current && !w.bare) ?? null;
@@ -349,6 +369,7 @@ export function createRefs(ctx) {
     return true;
   }
 
+  /** 그래프 이름표를 두 번 눌렀을 때. */
   function activateRef(ref, commit) {
     if (ref.kind === 'current') return;
     if (ref.kind === 'local') activate({ kind: 'local', branch: ctx.state.refs?.local.find((b) => b.name === ref.name) ?? { name: ref.name } });
@@ -869,7 +890,7 @@ export function createRefs(ctx) {
   const menuAt = (event, items) => showMenu(event.clientX, event.clientY, items);
 
   const menus = {
-    local: (event, branch) => menuAt(event, localItems(branch)),
+    local: (event, branch) => (ctx.gitkrakenMenus?.() ? branchPillMenu(event, branch, null) : menuAt(event, localItems(branch))),
     remote: (event, branch) => menuAt(event, remoteItems(branch)),
     // 원본 RefSidebar.PopulateMenu 의 원격 메뉴. 다른 작업이 도는 중이면 쓰는 항목을 끈다.
     remoteHeader: (event, remote) => menuAt(event, [
@@ -983,9 +1004,11 @@ export function createRefs(ctx) {
   }
 
   /**
-   * 그래프의 로컬 브랜치 이름표 우클릭(GitKraken 모양): 브랜치 작업과 그 끝 커밋 작업을 한 메뉴에 둔다.
-   * 묶음: [Pull·Push·upstream] [지금 브랜치에 병합·Rebase] [체크아웃(다른 워크트리면 그 워크트리 열기)·커밋 체크아웃] [커밋으로 워크트리]
-   *       [새 브랜치·Cherry-pick·Reset·Revert] [이름 바꾸기·지우기(워크트리 제거)] [복사·패치] [작업 폴더와 비교] [태그].
+   * 로컬 브랜치 우클릭(GitKraken 모양): 그래프 이름표, 그리고 GitKraken 배치의 사이드바. 브랜치 작업과 그 끝 커밋 작업을 한 메뉴에 둔다.
+   * 묶음: [Pull·Push·upstream] [지금 브랜치에 병합·Rebase] [체크아웃·커밋 체크아웃] [커밋으로 워크트리]
+   *       [새 브랜치·Cherry-pick·Reset·Revert·메시지 고치기] [패치·이름 바꾸기·지우기] [복사] [작업 폴더와 비교] [태그].
+   * 다른 워크트리에 체크아웃된 브랜치는 GitKraken 처럼 그 브랜치를 움직이는 항목(병합·Rebase·체크아웃·워크트리 만들기·Cherry-pick·비교)을 빼고
+   * "워크트리 열기" 와 워크트리 제거 항목을 둔다. commit: 그래프에서 누른 커밋(사이드바면 null — 받아 둔 끝 커밋을 쓴다).
    */
   function branchPillMenu(event, branch, commit) {
     const cur = current();
@@ -993,28 +1016,34 @@ export function createRefs(ctx) {
     const writable = !busyOp();
     const isCurrent = branch.current;
     const worktree = isCurrent ? null : worktreeOf(branch.name);
+    const movable = !isCurrent && !worktree;
     const tip = loadedCommit(branch.hash) ?? commit;
     const atHead = !!branch.hash && branch.hash === ctx.state.history?.head;
+    const upstreamUrl = githubBranchUrl(branch.upstream);
+    const commitBase = githubBase();
     menuAt(event, [
       { label: t('Pull (가능하면 앞으로 감기)'), disabled: !branch.upstream || !writable, action: () => (isCurrent ? ctx.pull?.() : run(t('앞으로 감는 중…'), 'fastForward', { branch: branch.name, current: false }, t('{name} 를 앞으로 감았습니다.', { name: branch.name }))) },
       { label: 'Push', disabled: !writable, action: () => pushBranch(branch) },
       { label: t('upstream 설정…'), action: () => setUpstream(branch) },
-      isCurrent ? null : '-',
-      isCurrent ? null : { label: t("'{name}' 를 '{target}' 에 병합", { name: branch.name, target: curName }), disabled: !writable, action: () => merge(branch.name) },
-      isCurrent ? null : { label: t("'{target}' 를 '{name}' 위로 Rebase", { name: branch.name, target: curName }), disabled: !writable, action: () => rebase(branch.name) },
+      movable ? '-' : null,
+      movable ? { label: t("'{name}' 를 '{target}' 에 병합", { name: branch.name, target: curName }), disabled: !writable, action: () => merge(branch.name) } : null,
+      movable ? { label: t("'{target}' 를 '{name}' 위로 Rebase", { name: branch.name, target: curName }), disabled: !writable, action: () => rebase(branch.name) } : null,
       '-',
       worktree
         ? { label: t("'{name}' 워크트리 열기", { name: branch.name }), disabled: worktree.prunable, action: () => openWorktree(worktree) }
         : isCurrent ? null : { label: t("'{name}' 체크아웃", { name: branch.name }), disabled: !writable, action: () => checkout(branch.name) },
-      { label: t('이 커밋 체크아웃'), disabled: atHead || !branch.hash || !writable, action: () => checkoutCommit(branch.hash) },
-      '-',
-      { label: t('이 커밋으로 워크트리 만들기…'), disabled: busy(), action: () => addWorktree(branch.name) },
+      worktree ? null : { label: t('이 커밋 체크아웃'), disabled: atHead || !branch.hash || !writable, action: () => checkoutCommit(branch.hash) },
+      worktree ? null : '-',
+      worktree ? null : { label: t('이 커밋으로 워크트리 만들기…'), disabled: busy(), action: () => addWorktree(branch.name) },
       '-',
       { label: t('여기서 새 브랜치…'), disabled: !writable, action: () => createBranch(branch.name, branch.name) },
-      { label: t('커밋 Cherry-pick'), disabled: isCurrent || atHead || !tip || !writable, action: () => cherryPick(tip) },
+      worktree ? null : { label: t('커밋 Cherry-pick'), disabled: isCurrent || atHead || !tip || !writable, action: () => cherryPick(tip) },
       { label: t("'{name}' 를 이 커밋으로 Reset", { name: curName }), disabled: isCurrent || atHead || !branch.hash || !writable, submenu: resetSubmenu(branch.hash) },
+      // 히스토리 고치기는 지금 브랜치의 커밋만 된다(Rust rewrite).
+      isCurrent ? { label: t('끝 커밋 메시지 고치기…'), disabled: !tip || !writable, action: () => rewrite(tip, 'reword') } : null,
       { label: t('커밋 Revert…'), disabled: !tip || !writable, action: () => revertCommit(tip) },
       '-',
+      { label: t('커밋으로 패치 만들기…'), disabled: !tip, action: () => savePatch(tip) },
       { label: t("'{name}' 이름 바꾸기…", { name: branch.name }), action: () => renameBranch(branch.name) },
       worktree ? { label: t('이 워크트리 제거…'), danger: true, disabled: busy(), action: () => removeWorktree(worktree) } : null,
       worktree
@@ -1023,9 +1052,10 @@ export function createRefs(ctx) {
       '-',
       { label: t('브랜치 이름 복사'), action: () => copy(branch.name) },
       { label: t('커밋 SHA 복사'), disabled: !branch.hash, action: () => copy(branch.hash) },
-      { label: t('커밋으로 패치 만들기…'), disabled: !tip, action: () => savePatch(tip) },
-      '-',
-      { label: t('커밋을 작업 폴더와 비교'), disabled: !ctx.compare || !branch.hash, action: () => ctx.compare?.(branch.hash, null, { title: t('{label} ↔ 작업 사본', { label: branch.name }) }) },
+      { label: t('GitHub 브랜치 링크 복사'), disabled: !upstreamUrl, action: () => copy(upstreamUrl) },
+      { label: t('GitHub 커밋 링크 복사'), disabled: !commitBase || !branch.hash, action: () => copy(`${commitBase}/commit/${branch.hash}`) },
+      worktree ? null : '-',
+      worktree ? null : { label: t('커밋을 작업 폴더와 비교'), disabled: !ctx.compare || !branch.hash, action: () => ctx.compare?.(branch.hash, null, { title: t('{label} ↔ 작업 사본', { label: branch.name }) }) },
       '-',
       { label: t('여기에 태그 만들기…'), disabled: !branch.hash, action: () => createTag(branch.hash, branch.name) },
       { label: t('여기에 주석 태그 만들기…'), disabled: !branch.hash, action: () => createTag(branch.hash, branch.name, { annotated: true }) },

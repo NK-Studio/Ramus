@@ -180,6 +180,8 @@ const refsUi = createRefs({
   showError,
   // 그래프 안 입력란은 GitKraken 그래프 탭이 있을 때만 쓴다(그 탭으로 옮긴 뒤 띄운다). 다른 배치는 브랜치 만들기 카드.
   inlineBranches: () => layoutName() === 'gitkraken',
+  // GitKraken 배치에서는 사이드바 브랜치 우클릭도 그래프 이름표와 같은 GitKraken 모양 메뉴를 띄운다.
+  gitkrakenMenus: () => layoutName() === 'gitkraken',
   beforeInlineBranch: () => {
     views?.select('main');
     closeDiff();
