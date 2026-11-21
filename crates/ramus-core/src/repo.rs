@@ -551,11 +551,12 @@ impl Repository {
     /// 지금 브랜치를 푸시한다. upstream 이 있으면 이름이 달라도 그 upstream 으로 올린다(GitKraken 과 같다 — git 기본
     /// `push.default=simple` 은 이름이 다르면 거부한다). upstream 이 없으면 원격(origin 이 있으면 origin)에 같은 이름으로 올리고 추적을 건다.
     pub fn push(&self) -> Result<String> {
-        self.push_to(None)
+        self.push_to(None, None)
     }
 
-    /// `remote` 를 주면 upstream 이 없을 때 그 원격에 올린다(원격이 여럿일 때 화면이 고르게 한다).
-    pub fn push_to(&self, remote: Option<&str>) -> Result<String> {
+    /// upstream 이 없을 때 `remote` 의 `to` 이름으로 올리고 추적을 건다(GitKraken 처럼 화면이 원격·이름을 묻는다).
+    /// 주지 않으면 origin(없으면 첫 원격)에 같은 이름으로. upstream 이 있으면 둘 다 쓰지 않는다.
+    pub fn push_to(&self, remote: Option<&str>, to: Option<&str>) -> Result<String> {
         let st = self.status()?;
         if st.branch.detached {
             return Err(GitError::new(tr("브랜치가 아닌 커밋을 보고 있어 푸시할 수 없습니다. 브랜치를 체크아웃해 주세요.", "Can't push while HEAD is detached. Check out a branch first.")));
@@ -568,7 +569,8 @@ impl Repository {
             let Some(remote) = remote else {
                 return Err(GitError::new(tr("원격 레포지토리가 없습니다. 먼저 원격을 추가해 주세요.", "There is no remote repository. Add a remote first.")));
             };
-            self.run(&["push", "--progress", "-u", &remote, &st.branch.name])?
+            let refspec = format!("refs/heads/{}:refs/heads/{}", st.branch.name, to.filter(|t| !t.trim().is_empty()).unwrap_or(&st.branch.name));
+            self.run(&["push", "--progress", "-u", &remote, &refspec])?
         };
         Ok(out.message())
     }

@@ -10,7 +10,7 @@ import { icon } from './icons.js';
 import { createGraph, createAvatars, laneColor, stashLabel } from './graph.js';
 import { renderStaging, renderCommit, renderCommitSkeleton, diffKey, openStagingFilter } from './changes.js';
 import { createDiffView } from './diff.js';
-import { confirmDialog, overwriteDialog, choiceDialog, pickDialog, formDialog, errorDialog, showMenu, menuBelow, altModifier, closeDrawer } from './dialogs.js';
+import { confirmDialog, overwriteDialog, choiceDialog, formDialog, errorDialog, showMenu, menuBelow, altModifier, closeDrawer } from './dialogs.js';
 import { createRefs } from './refs.js';
 import { createSidebar } from './sidebar.js';
 import { createToolbar } from './toolbar.js';
@@ -1768,15 +1768,17 @@ async function push() {
     refsUi.addRemote();
     return;
   }
+  // upstream 이 없으면 GitKraken 처럼 원격과 원격 브랜치 이름을 묻는다(기본: 같은 이름). 있으면 묻지 않고 그 upstream 으로.
   let remote;
-  if (!branch.upstream && remotes.length > 1) {
-    remote = await pickDialog({ title: t('올릴 원격'), glyph: 'push', message: t("'{name}' 를 어느 원격에 올릴까요?", { name: branch.name }), options: remotes.map((r) => ({ value: r, label: r })), value: prefs.get('push.remote') ?? 'origin' });
-    if (!remote) return;
-    prefs.set('push.remote', remote);
+  let to;
+  if (!branch.upstream) {
+    const target = await refsUi.askPushTarget(branch.name);
+    if (!target) return;
+    ({ remote, name: to } = target);
   }
   const firstPush = !branch.upstream;
   let rejected = null;
-  const result = await act(t('푸시하는 중…'), (job) => call('push', { remote, job }), {
+  const result = await act(t('푸시하는 중…'), (job) => call('push', { remote, to, job }), {
     remote: 'push',
     success: () => (firstPush ? t("'{name}' 를 처음 올렸습니다.", { name: branch.name }) : t('푸시했습니다.')),
     onError: (error) => {

@@ -63,7 +63,6 @@ export default {
   '등록된 원격이 없어 올릴 곳이 없습니다.\n원격을 추가하거나 GitHub 에 새 레포지토리를 만드세요.':
     "There's no remote to push to.\nAdd a remote or create a new repository on GitHub.",
   '브랜치 푸시': 'Push Branch',
-  '어느 원격에 올릴까요?': 'Which remote should it be pushed to?',
   '{name} 를 푸시하는 중…': 'Pushing {name}…',
   '{name} 를 {remote} 에 올렸습니다.': 'Pushed {name} to {remote}.',
   '원격 브랜치가 없습니다. 먼저 푸시하거나 원격을 추가하세요.': 'There are no remote branches. Push first or add a remote.',
@@ -364,4 +363,6 @@ export default {
   '새 주석 태그': 'New Annotated Tag',
   '메시지': 'Message',
   '주석 태그는 메시지를 적어야 합니다.': 'An annotated tag needs a message.',
+  "'{name}' 를 어느 원격·브랜치로 올리고 추적할까요?": "Which remote branch should '{name}' push to and pull from?",
+  '원격 브랜치 이름': 'Remote branch name',
 };

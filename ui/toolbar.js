@@ -114,7 +114,7 @@ export function createToolbar(container, ctx) {
    */
   const pushTip = (br) => {
     const n = br.ahead ?? 0;
-    if (!br.upstream) return t("'{name}' 를 원격에 처음 올리고 추적합니다. 올릴 커밋 {n}개.", { name: br.name, n });
+    if (!br.upstream) return t("'{name}' 는 아직 원격에 없습니다. 누르면 올릴 원격·브랜치 이름을 묻고, 올린 뒤 추적합니다. 올릴 커밋 {n}개.", { name: br.name, n });
     return t('{target} 로 푸시합니다. 올릴 커밋 {n}개.', { target: br.upstream, n });
   };
 

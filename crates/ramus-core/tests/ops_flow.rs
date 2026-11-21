@@ -94,6 +94,11 @@ fn remotes_worktrees_and_merge_modes() {
     commit(&d, "copy.txt", "copy");
     repo.push().unwrap();
     assert_eq!(repo.status().unwrap().branch.upstream.as_deref(), Some("origin/main-copy"));
+    // upstream 이 없으면 고른 이름(to)으로 올리고 그것을 추적한다(GitKraken 의 첫 Push 처럼).
+    repo.create_branch("named", "HEAD", true).unwrap();
+    repo.push_to(Some("origin"), Some("other-name")).unwrap();
+    assert_eq!(repo.status().unwrap().branch.upstream.as_deref(), Some("origin/other-name"));
+    repo.checkout("main-copy", false).unwrap();
     // 이름이 다른 upstream 을 추적하면 Push 는 묻지 않고 그 upstream 으로 올린다(GitKraken 과 같다).
     repo.set_upstream("main-copy", Some("origin/main")).unwrap();
     repo.push().unwrap();

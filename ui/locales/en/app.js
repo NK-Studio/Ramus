@@ -218,8 +218,6 @@ export default {
   '앞으로 감기만': 'Fast-forward Only',
   '{label} (기본)': '{label} (Default)',
   '원격이 없습니다. 원격을 추가한 뒤 다시 푸시하세요.': 'There are no remotes. Add a remote, then push again.',
-  '올릴 원격': 'Push to Remote',
-  "'{name}' 를 어느 원격에 올릴까요?": "Which remote should '{name}' be pushed to?",
   '푸시하는 중…': 'Pushing…',
   "'{name}' 를 처음 올렸습니다.": "Pushed '{name}' for the first time.",
   '푸시했습니다.': 'Pushed.',

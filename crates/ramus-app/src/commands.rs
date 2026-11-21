@@ -1415,7 +1415,7 @@ impl AppState {
                                 Some(e)
                             })
                         }
-                        _ => repo.push_to(Args(&args).s("remote").ok()).map(|msg| json!(msg)),
+                        _ => repo.push_to(Args(&args).s("remote").ok(), Args(&args).s("to").ok()).map(|msg| json!(msg)),
                     }
                 };
                 match (job, kind) {

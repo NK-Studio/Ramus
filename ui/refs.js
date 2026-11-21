@@ -205,11 +205,34 @@ export function createRefs(ctx) {
       const { remote, name } = splitUpstream(branch.upstream);
       return run(t('{name} 를 푸시하는 중…', { name: branch.name }), 'pushBranch', { branch: branch.name, remote, to: name, setUpstream: false }, t('{name} 를 {remote} 에 올렸습니다.', { name: branch.name, remote: branch.upstream }));
     }
-    // 처음 올리는 브랜치: 원격이 여럿이면 고르게 하고, 같은 이름으로 올려 추적을 건다.
-    const remote = list.length > 1 ? await pickDialog({ title: t('브랜치 푸시'), message: t('어느 원격에 올릴까요?'), glyph: 'cloud', options: list.map((r) => ({ value: r, label: r })), value: ctx.prefs.get('push.remote') ?? 'origin' }) : list[0];
-    if (!remote) return;
-    ctx.prefs.set('push.remote', remote);
-    await run(t('{name} 를 푸시하는 중…', { name: branch.name }), 'pushBranch', { branch: branch.name, remote, setUpstream: true }, t('{name} 를 {remote} 에 올렸습니다.', { name: branch.name, remote }));
+    // 처음 올리는 브랜치: GitKraken 처럼 원격과 원격 브랜치 이름을 묻고, 그것으로 올려 추적을 건다.
+    const target = await askPushTarget(branch.name);
+    if (!target) return;
+    await run(t('{name} 를 푸시하는 중…', { name: branch.name }), 'pushBranch', { branch: branch.name, remote: target.remote, to: target.name, setUpstream: true }, t('{name} 를 {remote} 에 올렸습니다.', { name: branch.name, remote: `${target.remote}/${target.name}` }));
+  }
+
+  /**
+   * upstream 이 없는 브랜치의 첫 Push 대상(GitKraken 의 "What remote/branch should X push to and pull from?").
+   * 원격이 하나여도 묻는다 — 원격 브랜치 이름을 로컬과 다르게 줄 수 있다. 기본은 지난번 원격(없으면 origin)과 같은 이름.
+   * 돌려주는 값: { remote, name } 또는 null(취소).
+   */
+  async function askPushTarget(branchName) {
+    const list = remotes();
+    if (!list.length) return null;
+    const remembered = ctx.prefs.get('push.remote');
+    const values = await formDialog({
+      title: t('브랜치 푸시'), glyph: 'push',
+      message: t("'{name}' 를 어느 원격·브랜치로 올리고 추적할까요?", { name: branchName }),
+      fields: [
+        { name: 'remote', type: 'select', label: t('원격'), options: list.map((r) => ({ value: r, label: r })), value: list.includes(remembered) ? remembered : list.includes('origin') ? 'origin' : list[0] },
+        { name: 'name', label: t('원격 브랜치 이름'), value: branchName, icon: 'branch' },
+      ],
+      ok: t('푸시'),
+      validate: (v) => branchNameProblem(v.name, []),
+    });
+    if (!values) return null;
+    ctx.prefs.set('push.remote', values.remote);
+    return { remote: values.remote, name: values.name.trim() };
   }
 
   /** upstream 'origin/feat/x' → { remote: 'origin', name: 'feat/x' }. 원격 이름에 '/' 가 있어도 원격 목록에서 가장 긴 앞머리로 가른다. */
@@ -1211,6 +1234,6 @@ export function createRefs(ctx) {
   }
 
   return {
-    commitMenu, refMenu, activateRef, activate, menus, add, createBranch, stashPush, stashPop, checkout, current, addRemote, addWorktree, addSubmodule, merge, rewrite,
+    commitMenu, refMenu, activateRef, activate, menus, add, askPushTarget, createBranch, stashPush, stashPop, checkout, current, addRemote, addWorktree, addSubmodule, merge, rewrite,
   };
 }

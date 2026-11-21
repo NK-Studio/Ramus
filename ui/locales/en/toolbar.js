@@ -38,7 +38,7 @@ export default {
   '자동 fetch 가 계정 문제로 실패했습니다. 눌러서 Fetch 하면 이 레포지토리에 쓸 계정을 고를 수 있습니다.': 'Auto fetch failed because of the account. Click Fetch to choose the account for this repository.',
   '원격이 없습니다.': 'No remotes.',
   '원격 커밋을 받아 현재 브랜치에 합칩니다.\n{age}': 'Fetch remote commits and integrate them into the current branch.\n{age}',
-  "'{name}' 를 원격에 처음 올리고 추적합니다. 올릴 커밋 {n}개.": "Push '{name}' to the remote for the first time and track it. {n} outgoing.",
+  "'{name}' 는 아직 원격에 없습니다. 누르면 올릴 원격·브랜치 이름을 묻고, 올린 뒤 추적합니다. 올릴 커밋 {n}개.": "'{name}' isn't on a remote yet. Pushing asks for the remote and branch name, then tracks it. {n} outgoing.",
   '{target} 로 푸시합니다. 올릴 커밋 {n}개.': 'Push to {target}. {n} outgoing.',
   '가장 최근 stash 를 작업 트리에 되돌립니다. stash {n}개.': 'Apply the latest stash and drop it. {n} stashed.',
 };
