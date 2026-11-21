@@ -168,6 +168,8 @@ export default {
     'Remove worktree {path}?\n\nThe folder is permanently deleted along with any uncommitted changes and untracked files. This cannot be undone. The branch is kept.',
   '워크트리를 제거하는 중…': 'Removing worktree…',
   '워크트리를 제거했습니다.': 'Removed the worktree.',
+  "'{name}' 는 폴더가 사라진 워크트리 {path} 에 체크아웃돼 있습니다. 워크트리 목록에서 정리한 뒤 전환하세요.":
+    "'{name}' is checked out in the worktree {path}, whose folder is missing. Prune it from the worktree list, then switch.",
 
   // 서브모듈
   '서브모듈 추가': 'Add Submodule',

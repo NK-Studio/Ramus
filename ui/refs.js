@@ -295,11 +295,11 @@ export function createRefs(ctx) {
     }
     switch (target.kind) {
       case 'local':
-        if (!target.branch.current) checkout(target.branch.name);
+        if (!target.branch.current && !openOwningWorktree(target.branch.name)) checkout(target.branch.name);
         break;
       case 'remote': {
         const local = target.branch.name.slice((target.branch.remote ?? '').length + 1);
-        if (current()?.name !== local) checkout(target.branch.name, true);
+        if (current()?.name !== local && !openOwningWorktree(local)) checkout(target.branch.name, true);
         break;
       }
       case 'tag':
@@ -332,6 +332,23 @@ export function createRefs(ctx) {
   }
 
   /** 그래프 이름표를 두 번 눌렀을 때. */
+  /** 이 브랜치를 체크아웃해 둔 다른 워크트리(지금 워크트리·bare 는 빼고). git 은 한 브랜치를 두 워크트리에 동시에 체크아웃하지 못한다. */
+  function worktreeOf(name) {
+    return (ctx.state.worktrees ?? []).find((w) => w.branch === name && !w.current && !w.bare) ?? null;
+  }
+
+  /**
+   * 브랜치가 다른 워크트리에 체크아웃돼 있으면 전환 대신 그 워크트리를 탭으로 열고 true 를 돌려준다(메뉴의 "워크트리 탭으로 열기" 와 같다).
+   * 그 워크트리 폴더가 사라졌으면(prunable) 열 수 없다고 알린다. 다른 워크트리에 없으면 false.
+   */
+  function openOwningWorktree(name) {
+    const worktree = worktreeOf(name);
+    if (!worktree) return false;
+    if (worktree.prunable) ctx.notify(t("'{name}' 는 폴더가 사라진 워크트리 {path} 에 체크아웃돼 있습니다. 워크트리 목록에서 정리한 뒤 전환하세요.", { name, path: worktree.path }));
+    else openWorktree(worktree);
+    return true;
+  }
+
   function activateRef(ref, commit) {
     if (ref.kind === 'current') return;
     if (ref.kind === 'local') activate({ kind: 'local', branch: ctx.state.refs?.local.find((b) => b.name === ref.name) ?? { name: ref.name } });
@@ -752,7 +769,7 @@ export function createRefs(ctx) {
     const curName = cur?.name ?? 'HEAD';
     const writable = !busyOp();
     const isCurrent = branch.current;
-    const worktree = isCurrent ? null : (ctx.state.worktrees ?? []).find((w) => w.branch === branch.name && !w.current && !w.bare) ?? null;
+    const worktree = isCurrent ? null : worktreeOf(branch.name);
     const tip = loadedCommit(branch.hash);
     const atHead = !!branch.hash && branch.hash === ctx.state.history?.head;
     const upstreamUrl = githubBranchUrl(branch.upstream);
@@ -975,7 +992,7 @@ export function createRefs(ctx) {
     const curName = cur?.name ?? 'HEAD';
     const writable = !busyOp();
     const isCurrent = branch.current;
-    const worktree = isCurrent ? null : (ctx.state.worktrees ?? []).find((w) => w.branch === branch.name && !w.current && !w.bare) ?? null;
+    const worktree = isCurrent ? null : worktreeOf(branch.name);
     const tip = loadedCommit(branch.hash) ?? commit;
     const atHead = !!branch.hash && branch.hash === ctx.state.history?.head;
     menuAt(event, [
