@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.17",
+      "date": "2026-11-21",
+      "notes": "### 변경\n- 도구 막대 Push 버튼의 풍선 도움말에 어디로 올라가는지(예: `origin/feat/a`)를 보입니다. 브랜치가 이름이 다른 upstream(예: `origin/main`)을 추적하면, 누를 때 같은 이름으로 새로 올릴지 그 upstream 에 올릴지 묻는다고 미리 알립니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.17/Ramus-v1.6.17-macos-arm64.dmg",
+          "sha256": "a1e6180d0186a2534365262d65814c6eb0b8f807bd4695e285876c974c3a3e49",
+          "size": 71232697
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.17/Ramus-v1.6.17-windows-x64-setup.exe",
+          "sha256": "9024f10406b3a841f9899238da0dd5ae26e700939aaca070adb621d998169617",
+          "size": 36564536
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.17/Ramus-v1.6.17-windows-x64.zip",
+          "sha256": "2fcc924285df9d1119eb3b56991946f0dc53482c1f08bb5abd6c3baf1e797fcb",
+          "size": 55352524
+        }
+      }
+    },
+    {
       "version": "1.6.16",
       "date": "2026-11-21",
       "notes": "### 고침\n- 원격 브랜치(예: `origin/feat/a`)에서 다른 이름으로 만든 브랜치를 Push 하면 \"upstream branch of your current branch does not match\" 오류가 나던 것을 고쳤습니다. 이제 새 브랜치는 시작한 원격 브랜치를 추적하지 않아 첫 Push 가 같은 이름으로 올리고 추적을 겁니다. 이미 이름이 다른 upstream 을 추적하는 브랜치는 같은 이름으로 새로 올릴지, 지금 upstream 에 올릴지 고르게 합니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.15/Ramus-v1.6.15-windows-x64.zip",
           "sha256": "c647b18b588026b77baae9f1028437cb23fe6404fea27a10711b952e0f0a6c7c",
           "size": 55351427
-        }
-      }
-    },
-    {
-      "version": "1.6.14",
-      "date": "2026-11-21",
-      "notes": "### 고침\n- 다른 워크트리에 체크아웃된 브랜치를 그래프 이름표나 사이드바에서 두 번 누르면 \"already used by worktree\" 오류가 나던 것을 고쳤습니다. 이제 메뉴의 \"워크트리 탭으로 열기\"처럼 그 워크트리를 탭으로 엽니다.",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.14/Ramus-v1.6.14-macos-arm64.dmg",
-          "sha256": "106065224bc987db5c38ac89489364ff932df6d787f73aa7c052aef7d2d5523a",
-          "size": 71230216
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.14/Ramus-v1.6.14-windows-x64-setup.exe",
-          "sha256": "7a76c1667aa32de2e764221fc291a996a4c0e2b10564ae5e4c68ec04e9258bf6",
-          "size": 36566104
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.14/Ramus-v1.6.14-windows-x64.zip",
-          "sha256": "904eeb0f184b47cee0cb3a4984d97497c807d4a49d455041ebd2b4fb4f002389",
-          "size": 55350893
         }
       }
     }
