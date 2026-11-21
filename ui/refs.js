@@ -535,18 +535,18 @@ export function createRefs(ctx) {
   async function removeWorktree(w) {
     if (!(await confirmDialog({
       title: t('워크트리 제거'), glyph: 'worktree', danger: true, ok: t('삭제'),
-      message: t('워크트리 {path} 를 제거할까요?\n\n그 폴더가 지워집니다. 커밋하지 않은 변경이 있으면 git 이 거부합니다. 브랜치는 그대로 남습니다.', { path: w.path }),
+      message: t('워크트리 {path} 를 제거할까요?\n\n그 폴더가 커밋하지 않은 변경, 추적하지 않는 파일과 함께 영구히 지워지며 되돌릴 수 없습니다. 브랜치는 그대로 남습니다.', { path: w.path }),
     }))) return;
-    await run(t('워크트리를 제거하는 중…'), 'removeWorktree', { path: w.path, force: false }, t('워크트리를 제거했습니다.'));
+    await run(t('워크트리를 제거하는 중…'), 'removeWorktree', { path: w.path, force: true }, t('워크트리를 제거했습니다.'));
   }
 
   /** 브랜치를 체크아웃해 둔 워크트리를 지우고 그 브랜치도 지운다(한 번 묻는다). 병합되지 않았으면 deleteBranch 가 강제 삭제를 따로 묻는다. */
   async function removeWorktreeAndBranch(w, branch) {
     if (!(await confirmDialog({
       title: t('워크트리와 브랜치 제거'), glyph: 'worktree', danger: true, ok: t('삭제'),
-      message: t("워크트리 {path} 를 제거하고 로컬 브랜치 '{name}' 도 지울까요?\n\n그 폴더가 지워집니다. 커밋하지 않은 변경이 있으면 git 이 거부합니다.", { path: w.path, name: branch.name }),
+      message: t("워크트리 {path} 를 제거하고 로컬 브랜치 '{name}' 도 지울까요?\n\n그 폴더가 커밋하지 않은 변경, 추적하지 않는 파일과 함께 영구히 지워지며 되돌릴 수 없습니다.", { path: w.path, name: branch.name }),
     }))) return;
-    const removed = await act(t('워크트리를 제거하는 중…'), () => call('removeWorktree', { path: w.path, force: false }).then(() => true), { success: () => t('워크트리를 제거했습니다.') });
+    const removed = await act(t('워크트리를 제거하는 중…'), () => call('removeWorktree', { path: w.path, force: true }).then(() => true), { success: () => t('워크트리를 제거했습니다.') });
     if (removed === true) await deleteBranch(branch, { confirmed: true });
   }
 
