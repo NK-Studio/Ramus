@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.18",
+      "date": "2026-11-21",
+      "notes": "### 변경\n- 이름이 다른 upstream(예: `origin/main`)을 추적하는 브랜치를 Push 하면, 어디로 올릴지 묻지 않고 GitKraken 처럼 그 upstream 으로 바로 올립니다. 도구 막대·브랜치 메뉴 모두 같고, 배치(GitKraken·Fork·Unity VCS)와 상관없습니다. 어디로 올라가는지는 Push 버튼 풍선 도움말에 보입니다(예: \"origin/main 로 푸시합니다\").",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.18/Ramus-v1.6.18-macos-arm64.dmg",
+          "sha256": "3b65881d8eb52cc2fff22fdd80907839016e0e919fb1733ef760e16ba35c6127",
+          "size": 71232244
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.18/Ramus-v1.6.18-windows-x64-setup.exe",
+          "sha256": "f3e8b2282cc1cc1dccda982f5182ba63cc79237129c7d382b8ff2d3b8c8934c8",
+          "size": 36564543
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.18/Ramus-v1.6.18-windows-x64.zip",
+          "sha256": "e4640929137c73c7e49d92d86b47aa776bfd9c19d92e17d5ed6a32e8a83c9cdf",
+          "size": 55352403
+        }
+      }
+    },
+    {
       "version": "1.6.17",
       "date": "2026-11-21",
       "notes": "### 변경\n- 도구 막대 Push 버튼의 풍선 도움말에 어디로 올라가는지(예: `origin/feat/a`)를 보입니다. 브랜치가 이름이 다른 upstream(예: `origin/main`)을 추적하면, 누를 때 같은 이름으로 새로 올릴지 그 upstream 에 올릴지 묻는다고 미리 알립니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.16/Ramus-v1.6.16-windows-x64.zip",
           "sha256": "7223b7c539bf3a9c7c7ea680cf0671194f5930a62e457977285c6b92fe769c8c",
           "size": 55353227
-        }
-      }
-    },
-    {
-      "version": "1.6.15",
-      "date": "2026-11-21",
-      "notes": "### 변경\n- GitKraken 배치에서 사이드바의 로컬 브랜치를 우클릭하면 그래프 이름표와 같은 GitKraken 모양 메뉴가 뜹니다. 다른 워크트리에 체크아웃된 브랜치는 GitKraken 처럼 병합·Rebase·체크아웃·Cherry-pick 같은 항목을 빼고 \"워크트리 열기\"와 워크트리 제거 항목을 보입니다.\n\n### 고침\n- 다른 워크트리에 체크아웃된 브랜치를 도구 막대의 브랜치 목록, 브랜치 메뉴, PR 체크아웃으로 고르면 \"already used by worktree\" 오류 창이 뜨던 것을 고쳤습니다. 이제 어디서 전환하든 그 워크트리를 탭으로 엽니다(이미 열려 있으면 그 탭으로 갑니다).",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.15/Ramus-v1.6.15-macos-arm64.dmg",
-          "sha256": "591fbbd9a0c7b58204da0591f765f937786e386561f6fb959109cb9eb908cc70",
-          "size": 71231104
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.15/Ramus-v1.6.15-windows-x64-setup.exe",
-          "sha256": "1fedf2693f07c5f80e9133bf9ef218871b5a06c2c2fcdea6cc3b60c856b47f5d",
-          "size": 36561149
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.15/Ramus-v1.6.15-windows-x64.zip",
-          "sha256": "c647b18b588026b77baae9f1028437cb23fe6404fea27a10711b952e0f0a6c7c",
-          "size": 55351427
         }
       }
     }
