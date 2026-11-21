@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.15",
+      "date": "2026-11-21",
+      "notes": "### 변경\n- GitKraken 배치에서 사이드바의 로컬 브랜치를 우클릭하면 그래프 이름표와 같은 GitKraken 모양 메뉴가 뜹니다. 다른 워크트리에 체크아웃된 브랜치는 GitKraken 처럼 병합·Rebase·체크아웃·Cherry-pick 같은 항목을 빼고 \"워크트리 열기\"와 워크트리 제거 항목을 보입니다.\n\n### 고침\n- 다른 워크트리에 체크아웃된 브랜치를 도구 막대의 브랜치 목록, 브랜치 메뉴, PR 체크아웃으로 고르면 \"already used by worktree\" 오류 창이 뜨던 것을 고쳤습니다. 이제 어디서 전환하든 그 워크트리를 탭으로 엽니다(이미 열려 있으면 그 탭으로 갑니다).",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.15/Ramus-v1.6.15-macos-arm64.dmg",
+          "sha256": "591fbbd9a0c7b58204da0591f765f937786e386561f6fb959109cb9eb908cc70",
+          "size": 71231104
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.15/Ramus-v1.6.15-windows-x64-setup.exe",
+          "sha256": "1fedf2693f07c5f80e9133bf9ef218871b5a06c2c2fcdea6cc3b60c856b47f5d",
+          "size": 36561149
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.15/Ramus-v1.6.15-windows-x64.zip",
+          "sha256": "c647b18b588026b77baae9f1028437cb23fe6404fea27a10711b952e0f0a6c7c",
+          "size": 55351427
+        }
+      }
+    },
+    {
       "version": "1.6.14",
       "date": "2026-11-21",
       "notes": "### 고침\n- 다른 워크트리에 체크아웃된 브랜치를 그래프 이름표나 사이드바에서 두 번 누르면 \"already used by worktree\" 오류가 나던 것을 고쳤습니다. 이제 메뉴의 \"워크트리 탭으로 열기\"처럼 그 워크트리를 탭으로 엽니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.13/Ramus-v1.6.13-windows-x64.zip",
           "sha256": "c15ead53bd5d644236c127d8ab1b5ab379b9672b877aa0b2b7804c004a3e3751",
           "size": 55350370
-        }
-      }
-    },
-    {
-      "version": "1.6.12",
-      "date": "2026-11-16",
-      "notes": "### 고침\n- 원격 접근이 실패한 뒤 계정 창에서 지금 쓰는 계정이 \"접근 가능\"인데도 \"거부됐습니다\"라고 하고 그 계정 버튼은 꺼져 있던 것을 고쳤습니다. 이제 계정 문제가 아닐 수 있다고 알리며 git 오류 원문을 보이고, 같은 계정으로 \"다시 시도\"할 수 있습니다.\n- 작업이 실패했을 때 오류 창 제목이 \"원격 브랜치를 지우는 실패\"처럼 어색하던 것을 고쳤습니다. 이제 \"원격 브랜치를 지우지 못했습니다\"처럼 나옵니다.\n- 원격에서 이미 지워진 브랜치(`[gone]`)에도 브랜치 메뉴의 \"원격 브랜치 지우기…\"가 켜져 있어 누르면 실패하던 것을 고쳤습니다. 이제 원격에 그 브랜치가 있을 때만 켜집니다.",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.12/Ramus-v1.6.12-macos-arm64.dmg",
-          "sha256": "42e79ffcc634c792597cd17904a92dcfe2554ecc249fcd217ede59aaaa9e58de",
-          "size": 71229980
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.12/Ramus-v1.6.12-windows-x64-setup.exe",
-          "sha256": "b645d0f4f2f0fad8808377f8e821ba09037958051dc4ee6fdcf8b7b4b377dbd4",
-          "size": 36565907
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.12/Ramus-v1.6.12-windows-x64.zip",
-          "sha256": "4705bd0adfc74a770d2d67125de5f4dfd2f605eb209e1da0bb3ac6d6476b7779",
-          "size": 55349643
         }
       }
     }
