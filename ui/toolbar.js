@@ -108,6 +108,18 @@ export function createToolbar(container, ctx) {
     if (why !== undefined) button.dataset.tip = why;
   };
 
+  /**
+   * Push 버튼 풍선: 어디로 올라가는지 보인다(GitKraken 의 "Push to origin/main" 처럼). upstream 이름이 브랜치와 다르면
+   * 누를 때 어디로 올릴지 묻는다고 알린다 — 묻지 않고 upstream 에 올리면 다른 브랜치(예: main)에 커밋이 올라갈 수 있다.
+   */
+  const pushTip = (br, remotes) => {
+    const n = br.ahead ?? 0;
+    if (!br.upstream) return t("'{name}' 를 원격에 처음 올리고 추적합니다. 올릴 커밋 {n}개.", { name: br.name, n });
+    const remote = remotes.filter((r) => br.upstream.startsWith(`${r}/`)).sort((a, b) => b.length - a.length)[0] ?? br.upstream.split('/')[0];
+    if (br.upstream.slice(remote.length + 1) === br.name) return t('{target} 로 푸시합니다. 올릴 커밋 {n}개.', { target: br.upstream, n });
+    return t("'{name}' 는 이름이 다른 {target} 를 추적합니다. 누르면 같은 이름으로 새로 올릴지, {target} 에 올릴지 묻습니다. 올릴 커밋 {n}개.", { name: br.name, target: br.upstream, n });
+  };
+
   let busyText = '';
   let busyJob = null;
   let progress = null;
@@ -313,7 +325,7 @@ export function createToolbar(container, ctx) {
       disable(pull, !idle || noRemote || !br.upstream || inProgress,
         blocked ?? (noRemote ? t('원격이 없습니다.') : t('원격 커밋을 받아 현재 브랜치에 합칩니다.\n{age}', { age: fetchAgeText(lastFetch) })));
       pullCaret.disabled = !idle;
-      disable(push, !idle || inProgress || br.detached || !br.hasCommits, blocked ?? t('현재 브랜치를 원격에 올립니다. 올릴 커밋 {n}개.', { n: br.ahead }));
+      disable(push, !idle || inProgress || br.detached || !br.hasCommits, blocked ?? pushTip(br, state.refs?.remotes ?? []));
       setBadge(push, br.ahead);
       setBadge(pull, br.behind);
       const stashes = state.refs?.stashes.length ?? 0;
