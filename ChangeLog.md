@@ -16,6 +16,9 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+### 추가
+- JavaScript · TypeScript 파일도 C# 의 Unity 타입처럼 API 이름을 타입 색으로 칠합니다. JS 내장 객체(`Promise` · `Map` · `JSON`), 브라우저 API(`HTMLElement` · `URL` · `ResizeObserver` · `WebGL2RenderingContext`), TS 유틸리티 타입(`Partial` · `Record`), 전역 객체(`document` · `console`), TS 타입 자리의 기본 타입(`string` · `number`)이 해당합니다. JS·TS 키워드도 따로 두어 `value` · `event` 같은 C# 낱말을 더는 키워드로 칠하지 않습니다.
+
 ## [1.6.19] - 2026-11-21
 
 ### 변경

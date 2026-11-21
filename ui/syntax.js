@@ -2,7 +2,8 @@
 // 편집기용 가벼운 줄 단위 색칠이다. 정확한 파서가 아니라 한 줄씩 훑고, 여러 줄에 걸치는 것(블록 주석 · HTML 의 여러 줄 태그 · <script> · <style>)은
 // 줄 끝 상태를 다음 줄에 넘긴다. 조각 갈래(kind)는 원본 GitSyntaxKind 의 소문자 이름이고, 색은 app.css 의 --git-code-* 토큰(.sx-<kind>)에서 온다.
 
-// 말 갈래(원본 GitSyntaxLanguage): 'csharp' · 'clike' · 'css' · 'json' · 'yaml' · 'xml' · 'html', 그리고 이 포트에서 더한 'python'. 색칠하지 않는 말은 null.
+// 말 갈래(원본 GitSyntaxLanguage): 'csharp' · 'clike' · 'css' · 'json' · 'yaml' · 'xml' · 'html', 그리고 이 포트에서 더한 'python' · 'javascript' · 'typescript'.
+// 색칠하지 않는 말은 null.
 // 조각 갈래(원본 GitSyntaxKind): keyword · string · number · comment · key · tag · attribute · punctuation · type · function(plain 은 조각으로 내지 않는다).
 // python 은 PyCharm 색을 따로 쓰려고 py-* 갈래를 낸다(tokenizePython 참고).
 
@@ -57,7 +58,9 @@ const LITERAL_KEYWORDS = new Set(['true', 'false', 'null', 'True', 'False', 'Nul
 const LANGUAGE_BY_EXTENSION = new Map();
 for (const [language, extensions] of [
   ['csharp', '.cs'],
-  ['clike', '.shader .hlsl .cginc .compute .glsl .js .ts .java .c .h .cpp .hpp .mm .m .rs .go .kt .swift .jslib .jspre'],
+  ['clike', '.shader .hlsl .cginc .compute .glsl .java .c .h .cpp .hpp .mm .m .rs .go .kt .swift'],
+  ['javascript', '.js .jsx .mjs .cjs .jslib .jspre'],
+  ['typescript', '.ts .tsx .mts .cts'],
   ['css', '.uss .tss .css .scss'],
   ['json', '.json .asmdef .asmref .inputactions .shadergraph .shadersubgraph .vfx'],
   ['yaml', '.yaml .yml .asset .prefab .unity .meta .mat .anim .controller .overridecontroller .mask .physicmaterial .lighting .playable .signal'
@@ -139,9 +142,11 @@ function tokenizeInto(line, language, state, spans) {
   switch (language) {
     // C 계열은 VSCode 처럼 흐름 키워드와 괄호 짝 색을 따로 칠한다.
     case 'clike':
-      return tokenizeCLike(line, state, spans, false, true);
+      return tokenizeCLike(line, state, spans, null, true);
     case 'csharp':
-      return tokenizeCLike(line, state, spans, true, true);
+    case 'javascript':
+    case 'typescript':
+      return tokenizeCLike(line, state, spans, language, true);
     case 'css':
       return tokenizeCss(line, state, spans);
     case 'json':
@@ -164,11 +169,15 @@ function tokenizeInto(line, language, state, spans) {
 // ── C 계열 · C# ──
 
 /**
- * csharp 이면 Unity · C# 타입 · 어트리뷰트 · 메시지 메서드도 칠한다(classifyCSharpName).
+ * mode 가 'csharp' 이면 Unity · C# 타입 · 어트리뷰트 · 메시지 메서드도 칠한다(classifyCSharpName).
+ * 'javascript' · 'typescript' 면 JS 내장 객체 · 브라우저 API · TS 유틸리티 타입(타입 색)과 JS·TS 전용 키워드를 칠한다(classifyJsName).
  * vscode 면 VSCode 처럼 흐름 키워드(control)와 괄호 짝(bracket-0..2, 깊이마다 돌려 쓰는 세 색)을 따로 내고, 괄호 깊이를 줄 끝 상태에 싣는다
  * (HTML 안의 <script> 처럼 vscode 가 아니면 예전 갈래·상태 그대로).
  */
-function tokenizeCLike(line, inState, spans, csharp = false, vscode = false) {
+function tokenizeCLike(line, inState, spans, mode = null, vscode = false) {
+  const csharp = mode === 'csharp';
+  const js = mode === 'javascript' || mode === 'typescript';
+  const ts = mode === 'typescript';
   let i = 0;
   const length = line.length;
   const state = vscode ? inState & BASE_MASK : inState;
@@ -232,12 +241,19 @@ function tokenizeCLike(line, inState, spans, csharp = false, vscode = false) {
       let end = i + 1;
       while (end < length && isWordChar(line[end])) end++;
       const word = line.slice(i, end);
-      if (CSHARP_KEYWORDS.has(word) || (csharp && CSHARP_ONLY_KEYWORDS.has(word))) {
+      if (ts && TS_PRIMITIVE_TYPES.has(word) && isTsTypePosition(line, i)) {
+        // TS 의 타입 자리(x: string · Array<number> · a | null)에 온 기본 타입은 타입 색으로(VSCode 의 support.type.primitive).
+        add(spans, i, end - i, 'type');
+      } else if (js && isJsKeyword(line, i, end, word, ts)) {
+        add(spans, i, end - i, vscode && CONTROL_KEYWORDS.has(word) ? 'control' : 'keyword');
+      } else if (!js && (CSHARP_KEYWORDS.has(word) || (csharp && CSHARP_ONLY_KEYWORDS.has(word)))) {
         add(spans, i, end - i, vscode && CONTROL_KEYWORDS.has(word) ? 'control' : kind('keyword'));
       } else if (csharp) {
         const attributeSlot = attributeLine && bracketDepth > 0 && parenDepth === 0;
         const nameKind = classifyCSharpName(line, i, end, word, attributeSlot);
         if (nameKind !== 'plain') add(spans, i, end - i, kind(nameKind));
+      } else if (js && classifyJsName(line, i, end, word, ts) !== 'plain') {
+        add(spans, i, end - i, 'type');
       }
       i = end;
       continue;
@@ -310,6 +326,118 @@ function wordEndingAt(line, last) {
   let first = last;
   while (first > 0 && isWordChar(line[first - 1])) first--;
   return isWordStart(line[first]) ? line.slice(first, last + 1) : null;
+}
+
+// ── JavaScript · TypeScript ──
+// C# 의 Unity 타입 색처럼, JS·TS 에서도 흔히 쓰는 API 이름을 타입 색(sx-type)으로 칠한다.
+// - JS 내장 객체(Array · Promise · Map · JSON · Math), 브라우저 API(HTMLElement · URL · ResizeObserver · WebGL2RenderingContext),
+//   Node(Buffer), TS 유틸리티 타입(Partial · Record · ReturnType), 전역 객체(console · document · window · process).
+// - TS 파일에서는 타입 자리의 기본 타입(string · number · boolean · any · unknown …)도 타입 색.
+// - JS·TS 전용 키워드(extends · super · keyof · satisfies · declare …)는 키워드 색. type 은 `type X =` 선언일 때만(event.type 은 그대로).
+// 줄 하나만 보고 고르므로 애매하면 칠하지 않는다: . 뒤의 멤버(obj.Map), 객체 키({ Map: 1 })는 빼고 본다.
+
+// JS 키워드. C 계열 표(CSHARP_KEYWORDS)는 C# 낱말(value · event · base · string)이 섞여 JS 변수까지 칠하므로 따로 둔다.
+const JS_KEYWORDS = new Set([
+  'async', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'export', 'extends',
+  'false', 'finally', 'for', 'from', 'function', 'get', 'if', 'import', 'in', 'instanceof', 'let', 'new', 'null', 'of', 'return', 'set', 'static',
+  'super', 'switch', 'this', 'throw', 'true', 'try', 'typeof', 'undefined', 'var', 'void', 'while', 'with', 'yield', 'as',
+]);
+const TS_KEYWORDS = new Set([
+  'abstract', 'accessor', 'asserts', 'declare', 'implements', 'infer', 'interface', 'is', 'keyof', 'override', 'private', 'protected', 'public',
+  'readonly', 'satisfies', 'unique',
+]);
+const TS_PRIMITIVE_TYPES = new Set(['string', 'number', 'boolean', 'any', 'unknown', 'never', 'object', 'bigint', 'symbol']);
+// 타입 자리를 여는 낱말(x as string · T extends number · keyof object).
+const TS_TYPE_WORDS = new Set(['as', 'extends', 'implements', 'keyof', 'satisfies', 'is', 'infer', 'typeof', 'readonly']);
+
+// 소문자 전역 객체. 지역 변수와 이름이 겹치기 쉬워 흔한 것만 둔다.
+const JS_GLOBAL_OBJECTS = new Set(['console', 'document', 'window', 'globalThis', 'navigator', 'process', 'localStorage', 'sessionStorage']);
+
+const JS_TYPES = new Set(`
+  Array ArrayBuffer Atomics BigInt BigInt64Array BigUint64Array Boolean DataView Date Error AggregateError EvalError RangeError ReferenceError
+  SyntaxError TypeError URIError FinalizationRegistry Float32Array Float64Array Function Int8Array Int16Array Int32Array Intl JSON Map Math Number
+  Object Promise Proxy Reflect RegExp Set SharedArrayBuffer String Symbol Uint8Array Uint8ClampedArray Uint16Array Uint32Array WeakMap WeakRef WeakSet
+  Iterator AsyncIterator Generator AsyncGenerator Iterable AsyncIterable IterableIterator ArrayLike PromiseLike ReadonlyArray ReadonlyMap ReadonlySet
+  TemplateStringsArray PropertyKey PropertyDescriptor
+  Partial Required Readonly Record Pick Omit Exclude Extract NonNullable Parameters ConstructorParameters ReturnType InstanceType ThisParameterType
+  OmitThisParameter ThisType Awaited Uppercase Lowercase Capitalize Uncapitalize NoInfer
+  URL URLSearchParams Headers Request Response AbortController AbortSignal Blob File FileList FileReader FormData TextEncoder TextDecoder
+  Event EventTarget CustomEvent KeyboardEvent MouseEvent PointerEvent WheelEvent FocusEvent InputEvent DragEvent TouchEvent MessageEvent ErrorEvent
+  ProgressEvent ClipboardEvent CompositionEvent AnimationEvent TransitionEvent SubmitEvent
+  Node NodeList HTMLCollection Element HTMLElement SVGElement SVGSVGElement Document DocumentFragment ShadowRoot Window Text Comment Range Selection
+  HTMLDivElement HTMLSpanElement HTMLInputElement HTMLTextAreaElement HTMLSelectElement HTMLOptionElement HTMLButtonElement HTMLAnchorElement
+  HTMLImageElement HTMLCanvasElement HTMLVideoElement HTMLAudioElement HTMLMediaElement HTMLFormElement HTMLLabelElement HTMLIFrameElement
+  HTMLTemplateElement HTMLStyleElement HTMLScriptElement HTMLTableElement HTMLDialogElement HTMLSlotElement
+  DOMRect DOMRectReadOnly DOMParser DOMException DOMTokenList DOMMatrix CSSStyleDeclaration CSSStyleSheet
+  MutationObserver ResizeObserver IntersectionObserver PerformanceObserver
+  Image Audio Worker SharedWorker ServiceWorker WebSocket EventSource XMLHttpRequest Storage Performance Notification BroadcastChannel MessageChannel
+  MessagePort Location History Navigator Screen Clipboard Crypto CryptoKey SubtleCrypto
+  ImageData ImageBitmap OffscreenCanvas CanvasRenderingContext2D OffscreenCanvasRenderingContext2D Path2D CanvasGradient CanvasPattern
+  WebGLRenderingContext WebGL2RenderingContext WebGLProgram WebGLShader WebGLBuffer WebGLTexture WebGLFramebuffer WebGLRenderbuffer
+  WebGLUniformLocation WebGLVertexArrayObject GPU GPUDevice GPUAdapter GPUBuffer GPUTexture GPUCanvasContext
+  AudioContext AudioBuffer AudioNode GainNode OscillatorNode AnalyserNode MediaStream MediaRecorder
+  ReadableStream WritableStream TransformStream Animation KeyframeEffect IDBDatabase IDBObjectStore IDBTransaction IDBRequest
+  Buffer NodeJS
+`.split(/\s+/).filter(Boolean));
+
+/** JS·TS 전용 키워드인지. type 은 `type X =` · `export type X` 의 선언일 때만 키워드다(event.type · { type: 1 } 은 아니다). */
+function isJsKeyword(line, start, end, word, ts) {
+  // obj.default · obj.new · { get: 1 } 처럼 멤버 · 키로 쓴 낱말은 키워드가 아니다.
+  const before = previousNonWhitespaceIndex(line, start);
+  if (before >= 0 && (line[before] === '.' || line[before] === '#')) return false;
+  if (!JS_KEYWORDS.has(word) && !(ts && TS_KEYWORDS.has(word)) && !(ts && (word === 'type' || word === 'namespace' || word === 'enum'))) return false;
+  const after = skipWhitespace(line, end);
+  if (after < line.length && line[after] === ':' && (before < 0 || line[before] === '{' || line[before] === ',') && word !== 'default') return false;
+  if (ts && (word === 'type' || word === 'namespace' || word === 'enum')) {
+    const previousWord = wordEndingAt(line, before);
+    const startsStatement = before < 0 || previousWord === 'export' || previousWord === 'declare';
+    return startsStatement && after < line.length && isWordStart(line[after]);
+  }
+  return true;
+}
+
+/** TS 기본 타입 이름이 타입 자리(: · < · | · & · as · extends 뒤)에 왔는지. */
+function isTsTypePosition(line, start) {
+  const before = previousNonWhitespaceIndex(line, start);
+  if (before < 0) return false;
+  const previous = line[before];
+  if (previous === ':' || previous === '<' || previous === '|' || previous === '&' || previous === '[') {
+    // a ? b : string 같은 삼항은 드물어 따로 거르지 않는다. 배열 자리([)는 [string, number] 튜플일 때만 — 바로 앞이 : 이나 < 여야 한다.
+    if (previous !== '[') return true;
+    const outer = previousNonWhitespaceIndex(line, before);
+    return outer >= 0 && (line[outer] === ':' || line[outer] === '<' || line[outer] === '=');
+  }
+  if (previous === ',') {
+    // 제네릭 · 튜플 안의 , 뒤(Map<string, number> · [string, number]). 여는 < · [ 가 같은 줄 앞에 열려 있어야 한다.
+    let depth = 0;
+    for (let k = before - 1; k >= 0; k--) {
+      const c = line[k];
+      if (c === '>' || c === ']' || c === ')') depth++;
+      else if (c === '<' || c === '[' || c === '(') {
+        if (depth === 0) return c === '<' || c === '[';
+        depth--;
+      }
+    }
+    return false;
+  }
+  if (previous === '>' && before > 0 && line[before - 1] === '=') return true; // (a) => string 같은 함수 타입의 반환
+  return TS_TYPE_WORDS.has(wordEndingAt(line, before));
+}
+
+/** JS·TS 낱말이 API 이름(타입 색)인지. . 뒤 멤버(obj.Map)와 객체 키({ Map: 1 })는 아니다. */
+function classifyJsName(line, start, end, word, ts) {
+  const known = isUpper(word[0]) ? JS_TYPES.has(word) : JS_GLOBAL_OBJECTS.has(word);
+  if (!known) return 'plain';
+  const before = previousNonWhitespaceIndex(line, start);
+  const previous = before >= 0 ? line[before] : '\0';
+  if (previous === '.' || previous === '#') return 'plain';
+  const after = skipWhitespace(line, end);
+  const next = after < line.length ? line[after] : '\0';
+  // 객체 키({ Map: 1 } · , document: x). TS 의 선택적 키(a?: T)는 낱말 다음이 ? 라 여기 오지 않는다.
+  if (next === ':' && (previous === '{' || previous === ',' || before < 0)) return 'plain';
+  // 대입받는 이름(window = x)은 칠하지 않는다. == · === · => 는 괜찮다.
+  if (next === '=' && (after + 1 >= line.length || (line[after + 1] !== '=' && line[after + 1] !== '>'))) return 'plain';
+  return 'type';
 }
 
 // ── Python ──

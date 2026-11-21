@@ -331,10 +331,52 @@ test('Test_LanguageOf_ByExtension', () => {
   assert.equal(languageOf('A.uxml'), 'xml');
   assert.equal(languageOf('Assets/Web/index.html'), 'html');
   assert.equal(languageOf('Assets/Web/style.css'), 'css');
-  assert.equal(languageOf('Assets/Web/app.js'), 'clike');
+  assert.equal(languageOf('Assets/Web/app.js'), 'javascript');
+  assert.equal(languageOf('src/main.ts'), 'typescript');
+  assert.equal(languageOf('src/App.tsx'), 'typescript');
+  assert.equal(languageOf('scripts/build.mjs'), 'javascript');
+  assert.equal(languageOf('Assets/Plugins/a.jslib'), 'javascript');
   assert.equal(languageOf('README.md'), null);
   assert.equal(languageOf('tools/build.py'), 'python');
   assert.equal(languageOf('stubs/a.pyi'), 'python');
+});
+
+// ── JavaScript · TypeScript(이 포트에서 더한 말: API 이름을 C# 의 Unity 타입처럼 타입 색으로) ──
+
+test('Test_Tokenize_JS_BuiltInsAndBrowserApis', () => {
+  assert.deepEqual(spans('const list = new Map(); await Promise.all(items);', 'javascript'), [
+    ['const', 'keyword'], ['new', 'keyword'], ['Map', 'type'], ['await', 'control'], ['Promise', 'type'],
+  ]);
+  assert.deepEqual(spans('const el = document.querySelector("a"); console.log(el instanceof HTMLElement);', 'javascript'), [
+    ['const', 'keyword'], ['document', 'type'], ['"a"', 'string'], ['console', 'type'], ['instanceof', 'keyword'], ['HTMLElement', 'type'],
+  ]);
+});
+
+test('Test_Tokenize_JS_MembersKeysAndCSharpWordsStayPlain', () => {
+  // . 뒤 멤버 · 객체 키는 API 이름이어도 칠하지 않고, C# 낱말(value · event · string)은 JS 에서 키워드가 아니다.
+  assert.deepEqual(spans('const value = obj.Map; const o = { Map: 1, document: 2 };', 'javascript'), [
+    ['const', 'keyword'], ['const', 'keyword'], ['1', 'number'], ['2', 'number'],
+  ]);
+  assert.deepEqual(spans('let event = string;', 'javascript'), [['let', 'keyword']]);
+  assert.deepEqual(spans('class A extends B { constructor() { super(); } }', 'javascript'), [
+    ['class', 'keyword'], ['extends', 'keyword'], ['super', 'keyword'],
+  ]);
+});
+
+test('Test_Tokenize_TS_PrimitiveAndUtilityTypes', () => {
+  assert.deepEqual(spans('function f(a: string, b: Map<string, number>): Promise<void> {}', 'typescript'), [
+    ['function', 'keyword'], ['string', 'type'], ['Map', 'type'], ['string', 'type'], ['number', 'type'], ['Promise', 'type'], ['void', 'keyword'],
+  ]);
+  assert.deepEqual(spans('export type Props = Partial<Record<string, unknown>>;', 'typescript'), [
+    ['export', 'control'], ['type', 'keyword'], ['Partial', 'type'], ['Record', 'type'], ['string', 'type'], ['unknown', 'type'],
+  ]);
+  // 값 자리의 string · number 는 변수 이름이다(타입 자리가 아니다). event.type 의 type 도 키워드가 아니다.
+  assert.deepEqual(spans('const n = number + count; if (event.type === "x") {}', 'typescript'), [
+    ['const', 'keyword'], ['if', 'control'], ['"x"', 'string'],
+  ]);
+  assert.deepEqual(spans('interface A extends B { readonly id: number }', 'typescript'), [
+    ['interface', 'keyword'], ['extends', 'keyword'], ['readonly', 'keyword'], ['number', 'type'],
+  ]);
 });
 
 // ── Python(이 포트에서 더한 말, PyCharm 색 갈래 py-*) ──
