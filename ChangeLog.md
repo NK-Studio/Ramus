@@ -16,6 +16,9 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+### 고침
+- 원격 브랜치(예: `origin/feat/a`)에서 다른 이름으로 만든 브랜치를 Push 하면 "upstream branch of your current branch does not match" 오류가 나던 것을 고쳤습니다. 이제 새 브랜치는 시작한 원격 브랜치를 추적하지 않아 첫 Push 가 같은 이름으로 올리고 추적을 겁니다. 이미 이름이 다른 upstream 을 추적하는 브랜치는 같은 이름으로 새로 올릴지, 지금 upstream 에 올릴지 고르게 합니다.
+
 ## [1.6.15] - 2026-11-21
 
 ### 변경

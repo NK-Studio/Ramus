@@ -84,8 +84,21 @@ fn remotes_worktrees_and_merge_modes() {
     git(tmp.path(), &["init", "-q", "--bare", "-b", "main", bare.to_str().unwrap()]);
     repo.add_remote("origin", bare.to_str().unwrap(), "").unwrap();
     assert_eq!(repo.remote_list().unwrap()[0].fetch_url, bare.to_str().unwrap());
-    repo.push_branch("main", "origin", true, false).unwrap();
+    repo.push_branch("main", "origin", None, true, false).unwrap();
     assert_eq!(repo.status().unwrap().branch.upstream.as_deref(), Some("origin/main"));
+
+    // 원격 브랜치에서 만든 다른 이름의 브랜치는 그 원격 브랜치를 추적하지 않는다 — 첫 Push 가 같은 이름으로 올린다.
+    repo.fetch_remote("origin").unwrap();
+    repo.create_branch("main-copy", "origin/main", true).unwrap();
+    assert_eq!(repo.status().unwrap().branch.upstream, None);
+    commit(&d, "copy.txt", "copy");
+    repo.push().unwrap();
+    assert_eq!(repo.status().unwrap().branch.upstream.as_deref(), Some("origin/main-copy"));
+    // 이름이 다른 upstream 으로 올릴 수도 있다(to).
+    repo.set_upstream("main-copy", Some("origin/main")).unwrap();
+    repo.push_branch("main-copy", "origin", Some("main"), false, false).unwrap();
+    assert_eq!(git(&d, &["rev-parse", "origin/main"]), git(&d, &["rev-parse", "main-copy"]));
+    repo.checkout("main", false).unwrap();
     repo.rename_remote("origin", "up").unwrap();
     assert_eq!(repo.remote_list().unwrap()[0].name, "up");
 

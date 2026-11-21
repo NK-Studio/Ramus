@@ -200,6 +200,7 @@ export function createRefs(ctx) {
   async function pushBranch(branch) {
     const list = remotes();
     if (!list.length) return offerAddRemote(t('브랜치 푸시'));
+    if (branch.upstream && splitUpstream(branch.upstream).name !== branch.name) return pushRenamed(branch);
     let remote = branch.upstream?.split('/')[0];
     if (!remote) {
       remote = list.length > 1 ? await pickDialog({ title: t('브랜치 푸시'), message: t('어느 원격에 올릴까요?'), glyph: 'cloud', options: list.map((r) => ({ value: r, label: r })), value: ctx.prefs.get('push.remote') ?? 'origin' }) : list[0];
@@ -207,6 +208,36 @@ export function createRefs(ctx) {
       ctx.prefs.set('push.remote', remote);
     }
     await run(t('{name} 를 푸시하는 중…', { name: branch.name }), 'pushBranch', { branch: branch.name, remote, setUpstream: !branch.upstream }, t('{name} 를 {remote} 에 올렸습니다.', { name: branch.name, remote }));
+  }
+
+  /** upstream 'origin/feat/x' → { remote: 'origin', name: 'feat/x' }. 원격 이름에 '/' 가 있어도 원격 목록에서 가장 긴 앞머리로 가른다. */
+  function splitUpstream(upstream) {
+    const remote = remotes().filter((r) => upstream.startsWith(`${r}/`)).sort((a, b) => b.length - a.length)[0] ?? upstream.split('/')[0];
+    return { remote, name: upstream.slice(remote.length + 1) };
+  }
+
+  /**
+   * upstream 이름이 로컬 브랜치와 다를 때의 Push(예: origin/feat/a 에서 만든 feat/b). git 은 어느 쪽에 올릴지 몰라 거부하므로 고르게 한다:
+   * 같은 이름으로 새로 올리고 그것을 추적(기본 — 새 브랜치를 만든 뜻), 또는 지금 upstream 에 그대로 올리기.
+   * branch: { name, upstream }. 도구 막대 Push 가 git 의 거부를 받았을 때도 부른다.
+   */
+  async function pushRenamed(branch) {
+    const { remote, name } = splitUpstream(branch.upstream);
+    const choice = await pickDialog({
+      title: t('브랜치 푸시'), glyph: 'push',
+      message: t("'{name}' 는 이름이 다른 '{upstream}' 를 추적하고 있습니다. 어디로 올릴까요?", { name: branch.name, upstream: branch.upstream }),
+      options: [
+        { value: 'same', label: t("'{target}' 로 새로 올리고 그것을 추적", { target: `${remote}/${branch.name}` }) },
+        { value: 'upstream', label: t("지금 upstream '{upstream}' 에 올리기", { upstream: branch.upstream }) },
+      ],
+      value: 'same',
+    });
+    if (!choice) return;
+    if (choice === 'same') {
+      await run(t('{name} 를 푸시하는 중…', { name: branch.name }), 'pushBranch', { branch: branch.name, remote, setUpstream: true }, t('{name} 를 {remote} 에 올렸습니다.', { name: branch.name, remote }));
+    } else {
+      await run(t('{name} 를 푸시하는 중…', { name: branch.name }), 'pushBranch', { branch: branch.name, remote, to: name, setUpstream: false }, t('{name} 를 {remote} 에 올렸습니다.', { name: branch.name, remote: branch.upstream }));
+    }
   }
 
   async function setUpstream(branch) {
@@ -1202,6 +1233,6 @@ export function createRefs(ctx) {
   }
 
   return {
-    commitMenu, refMenu, activateRef, activate, menus, add, createBranch, stashPush, stashPop, checkout, current, addRemote, addWorktree, addSubmodule, merge, rewrite,
+    commitMenu, refMenu, activateRef, activate, menus, add, pushRenamed, createBranch, stashPush, stashPop, checkout, current, addRemote, addWorktree, addSubmodule, merge, rewrite,
   };
 }

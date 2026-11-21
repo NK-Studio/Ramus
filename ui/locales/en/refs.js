@@ -364,4 +364,7 @@ export default {
   '새 주석 태그': 'New Annotated Tag',
   '메시지': 'Message',
   '주석 태그는 메시지를 적어야 합니다.': 'An annotated tag needs a message.',
+  "'{name}' 는 이름이 다른 '{upstream}' 를 추적하고 있습니다. 어디로 올릴까요?": "'{name}' tracks '{upstream}', which has a different name. Where should it be pushed?",
+  "'{target}' 로 새로 올리고 그것을 추적": "Push as new '{target}' and track it",
+  "지금 upstream '{upstream}' 에 올리기": "Push to current upstream '{upstream}'",
 };

@@ -206,12 +206,14 @@ impl Repository {
         self.git_run(&["switch", "--detach", hash]).map(|_| ()).map_err(Self::explain_checkout)
     }
 
+    /// 새 브랜치는 시작점이 원격 브랜치여도 그것을 추적하지 않는다(`--no-track`). git 기본값은 `origin/x` 에서 만든 `y` 가
+    /// `origin/x` 를 upstream 으로 물려받아, 첫 Push 가 "upstream 이름이 다르다" 며 거부된다. 첫 Push 가 같은 이름으로 올리고 추적을 건다.
     pub fn create_branch(&self, name: &str, start: &str, checkout: bool) -> Result<()> {
         self.check_branch_name(name)?;
         if checkout {
-            self.git_run(&["switch", "-c", name, start]).map(|_| ())
+            self.git_run(&["switch", "--no-track", "-c", name, start]).map(|_| ())
         } else {
-            self.git_run(&["branch", "--", name, start]).map(|_| ())
+            self.git_run(&["branch", "--no-track", "--", name, start]).map(|_| ())
         }
     }
 

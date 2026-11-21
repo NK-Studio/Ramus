@@ -1320,7 +1320,7 @@ impl AppState {
                     "removeRemote" => done(repo.remove_remote(a.s("name")?)),
                     "pruneRemote" => text(repo.prune_remote(a.s("name")?)),
                     "fetchRemote" => done(repo.fetch_remote(a.s("name")?)),
-                    "pushBranch" => text(repo.push_branch(a.s("branch")?, a.s("remote")?, a.b("setUpstream"), a.b("force"))),
+                    "pushBranch" => text(repo.push_branch(a.s("branch")?, a.s("remote")?, a.s("to").ok(), a.b("setUpstream"), a.b("force"))),
                     "setUpstream" => done(repo.set_upstream(a.s("branch")?, a.s("upstream").ok())),
                     "fastForward" => done(match a.s("target") {
                         Ok(target) => repo.fast_forward_to(a.s("branch")?, target),

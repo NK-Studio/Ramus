@@ -196,8 +196,9 @@ impl Repository {
         self.git_run(&["fetch", "--prune", "--progress", name]).map(|_| ())
     }
 
-    /// 브랜치 하나를 원격에 올린다. upstream 이 없으면 걸어 준다.
-    pub fn push_branch(&self, branch: &str, remote: &str, set_upstream: bool, force: bool) -> Result<String> {
+    /// 브랜치 하나를 원격에 올린다. `set_upstream` 이면 올린 원격 브랜치를 추적하게 한다.
+    /// `to` 를 주면 원격의 그 이름으로 올린다(upstream 이름이 로컬과 다른 브랜치를 그 upstream 으로 올릴 때). 없으면 같은 이름.
+    pub fn push_branch(&self, branch: &str, remote: &str, to: Option<&str>, set_upstream: bool, force: bool) -> Result<String> {
         let mut args = vec!["push", "--progress"];
         if set_upstream {
             args.push("-u");
@@ -205,7 +206,8 @@ impl Repository {
         if force {
             args.push("--force-with-lease");
         }
-        args.extend([remote, branch]);
+        let refspec = format!("refs/heads/{branch}:refs/heads/{}", to.unwrap_or(branch));
+        args.extend([remote, refspec.as_str()]);
         self.git_run_with_env(&args, &[])
     }
 
