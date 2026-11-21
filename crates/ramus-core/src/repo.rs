@@ -548,7 +548,8 @@ impl Repository {
         Ok(self.head().unwrap_or_default())
     }
 
-    /// 지금 브랜치를 푸시한다. upstream 이 없으면 원격(origin 이 있으면 origin)에 같은 이름으로 올리고 추적을 건다.
+    /// 지금 브랜치를 푸시한다. upstream 이 있으면 이름이 달라도 그 upstream 으로 올린다(GitKraken 과 같다 — git 기본
+    /// `push.default=simple` 은 이름이 다르면 거부한다). upstream 이 없으면 원격(origin 이 있으면 origin)에 같은 이름으로 올리고 추적을 건다.
     pub fn push(&self) -> Result<String> {
         self.push_to(None)
     }
@@ -560,7 +561,7 @@ impl Repository {
             return Err(GitError::new(tr("브랜치가 아닌 커밋을 보고 있어 푸시할 수 없습니다. 브랜치를 체크아웃해 주세요.", "Can't push while HEAD is detached. Check out a branch first.")));
         }
         let out = if st.branch.upstream.is_some() {
-            self.run(&["push", "--progress"])?
+            self.run(&["-c", "push.default=upstream", "push", "--progress"])?
         } else {
             let remotes = self.remotes()?;
             let remote = remote.map(str::to_string).filter(|r| remotes.contains(r)).or_else(|| remotes.iter().find(|r| *r == "origin").or(remotes.first()).cloned());

@@ -94,8 +94,12 @@ fn remotes_worktrees_and_merge_modes() {
     commit(&d, "copy.txt", "copy");
     repo.push().unwrap();
     assert_eq!(repo.status().unwrap().branch.upstream.as_deref(), Some("origin/main-copy"));
-    // 이름이 다른 upstream 으로 올릴 수도 있다(to).
+    // 이름이 다른 upstream 을 추적하면 Push 는 묻지 않고 그 upstream 으로 올린다(GitKraken 과 같다).
     repo.set_upstream("main-copy", Some("origin/main")).unwrap();
+    repo.push().unwrap();
+    assert_eq!(git(&d, &["rev-parse", "origin/main"]), git(&d, &["rev-parse", "main-copy"]));
+    // 브랜치 메뉴의 Push 도 이름을 주면(to) 그 upstream 으로 올린다.
+    commit(&d, "copy2.txt", "copy2");
     repo.push_branch("main-copy", "origin", Some("main"), false, false).unwrap();
     assert_eq!(git(&d, &["rev-parse", "origin/main"]), git(&d, &["rev-parse", "main-copy"]));
     repo.checkout("main", false).unwrap();

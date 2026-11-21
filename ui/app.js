@@ -1776,24 +1776,16 @@ async function push() {
   }
   const firstPush = !branch.upstream;
   let rejected = null;
-  let renamed = false;
   const result = await act(t('푸시하는 중…'), (job) => call('push', { remote, job }), {
     remote: 'push',
     success: () => (firstPush ? t("'{name}' 를 처음 올렸습니다.", { name: branch.name }) : t('푸시했습니다.')),
     onError: (error) => {
-      // upstream 이름이 브랜치와 다르면 git(push.default=simple)이 거부한다 — 어디로 올릴지 고르게 한다.
-      if (branch.upstream && /upstream branch of your current branch does\s+not\s+match/i.test(error?.message ?? '')) {
-        renamed = true;
-        return true;
-      }
       if (error?.advice?.kind !== 'remoteAhead') return false;
       rejected = error;
       return true;
     },
   });
-  if (renamed) {
-    await refsUi.pushRenamed({ name: branch.name, upstream: branch.upstream });
-  } else if (rejected && await confirmDialog({ title: t('원격에 새 커밋이 있습니다'), glyph: 'pull', message: t('{cause}\n\n먼저 Pull 해서 합친 뒤 다시 Push 할까요?', { cause: rejected.advice.cause }), ok: t('Pull 하고 Push') })) {
+  if (rejected && await confirmDialog({ title: t('원격에 새 커밋이 있습니다'), glyph: 'pull', message: t('{cause}\n\n먼저 Pull 해서 합친 뒤 다시 Push 할까요?', { cause: rejected.advice.cause }), ok: t('Pull 하고 Push') })) {
     if (await pull()) await push();
   } else if (result !== undefined && firstPush && state.refs?.remotes && isGithub()) {
     toast(t('새 브랜치를 올렸습니다. GitHub 에서 Pull Request 를 만들 수 있습니다.'), 'info');
