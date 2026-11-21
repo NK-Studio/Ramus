@@ -16,6 +16,8 @@ Ramus 의 눈에 띄는 변경을 버전별로 적습니다. 형식은 [Keep a C
 
 ## [Unreleased]
 
+## [1.6.18] - 2026-11-21
+
 ### 변경
 - 이름이 다른 upstream(예: `origin/main`)을 추적하는 브랜치를 Push 하면, 어디로 올릴지 묻지 않고 GitKraken 처럼 그 upstream 으로 바로 올립니다. 도구 막대·브랜치 메뉴 모두 같고, 배치(GitKraken·Fork·Unity VCS)와 상관없습니다. 어디로 올라가는지는 Push 버튼 풍선 도움말에 보입니다(예: "origin/main 로 푸시합니다").
 
