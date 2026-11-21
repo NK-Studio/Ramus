@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.16",
+      "date": "2026-11-21",
+      "notes": "### 고침\n- 원격 브랜치(예: `origin/feat/a`)에서 다른 이름으로 만든 브랜치를 Push 하면 \"upstream branch of your current branch does not match\" 오류가 나던 것을 고쳤습니다. 이제 새 브랜치는 시작한 원격 브랜치를 추적하지 않아 첫 Push 가 같은 이름으로 올리고 추적을 겁니다. 이미 이름이 다른 upstream 을 추적하는 브랜치는 같은 이름으로 새로 올릴지, 지금 upstream 에 올릴지 고르게 합니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.16/Ramus-v1.6.16-macos-arm64.dmg",
+          "sha256": "6566719409536670e2d307e28155e5e4d4340f5ce3b5e56290f4c5e1c8a12afa",
+          "size": 71231707
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.16/Ramus-v1.6.16-windows-x64-setup.exe",
+          "sha256": "b2a7c2b34d13f1729b31543b127d13c4fae7fbca258b508fad3a58e8d2e2ee3d",
+          "size": 36567187
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.16/Ramus-v1.6.16-windows-x64.zip",
+          "sha256": "7223b7c539bf3a9c7c7ea680cf0671194f5930a62e457977285c6b92fe769c8c",
+          "size": 55353227
+        }
+      }
+    },
+    {
       "version": "1.6.15",
       "date": "2026-11-21",
       "notes": "### 변경\n- GitKraken 배치에서 사이드바의 로컬 브랜치를 우클릭하면 그래프 이름표와 같은 GitKraken 모양 메뉴가 뜹니다. 다른 워크트리에 체크아웃된 브랜치는 GitKraken 처럼 병합·Rebase·체크아웃·Cherry-pick 같은 항목을 빼고 \"워크트리 열기\"와 워크트리 제거 항목을 보입니다.\n\n### 고침\n- 다른 워크트리에 체크아웃된 브랜치를 도구 막대의 브랜치 목록, 브랜치 메뉴, PR 체크아웃으로 고르면 \"already used by worktree\" 오류 창이 뜨던 것을 고쳤습니다. 이제 어디서 전환하든 그 워크트리를 탭으로 엽니다(이미 열려 있으면 그 탭으로 갑니다).",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.14/Ramus-v1.6.14-windows-x64.zip",
           "sha256": "904eeb0f184b47cee0cb3a4984d97497c807d4a49d455041ebd2b4fb4f002389",
           "size": 55350893
-        }
-      }
-    },
-    {
-      "version": "1.6.13",
-      "date": "2026-11-21",
-      "notes": "### 변경\n- 워크트리를 제거할 때 커밋하지 않은 변경이나 추적하지 않는 파일이 있으면 git 이 거부해 지울 수 없던 것을, 확인 한 번으로 함께 지우도록 바꿨습니다. 확인 창에 되돌릴 수 없다고 알립니다.",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.13/Ramus-v1.6.13-macos-arm64.dmg",
-          "sha256": "1955783eb6f53725f9c5041ddb4fd08cebc9fa26b96e5fdc50619d951f774c53",
-          "size": 71230057
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.13/Ramus-v1.6.13-windows-x64-setup.exe",
-          "sha256": "0526ee9c5ac9282ec54475129949468b1e197b49de5c2db4cd5e26445883fc1d",
-          "size": 36570182
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.13/Ramus-v1.6.13-windows-x64.zip",
-          "sha256": "c15ead53bd5d644236c127d8ab1b5ab379b9672b877aa0b2b7804c004a3e3751",
-          "size": 55350370
         }
       }
     }
