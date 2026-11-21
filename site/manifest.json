@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.14",
+      "date": "2026-11-21",
+      "notes": "### 고침\n- 다른 워크트리에 체크아웃된 브랜치를 그래프 이름표나 사이드바에서 두 번 누르면 \"already used by worktree\" 오류가 나던 것을 고쳤습니다. 이제 메뉴의 \"워크트리 탭으로 열기\"처럼 그 워크트리를 탭으로 엽니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.14/Ramus-v1.6.14-macos-arm64.dmg",
+          "sha256": "106065224bc987db5c38ac89489364ff932df6d787f73aa7c052aef7d2d5523a",
+          "size": 71230216
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.14/Ramus-v1.6.14-windows-x64-setup.exe",
+          "sha256": "7a76c1667aa32de2e764221fc291a996a4c0e2b10564ae5e4c68ec04e9258bf6",
+          "size": 36566104
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.14/Ramus-v1.6.14-windows-x64.zip",
+          "sha256": "904eeb0f184b47cee0cb3a4984d97497c807d4a49d455041ebd2b4fb4f002389",
+          "size": 55350893
+        }
+      }
+    },
+    {
       "version": "1.6.13",
       "date": "2026-11-21",
       "notes": "### 변경\n- 워크트리를 제거할 때 커밋하지 않은 변경이나 추적하지 않는 파일이 있으면 git 이 거부해 지울 수 없던 것을, 확인 한 번으로 함께 지우도록 바꿨습니다. 확인 창에 되돌릴 수 없다고 알립니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.12/Ramus-v1.6.12-windows-x64.zip",
           "sha256": "4705bd0adfc74a770d2d67125de5f4dfd2f605eb209e1da0bb3ac6d6476b7779",
           "size": 55349643
-        }
-      }
-    },
-    {
-      "version": "1.6.11",
-      "date": "2026-11-16",
-      "notes": "### 고침\n- UI 배율을 바꾸면 macOS 탭 막대가 함께 커지고 작아지며 신호등 버튼과 어긋나던 것을 고쳤습니다. 이제 탭 막대(Windows 는 제목 막대)는 배율과 상관없이 늘 같은 크기이고, 배율은 그 아래 내용에만 적용됩니다.",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.11/Ramus-v1.6.11-macos-arm64.dmg",
-          "sha256": "aca057fe284a5ec5123ff242f18c9c0981f613ad777730677491086da2c56fa3",
-          "size": 71222885
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.11/Ramus-v1.6.11-windows-x64-setup.exe",
-          "sha256": "66b3d237998b5f7d405dfec754c3ed6b662778913655121f9e8cfffdf3faf5c1",
-          "size": 36567131
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.11/Ramus-v1.6.11-windows-x64.zip",
-          "sha256": "da098f6d9c352d5cf87cc7d3adff3e7851827243855d075dcb64a8ca351d243e",
-          "size": 55348375
         }
       }
     }
