@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.20",
+      "date": "2026-11-21",
+      "notes": "### 추가\n- JavaScript · TypeScript 파일도 C# 의 Unity 타입처럼 API 이름을 타입 색으로 칠합니다. JS 내장 객체(`Promise` · `Map` · `JSON`), 브라우저 API(`HTMLElement` · `URL` · `ResizeObserver` · `WebGL2RenderingContext`), TS 유틸리티 타입(`Partial` · `Record`), 전역 객체(`document` · `console`), TS 타입 자리의 기본 타입(`string` · `number`)이 해당합니다. JS·TS 키워드도 따로 두어 `value` · `event` 같은 C# 낱말을 더는 키워드로 칠하지 않습니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.20/Ramus-v1.6.20-macos-arm64.dmg",
+          "sha256": "ed248eedc769379e3007297f62dc6d5f4f0cebee3e46352a5038b1f8b0d800f7",
+          "size": 71236216
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.20/Ramus-v1.6.20-windows-x64-setup.exe",
+          "sha256": "23d75e40d29b1228561956639b403d503ee30823188225306e0b66ca2aeb9d12",
+          "size": 36571625
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.20/Ramus-v1.6.20-windows-x64.zip",
+          "sha256": "f8fb7662275fe98acf9c2d2d394eed89cf24112d13b778ac0bf6a3c155325185",
+          "size": 55356457
+        }
+      }
+    },
+    {
       "version": "1.6.19",
       "date": "2026-11-21",
       "notes": "### 변경\n- 원격에 아직 없는(upstream 이 없는) 브랜치를 Push 하면 GitKraken 처럼 올릴 원격과 원격 브랜치 이름을 묻습니다(기본: 지난번 원격, 같은 이름). 원격이 하나여도 묻고, 올린 뒤 그 브랜치를 추적합니다. 도구 막대·브랜치 메뉴 모두 같습니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.18/Ramus-v1.6.18-windows-x64.zip",
           "sha256": "e4640929137c73c7e49d92d86b47aa776bfd9c19d92e17d5ed6a32e8a83c9cdf",
           "size": 55352403
-        }
-      }
-    },
-    {
-      "version": "1.6.17",
-      "date": "2026-11-21",
-      "notes": "### 변경\n- 도구 막대 Push 버튼의 풍선 도움말에 어디로 올라가는지(예: `origin/feat/a`)를 보입니다. 브랜치가 이름이 다른 upstream(예: `origin/main`)을 추적하면, 누를 때 같은 이름으로 새로 올릴지 그 upstream 에 올릴지 묻는다고 미리 알립니다.",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.17/Ramus-v1.6.17-macos-arm64.dmg",
-          "sha256": "a1e6180d0186a2534365262d65814c6eb0b8f807bd4695e285876c974c3a3e49",
-          "size": 71232697
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.17/Ramus-v1.6.17-windows-x64-setup.exe",
-          "sha256": "9024f10406b3a841f9899238da0dd5ae26e700939aaca070adb621d998169617",
-          "size": 36564536
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.17/Ramus-v1.6.17-windows-x64.zip",
-          "sha256": "2fcc924285df9d1119eb3b56991946f0dc53482c1f08bb5abd6c3baf1e797fcb",
-          "size": 55352524
         }
       }
     }
