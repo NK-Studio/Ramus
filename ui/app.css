@@ -651,6 +651,9 @@ body.git-busy .staging-btn, body.git-busy .row-action, body.git-busy .commit-btn
 
 /* 파일 목록·줄(원본 FileRow.uxml·GitRows.uss): 20px, 줄 안쪽 왼쪽 4px·오른쪽 8px. */
 .file-list { flex: 1; min-height: 0; overflow: auto; outline: none; background: var(--git-list-bg); }
+/* 보이는 줄만 그린다: 전체 높이만 잡는 칸 안에, 그려 둔 줄 묶음을 제자리로 내려 둔다(files.js fileList). */
+.file-list-space { position: relative; min-width: 100%; }
+.file-list-rows { position: absolute; top: 0; left: 0; right: 0; }
 .file-browser { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .file-tree-toolbar { flex: none; display: flex; align-items: center; height: 26px; padding: 0 4px; background: var(--git-list-bg); border-bottom: 1px solid var(--git-divider); }
 .expand-toggle { height: 20px; padding: 0 6px; border: 0; border-radius: var(--git-radius); background: transparent; color: var(--git-text-muted); font-size: 11px; cursor: pointer; }
@@ -1451,14 +1454,15 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .modal-error { min-height: 16px; }
 .seg { align-self: flex-start; }
 .seg button { display: inline-flex; align-items: center; gap: 4px; }
-/* 오류 카드: 설명 | git 원문 전환, 두 보기를 겹쳐 높은 쪽에 맞춘다. [전체 복사] 는 왼쪽 끝. */
+/* 오류 카드: 설명 | git 원문 전환, 고른 보기의 높이만 쓴다(원문은 320px 까지, 넘으면 스크롤). [전체 복사] 는 왼쪽 끝. */
 .error-modes { display: flex; align-self: flex-start; margin: 0 0 10px 58px; border: 1px solid var(--git-button-border); border-radius: 6px; overflow: hidden; }
 .error-modes button { height: 24px; padding: 0 12px; border: 0; background: var(--git-button-bg); color: var(--git-text-muted); font-size: 12px; cursor: pointer; }
 .error-modes button:hover { background: var(--git-button-hover); }
 .error-modes button.on { background: var(--git-accent); color: var(--git-accent-text); font-weight: 700; }
 .error-stack { display: grid; max-height: 320px; margin: 0 0 6px 58px; overflow: auto; }
 .error-stack > .error-view { grid-area: 1 / 1; min-width: 0; }
-.error-stack > .error-view.hidden { visibility: hidden; }
+/* 안 보이는 쪽은 자리도 비운다 — 원문이 길 때 짧은 설명 밑에 원문 높이만큼 빈칸이 생기지 않게. */
+.error-stack > .error-view.hidden { display: none; }
 .error-cause { font-size: 13px; font-weight: 700; color: var(--git-text); white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
 .error-fix { margin-top: 6px; font-size: 12px; color: var(--git-text-muted); white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
 .error-raw { margin: 4px 0 0; padding: 8px 10px; border: 1px solid var(--git-border); border-radius: 6px; font: 12px/1.5 var(--mono); color: var(--git-text); white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; }
@@ -1759,13 +1763,17 @@ input.field[readonly] { color: var(--git-text-secondary); background: var(--git-
 .gh-accounts { display: flex; flex-direction: column; gap: 8px; }
 /* 설정 > 로그인: GitHub 계정 카드 */
 .gh-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--git-divider); border-radius: var(--radius); background: var(--git-field-bg); }
-.gh-card.loading { min-height: 40px; }
+/* 계정·키를 처음 읽는 동안: 실제 카드와 같은 크기의 회색 모양, 밝은 띠가 지나간다(.sk-cover 와 같은 띠). */
+.gh-skeleton { position: relative; overflow: hidden; }
+.gh-skeleton::after { content: ''; position: absolute; left: 0; right: 0; top: -40%; height: 40%; background: linear-gradient(180deg, transparent, var(--git-skeleton-shine, rgba(255, 255, 255, 0.05)), transparent); animation: sk-sweep 2.3s linear infinite; pointer-events: none; }
+.gh-skeleton .gh-card-who { gap: 8px; }
+.gh-sk-avatar { width: 40px; height: 40px; border-radius: 20px; }
+.gh-sk-button { width: 76px; height: 30px; border-radius: var(--radius); }
+.gh-skeleton-block { display: flex; flex-direction: column; gap: 10px; }
 .gh-card-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .gh-card-name { font-weight: 600; color: var(--git-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gh-card-login, .gh-card-note { white-space: nowrap; }
 .gh-card-state { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-.gh-status { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
-.gh-status.ok { color: var(--git-success); }
 .gh-badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
 .gh-badge { padding: 1px 6px; border: 1px solid var(--git-divider); border-radius: 9px; font-size: 11px; color: var(--git-text-secondary); white-space: nowrap; }
 .gh-badge.accent { border-color: var(--git-accent-soft); background: var(--git-accent-soft); color: var(--git-accent-fg); }

@@ -358,13 +358,15 @@ impl GitRunner {
     }
 }
 
-/// 모든 git 호출 맨 앞에 붙이는 플랫폼 `-c` 인자. 설정의 `config_args` 보다 앞이라 사용자가 고른 값이 이긴다.
-/// Windows: 경로가 260자를 넘는 파일도 만들게 한다(`core.longpaths`). 없으면 깊은 경로가 있는 브랜치로 바꿀 때
-/// git 이 "Filename too long" 으로 중간에 멈춰 작업 트리가 반쯤 바뀐 채 남는다. Git for Windows 의 기본값은 꺼져 있다.
+/// 모든 git 호출 맨 앞에 붙이는 `-c` 인자. 설정의 `config_args` 보다 앞이라 앱 설정에서 고른 값이 이긴다.
+/// - `checkout.workers=0`: 작업 트리에 파일을 쓸 때(브랜치 전환·변경 버리기·clone) CPU 수만큼 나눠 쓴다. git 기본값은 하나씩이라
+///   파일이 수만 개면 몇 배 느리다(2만 개 되돌리기: 9.2초 → 4.7초, Windows).
+/// - Windows `core.longpaths=true`: 경로가 260자를 넘는 파일도 만든다. 없으면 깊은 경로가 있는 브랜치로 바꿀 때
+///   git 이 "Filename too long" 으로 중간에 멈춰 작업 트리가 반쯤 바뀐 채 남는다. Git for Windows 의 기본값은 꺼져 있다.
 #[cfg(windows)]
-pub(crate) const PLATFORM_CONFIG_ARGS: &[&str] = &["-c", "core.longpaths=true"];
+pub(crate) const PLATFORM_CONFIG_ARGS: &[&str] = &["-c", "core.longpaths=true", "-c", "checkout.workers=0"];
 #[cfg(not(windows))]
-pub(crate) const PLATFORM_CONFIG_ARGS: &[&str] = &[];
+pub(crate) const PLATFORM_CONFIG_ARGS: &[&str] = &["-c", "checkout.workers=0"];
 
 fn apply_environment(cmd: &mut Command) {
     cmd.env("GIT_TERMINAL_PROMPT", "0");

@@ -1573,7 +1573,9 @@ const actions = {
     const left = kept.size ? t('\n\n숨긴 파일 {n}개는 버리지 않고 그대로 둡니다.', { n: kept.size }) : '';
     if (!(await confirmDialog({ title: t('모든 변경 버리기'), glyph: 'trash', danger: true, message: t('{branch} 의 변경 {n}개를 모두 버립니다. Stage 한 것도 마지막 커밋 상태로 되돌리고 새 파일은 지웁니다. 실행 취소로도 되살릴 수 없습니다.{left}', { branch: state.status.branch.name, n: all.length, left }), ok: t('모두 버리기') }))) return;
     closeDiff();
-    await act(t('모두 버리는 중…'), () => call('discard', { paths: all.map((e) => e.path) }), { success: () => t('모든 변경을 버렸습니다.') });
+    // 화면이 본 변경을 넘긴다. Rust 는 지금 바뀐 것이 정확히 이것뿐이면 reset --hard + clean 으로 한 번에 버리고(파일이 수만 개여도 빠르다),
+    // 확인 창을 띄운 뒤 새로 생긴 변경·숨긴 파일이 있으면 이 경로만 골라 버린다.
+    await act(t('모두 버리는 중…'), () => call('discardAll', { paths: all.map((e) => e.path) }), { success: () => t('모든 변경을 버렸습니다.') });
   },
   async ignore(path, kind) {
     await act(t('.gitignore 에 넣는 중…'), () => call('ignore', { path, kind }), { success: (p) => t(".gitignore 에 '{p}' 를 넣었습니다.", { p }) });
@@ -1977,9 +1979,23 @@ function renderFooter() {
         showMenu(r.left, r.top - 4 - 30 * 3, scaleItems(scale));
       },
     }, icon('zoomIn', 14, 'footer-icon'), el('span', { class: 'footer-text', text: `${scale}%` })),
-    el('button', { class: 'footer-btn', 'data-tip': t('이 레포지토리의 GitHub 계정…'), onclick: () => github.chooseAccount() },
-      icon('github', 14, 'footer-icon'), el('span', { class: 'footer-text', text: github.account ?? 'GitHub' })),
+    footerAccount(),
     el('span', { class: 'footer-version', 'data-tip': 'Ramus', text: state.version }));
+}
+
+/**
+ * 아래쪽 상태 줄의 GitHub 계정 칸: git 이 이 레포지토리에 실제로 쓰는 계정(푸시·풀·LFS 가 이 계정으로 접속한다).
+ * 앱 로그인 계정을 보이면, 이 레포지토리에 계정을 고르지 않았을 때 git 이 쓰는 자격 증명 도우미 계정과 어긋나 헷갈린다.
+ */
+function footerAccount() {
+  const git = github.gitAccount;
+  const label = git?.login ?? github.account ?? 'GitHub';
+  const how = git ? (git.source === 'app' ? t('앱 로그인') : t('git 자격 증명')) : '';
+  const tip = git
+    ? t('git 이 이 레포지토리에 쓰는 계정: {login} ({how}). 눌러서 바꿉니다.', { login: git.login, how })
+    : t('이 레포지토리의 GitHub 계정…');
+  return el('button', { class: 'footer-btn', 'data-tip': tip, onclick: () => github.chooseAccount() },
+    icon('github', 14, 'footer-icon'), el('span', { class: 'footer-text', text: label }));
 }
 
 /** 원본 RefTreeBuilder.Sections 순서. 레일 아이콘도 이 순서다. */

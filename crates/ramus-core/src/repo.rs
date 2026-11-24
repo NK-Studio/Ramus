@@ -355,6 +355,57 @@ impl Repository {
         check(self.git.run_with(&self.root, args, Some(input), &HashMap::new()))
     }
 
+    /// 경로 여러 개에 하는 git 명령(add · reset · restore · rm · stash push). 경로는 명령줄이 아니라 표준 입력으로 넘긴다
+    /// (`--pathspec-from-file=- --pathspec-file-nul`). Windows 명령줄은 32,767자가 한계라, 파일이 수천 개면
+    /// 명령줄로 넘길 때 git 을 띄우지도 못한다(os error 206). `args` 에는 "--" 와 경로를 넣지 않는다.
+    /// 그 옵션이 없는 git(2.26 전 — 설정에서 고른 시스템·직접 지정 git)이면 명령줄로 넘기되 한계를 넘지 않게 나눠 부른다.
+    pub(crate) fn run_paths<S: AsRef<str>>(&self, args: &[S], paths: &[String]) -> Result<GitOutput> {
+        self.run_paths_with(args, paths, self.pathspec_stdin_supported())
+    }
+
+    fn run_paths_with<S: AsRef<str>>(&self, args: &[S], paths: &[String], stdin: bool) -> Result<GitOutput> {
+        // 경로가 없으면 아무것도 하지 않는다 — "git add -A --" 처럼 경로 없이 부르면 전부에 해 버리는 명령이 있다.
+        if paths.is_empty() {
+            return Ok(GitOutput { code: 0, stdout: String::new(), stderr: String::new() });
+        }
+        let mut full: Vec<&str> = args.iter().map(|a| a.as_ref()).collect();
+        if stdin {
+            full.extend(["--pathspec-from-file=-", "--pathspec-file-nul"]);
+            let mut input = String::with_capacity(paths.iter().map(|p| p.len() + 1).sum());
+            for path in paths {
+                input.push_str(path);
+                input.push('\0');
+            }
+            return self.run_input(&full, &input);
+        }
+        full.push("--");
+        // stash 는 나눠 부르면 stash 가 여러 개 생긴다 — 한 번에 넘긴다(경로가 아주 많으면 명령줄 한계에 걸릴 수 있다).
+        let chunks = if full.first() == Some(&"stash") { vec![paths] } else { path_chunks(paths) };
+        let mut out = GitOutput { code: 0, stdout: String::new(), stderr: String::new() };
+        for chunk in chunks {
+            let mut part = full.clone();
+            part.extend(chunk.iter().map(String::as_str));
+            let o = self.run(&part)?;
+            out.stdout.push_str(&o.stdout);
+            out.stderr.push_str(&o.stderr);
+        }
+        Ok(out)
+    }
+
+    /// 이 git 이 `--pathspec-from-file` 을 아는가(2.26 이상). git 실행 파일마다 한 번만 묻는다. 버전을 못 읽으면 안다고 본다.
+    fn pathspec_stdin_supported(&self) -> bool {
+        static KNOWN: std::sync::OnceLock<std::sync::Mutex<HashMap<PathBuf, bool>>> = std::sync::OnceLock::new();
+        let git = self.git.globals().git_path.unwrap_or_else(|| PathBuf::from("git"));
+        let known = KNOWN.get_or_init(Default::default);
+        if let Some(&supported) = known.lock().unwrap().get(&git) {
+            return supported;
+        }
+        let out = self.git.run(&self.root, &["--version"]);
+        let supported = git_version(&out.stdout).is_none_or(|v| v >= (2, 26));
+        known.lock().unwrap().insert(git, supported);
+        supported
+    }
+
     pub fn status(&self) -> Result<RepoStatus> {
         let out = self.run(&["status", "--porcelain=v1", "-z", "--branch", "--untracked-files=all"])?;
         let (branch, entries) = status::parse(&out.stdout);
@@ -504,9 +555,7 @@ impl Repository {
         if paths.is_empty() {
             return Ok(());
         }
-        let mut args = vec!["add".to_string(), "-A".into(), "--".into()];
-        args.extend(paths.iter().cloned());
-        self.run(&args).map(|_| ())
+        self.run_paths(&["add", "-A"], paths).map(|_| ())
     }
 
     pub fn stage_all(&self) -> Result<()> {
@@ -518,13 +567,8 @@ impl Repository {
         if paths.is_empty() {
             return Ok(());
         }
-        let mut args: Vec<String> = if self.head().is_some() {
-            vec!["reset".into(), "-q".into(), "--".into()]
-        } else {
-            vec!["rm".into(), "--cached".into(), "-r".into(), "-q".into(), "--".into()]
-        };
-        args.extend(paths.iter().cloned());
-        self.run(&args).map(|_| ())
+        let args: &[&str] = if self.head().is_some() { &["reset", "-q"] } else { &["rm", "--cached", "-r", "-q"] };
+        self.run_paths(args, paths).map(|_| ())
     }
 
     pub fn unstage_all(&self) -> Result<()> {
@@ -638,7 +682,9 @@ impl Repository {
     /// 파일을 HEAD 상태로 되돌린다(Stage 한 것까지). 새 파일은 지운다.
     pub fn discard(&self, paths: &[String]) -> Result<()> {
         let st = self.status()?;
-        let entries: Vec<&StatusEntry> = st.unstaged.iter().chain(st.staged.iter()).filter(|e| paths.contains(&e.path)).collect();
+        // 파일이 수만 개여도 느려지지 않게 집합으로 찾는다.
+        let wanted: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
+        let entries: Vec<&StatusEntry> = st.unstaged.iter().chain(st.staged.iter()).filter(|e| wanted.contains(e.path.as_str())).collect();
         let mut untracked = Vec::new();
         let mut added = Vec::new();
         let mut tracked = Vec::new();
@@ -661,28 +707,55 @@ impl Repository {
         added.sort();
         added.dedup();
         if !added.is_empty() {
-            let mut args = vec!["rm".to_string(), "-f".into(), "-q".into(), "--".into()];
-            args.extend(added);
-            self.run(&args)?;
+            self.run_paths(&["rm", "-f", "-q"], &added)?;
         }
         tracked.sort();
         tracked.dedup();
         if !tracked.is_empty() {
             // HEAD 에 없는 경로(이름 변경의 새 경로)는 restore 가 인덱스·작업 트리에서 지운다.
-            let mut args = vec!["restore".to_string(), "--source=HEAD".into(), "--staged".into(), "--worktree".into(), "--".into()];
-            args.extend(tracked);
-            self.run(&args)?;
+            self.run_paths(&["restore", "--source=HEAD", "--staged", "--worktree"], &tracked)?;
         }
         Ok(())
+    }
+
+    /// "모든 변경 버리기": 화면이 보여 준 변경 `paths` 를 버린다(숨긴 파일은 화면이 빼고 넘긴다).
+    /// 지금 바뀐 파일이 정확히 그것뿐이면 경로를 하나하나 넘기지 않고 `reset --hard` + `clean -fd` 로 한 번에 한다 —
+    /// 파일이 수만 개면 경로 목록을 맞춰 보는 `restore` 보다 훨씬 빠르다. 다음일 때는 `discard` 로 그 경로만 버린다:
+    /// - 화면이 본 것과 지금이 다르다(확인 창을 띄운 뒤 Unity 등이 새로 만든 파일, 숨긴 파일): 보지 못한 변경까지 버리지 않게.
+    /// - 병합·rebase 같은 작업 중이다: reset --hard 는 MERGE_HEAD 같은 진행 상태까지 지운다.
+    /// - assume-unchanged 로 표시한 파일이 있다: reset --hard 는 그 파일의 로컬 수정까지 덮어쓴다(변경 목록에는 안 보인다).
+    /// - 커밋이 하나도 없다.
+    /// .gitignore 로 무시한 파일은 어느 쪽이든 지우지 않는다.
+    pub fn discard_all(&self, paths: &[String]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let st = self.status()?;
+        let now: std::collections::HashSet<&str> = st.unstaged.iter().chain(&st.staged).map(|e| e.path.as_str()).collect();
+        let seen: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
+        let fast = now == seen && st.operation.is_none() && self.head().is_some() && !self.has_assume_unchanged()?;
+        if fast {
+            self.run(&["reset", "-q", "--hard", "HEAD"])?;
+            self.run(&["clean", "-f", "-d", "-q"])?;
+            return Ok(());
+        }
+        self.discard(paths)
+    }
+
+    /// assume-unchanged(`git update-index --assume-unchanged`)로 표시한 파일이 있는가. `ls-files -v` 는 그 파일의 꼬리표를 소문자로 쓴다.
+    fn has_assume_unchanged(&self) -> Result<bool> {
+        let out = self.run(&["ls-files", "-v", "-z"])?;
+        Ok(out.stdout.split('\0').any(|line| line.chars().next().is_some_and(|c| c.is_ascii_lowercase())))
     }
 
     /// 작업 트리 쪽 변경만 버린다(인덱스에 올린 내용은 남는다). 새 파일(untracked)은 지운다.
     /// Unstaged 목록의 "변경 버리기" 다(원본 GitOperations.DiscardWorkTreeAsync = `git restore --worktree`).
     pub fn discard_worktree(&self, paths: &[String]) -> Result<()> {
         let st = self.status()?;
+        let wanted: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
         let mut untracked = Vec::new();
         let mut tracked = Vec::new();
-        for e in st.unstaged.iter().filter(|e| paths.contains(&e.path)) {
+        for e in st.unstaged.iter().filter(|e| wanted.contains(e.path.as_str())) {
             if e.state == status::FileState::Untracked {
                 untracked.push(e.path.clone());
             } else {
@@ -698,9 +771,7 @@ impl Repository {
         tracked.sort();
         tracked.dedup();
         if !tracked.is_empty() {
-            let mut args = vec!["restore".to_string(), "--worktree".into(), "--".into()];
-            args.extend(tracked);
-            self.run(&args)?;
+            self.run_paths(&["restore", "--worktree"], &tracked)?;
         }
         Ok(())
     }
@@ -758,9 +829,79 @@ impl Repository {
     }
 }
 
+/// "git version 2.53.0.windows.1" · "git version 2.39.5 (Apple Git-154)" → (2, 53) · (2, 39).
+fn git_version(text: &str) -> Option<(u32, u32)> {
+    let mut parts = text.trim().strip_prefix("git version ")?.split('.');
+    Some((parts.next()?.trim().parse().ok()?, parts.next()?.trim().parse().ok()?))
+}
+
+/// 경로를 명령줄로만 받는 명령(git diff 등)에 넘길 때, 명령줄 한계를 넘지 않게 나눈다. 빈 목록이면 빈 묶음 하나.
+/// Windows 명령줄은 32,767자(UTF-16)가 한계다. 바이트 길이로 세므로 실제보다 넉넉히 잡힌다.
+pub(crate) fn path_chunks(paths: &[String]) -> Vec<&[String]> {
+    const LIMIT: usize = 24_000;
+    let mut chunks = Vec::new();
+    let (mut start, mut len) = (0, 0);
+    for (i, path) in paths.iter().enumerate() {
+        let size = path.len() + 3;
+        if i > start && len + size > LIMIT {
+            chunks.push(&paths[start..i]);
+            start = i;
+            len = 0;
+        }
+        len += size;
+    }
+    if start < paths.len() || paths.is_empty() {
+        chunks.push(&paths[start..]);
+    }
+    chunks
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_git_version() {
+        assert_eq!(git_version("git version 2.53.0.windows.1\n"), Some((2, 53)));
+        assert_eq!(git_version("git version 2.39.5 (Apple Git-154)"), Some((2, 39)));
+        assert_eq!(git_version("git version 2.25.1"), Some((2, 25)));
+        assert_eq!(git_version("not git"), None);
+    }
+
+    /// 오래된 git 처럼 경로를 명령줄로 넘겨도(나눠 불러도) 모든 경로에 한다.
+    #[test]
+    fn paths_on_the_command_line_are_chunked() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        let git = GitRunner::default();
+        for args in [&["init", "-q", "-b", "main"][..], &["config", "user.name", "t"], &["config", "user.email", "t@example.com"]] {
+            assert!(git.run(d, args).success());
+        }
+        let paths: Vec<String> = (0..1500).map(|i| format!("Some Folder/Long_Asset_Name_For_Chunking_{i:05}.asset")).collect();
+        for p in &paths {
+            std::fs::create_dir_all(d.join(p).parent().unwrap()).unwrap();
+            std::fs::write(d.join(p), "x").unwrap();
+        }
+        assert!(path_chunks(&paths).len() > 1);
+        let repo = Repository::open(git, d).unwrap();
+        repo.run_paths_with(&["add", "-A"], &paths, false).unwrap();
+        assert_eq!(repo.status().unwrap().staged.len(), paths.len());
+        repo.run_paths_with(&["rm", "--cached", "-r", "-q"], &paths, false).unwrap();
+        assert!(repo.status().unwrap().staged.is_empty());
+        // 경로가 없으면 아무것도 하지 않는다(add -A 가 전부를 올리지 않게).
+        repo.run_paths_with(&["add", "-A"], &[], false).unwrap();
+        assert!(repo.status().unwrap().staged.is_empty());
+    }
+
+    #[test]
+    fn path_chunks_stay_under_the_command_line_limit() {
+        assert_eq!(path_chunks(&[]).len(), 1);
+        let paths: Vec<String> = (0..5000).map(|i| format!("Assets/Folder{}/File_{i}.prefab.meta", i % 50)).collect();
+        let chunks = path_chunks(&paths);
+        assert!(chunks.len() > 1);
+        assert_eq!(chunks.iter().map(|c| c.len()).sum::<usize>(), paths.len());
+        assert!(chunks.iter().all(|c| c.iter().map(|p| p.len() + 3).sum::<usize>() <= 24_000));
+    }
 
     #[test]
     fn diff_args_by_target() {

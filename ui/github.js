@@ -1902,8 +1902,13 @@ export function createGitHub(ctx) {
     get count() { return count(); },
     get info() { return info; },
     get signedIn() { return signedIn; },
-    /** 아래쪽 상태 줄 계정 칸(원본 GitAccounts.ApiLogin — 고른 계정, 없으면 앱 로그인). */
+    /** API 에 쓰는 계정(원본 GitAccounts.ApiLogin — 고른 계정, 없으면 앱 로그인). Pull Request 목록이 쓴다. */
     get account() { return info?.me ?? null; },
+    /**
+     * git 이 이 레포지토리의 github.com 원격에 실제로 쓰는 계정 {login, source: 'app'|'credential'}. 아래쪽 상태 줄이 보인다.
+     * 고른 계정이 없으면 git 은 자격 증명 도우미의 계정을 쓰므로, 앱 로그인(account)과 다를 수 있다.
+     */
+    get gitAccount() { return info?.git ?? null; },
     reset() { loadedFor = null; loadToken++; set = null; info = null; },
   };
 }

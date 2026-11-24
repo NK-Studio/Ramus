@@ -237,7 +237,15 @@ impl Repository {
             return Ok(false);
         }
         for command in &plan.commands {
-            self.git_run(command)?;
+            // 경로가 딸린 stash 는 경로를 표준 입력으로 넘긴다(파일이 많으면 명령줄 한계를 넘는다).
+            match command.iter().position(|a| a == "--") {
+                Some(at) if command.first().map(String::as_str) == Some("stash") => {
+                    self.run_paths(&command[..at], &command[at + 1..])?;
+                }
+                _ => {
+                    self.git_run(command)?;
+                }
+            }
         }
         Ok(true)
     }

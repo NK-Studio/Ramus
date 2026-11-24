@@ -165,6 +165,23 @@ impl AppState {
         }
     }
 
+    /// git 이 이 레포지토리의 github.com 원격에 실제로 쓰는 계정 (login, source). `github_git_token` 과 같은 규칙:
+    /// 앱 계정을 골랐으면 앱 로그인, 아니면 자격 증명 도우미(키체인·GCM)가 내주는 계정. 아래쪽 상태 줄이 이것을 보인다 —
+    /// API 계정(`github_api_token`)은 고른 것이 없으면 앱 로그인을 먼저 쓰므로, 그것을 보이면 git 이 쓰는 계정과 어긋난다.
+    fn github_git_account(&self) -> Option<(String, &'static str)> {
+        match self.github_choice() {
+            Some((source, _)) if source == "app" => self.app_login().map(|(login, _)| (login, "app")),
+            choice => {
+                let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| std::env::temp_dir());
+                let wanted = choice.map(|(_, login)| login);
+                github::credential_account(&self.runner, &dir, wanted.as_deref())
+                    .map(|(login, _)| login)
+                    .filter(|login| !login.is_empty() && login != "x-access-token")
+                    .map(|login| (login, "credential"))
+            }
+        }
+    }
+
     /// API 에 쓸 토큰: 고른 계정 → 앱 로그인 → 자격 증명 도우미.
     fn github_api_token(&self) -> Option<(String, String)> {
         let dir = self.repo().map(|r| r.root().to_path_buf()).unwrap_or_else(|_| std::env::temp_dir());
@@ -1049,7 +1066,9 @@ impl AppState {
             "githubRepo" => {
                 let ids = self.github_remote.lock().unwrap().clone();
                 let me = self.github_api_token().map(|(login, _)| login);
-                Ok(json!({ "owner": ids.as_ref().map(|i| i.0.clone()), "repo": ids.as_ref().map(|i| i.1.clone()), "me": me, "signedIn": self.app_login().is_some() }))
+                // git 이 실제로 쓰는 계정(아래쪽 상태 줄). GitHub 원격이 있을 때만 묻는다(자격 증명 도우미를 깨우지 않게).
+                let git = ids.as_ref().and_then(|_| self.github_git_account()).map(|(login, source)| json!({ "login": login, "source": source }));
+                Ok(json!({ "owner": ids.as_ref().map(|i| i.0.clone()), "repo": ids.as_ref().map(|i| i.1.clone()), "me": me, "git": git, "signedIn": self.app_login().is_some() }))
             }
             "githubApi" => {
                 let a = Args(&args);
@@ -1335,7 +1354,7 @@ impl AppState {
                     _ => done(repo.stash_drop(a.s("name")?)),
                 }
             }
-            "stage" | "unstage" | "stageAll" | "unstageAll" | "commit" | "push" | "applyLines" | "discard" | "fetch" | "pull" | "ignore" | "lfsTrack"
+            "stage" | "unstage" | "stageAll" | "unstageAll" | "commit" | "push" | "applyLines" | "discard" | "discardAll" | "fetch" | "pull" | "ignore" | "lfsTrack"
             | "lfsPull" | "stashPaths" | "deletePath" | "restoreFile" => {
                 let repo = self.repo()?;
                 // Fetch·Pull·Push 는 화면이 이름(job)을 붙인다: 진행 알림이 그 작업 것으로 나뉘고 cancelJob 으로 멈출 수 있다.
@@ -1361,6 +1380,8 @@ impl AppState {
                             let paths = parse::<PathsArg>(args)?.paths;
                             if worktree_only { repo.discard_worktree(&paths) } else { repo.discard(&paths) }.map(|_| Value::Null)
                         }
+                        // 모든 변경 버리기. paths: 화면이 보여 준(숨긴 파일을 뺀) 변경 — 지금 바뀐 것이 정확히 이것이면 한 번에 버린다.
+                        "discardAll" => repo.discard_all(&parse::<PathsArg>(args)?.paths).map(|_| Value::Null),
                         "applyLines" => {
                             let a: LinesArg = parse(args)?;
                             repo.apply_lines_with(a.action, &a.path, a.untracked, &a.fingerprint, &a.lines, a.context.unwrap_or(3)).map(|_| Value::Null)
@@ -1376,11 +1397,14 @@ impl AppState {
                         "stashPaths" => {
                             let message = Args(&args).s("message").unwrap_or("").to_string();
                             let paths = parse::<PathsArg>(args)?.paths;
-                            let r = repo.stash_paths(&paths, &message).map(|_| Value::Null);
+                            let r = repo.stash_paths(&paths, &message);
+                            // 전부 넣었으면 다시 하기도 경로 없이(경로가 수천 개면 명령줄 한계에 걸린다).
+                            let whole = matches!(r, Ok(true));
+                            let r = r.map(|_| Value::Null);
                             self.recorded_any(&repo, r, &before, |b, after| {
                                 let mut e = UndoEntry::new(UndoKind::Stash, if message.is_empty() { tr("Stash (고른 파일)", "Stash (Selected Files)").to_string() } else { message.clone() });
                                 e.hash = after.stash.clone();
-                                e.paths = paths.clone();
+                                e.paths = if whole { Vec::new() } else { paths.clone() };
                                 (!after.stash.is_empty() && after.stash != b.stash).then_some(e)
                             })
                         }

@@ -107,7 +107,6 @@ export default {
   '자격 증명': 'Credentials',
   'GitHub 계정을 읽는 중…': 'Loading GitHub accounts…',
   'GitHub 계정 정보를 읽지 못했습니다.': "Couldn't load GitHub account information.",
-  '연결됨': 'Connected',
   '이 레포에서 사용 중': 'Used by this repo',
   '이 레포를 읽을 수 없음': "Can't access this repo",
   '로그아웃': 'Sign Out',

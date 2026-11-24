@@ -204,7 +204,8 @@ export function renderStaging(container, status, draft, api) {
   const common = (mode, st) => ({
     view, state: st, collapsed, onToggleFolder: toggleFolder, onSetCollapsed: setCollapsed,
     keyOf: (e) => diffKey(mode, e.path),
-    activeKey: api.activeDiffKey(),
+    // 함수로 넘긴다 — 나중에 굴러 들어와 그려지는 줄도 지금 연 diff 를 보인다.
+    activeKey: () => api.activeDiffKey(),
     onOpen: (e, how) => api.openDiff(e, mode, how),
     expandToggle: !fork && !conflictMode,
   });
@@ -719,7 +720,7 @@ export function renderCommit(container, detail, api) {
     onSetCollapsed: setCollapsed,
     expandToggle: true,
     keyOf: (e) => diffKey(`commit-${detail.hash}`, e.path),
-    activeKey: api.activeDiffKey(),
+    activeKey: () => api.activeDiffKey(),
     onOpen: (f, how) => api.openCommitDiff(detail.hash, f, how),
     onHover: api.prefetchCommitDiff && ((f) => api.prefetchCommitDiff(detail.hash, f)),
     onMenu: (event, files) => api.commitFileMenu(event, detail, files),

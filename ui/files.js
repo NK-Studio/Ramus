@@ -82,28 +82,74 @@ export function stateSummary(files) {
 export const folderFiles = (node) => [...node.files, ...[...node.folders.values()].flatMap(folderFiles)];
 const allFolders = (node) => [...node.folders.values()].flatMap((f) => [f.path, ...allFolders(f)]);
 
+/** 경로가 고른 폴더(Set) 중 하나의 아래에 있는가. 경로 앞부분만 훑으므로 폴더 수와 상관없이 빠르다. */
+function inFolder(path, folders) {
+  for (let i = path.indexOf('/'); i > 0; i = path.indexOf('/', i + 1)) if (folders.has(path.slice(0, i))) return true;
+  return false;
+}
+const folderSet = (st) => (st.folders instanceof Set ? st.folders : new Set(st.folders ?? []));
+
 /** 고른 파일 전부(목록 순서). 고른 폴더는 그 아래 파일 전부로 센다(원본 FileTree.SelectedFiles). */
 export function selectedEntries(st, entries) {
-  const folders = [...(st.folders ?? [])];
-  return entries.filter((e) => st.selected.has(e.path) || folders.some((f) => e.path.startsWith(`${f}/`)));
+  const folders = folderSet(st);
+  if (!folders.size) return st.selected.size ? entries.filter((e) => st.selected.has(e.path)) : [];
+  return entries.filter((e) => st.selected.has(e.path) || inFolder(e.path, folders));
 }
 
 /** 고른 줄의 경로(폴더는 폴더 경로 그대로). 고른 폴더 아래의 폴더·파일은 그 폴더에 들어 있으니 뺀다 — 숨기기처럼 폴더째 다루는 동작이 쓴다. */
 export function selectionPaths(st) {
-  const folders = [...(st.folders ?? [])];
-  const inside = (path) => folders.some((f) => path.startsWith(`${f}/`));
-  return [...folders.filter((f) => !inside(f)), ...[...st.selected].filter((p) => !inside(p))];
+  const folders = folderSet(st);
+  return [...[...folders].filter((f) => !inFolder(f, folders)), ...[...st.selected].filter((p) => !inFolder(p, folders))];
+}
+
+// ── 보이는 줄만 그리기 ──
+// 바뀐 파일이 수만 개여도(예: 반쯤 끝난 체크아웃) 줄을 전부 DOM 으로 만들면 그릴 때마다 1초가 넘게 걸린다.
+// 목록은 전체 높이만 자리를 잡아 두고, 화면에 보이는 줄과 위아래 몇 줄만 그린다(GitKraken·Fork 와 같다).
+
+/** 트리 정렬. localeCompare 와 같은 순서지만 파일이 수만 개면 훨씬 빠르다. */
+const byName = new Intl.Collator().compare;
+
+/** 줄 높이(px). CSS 의 .file-row height 와 같다 — 처음 그린 줄에서 재어 맞춘다. */
+let rowHeight = 20;
+/** 보이는 칸 위아래로 더 그려 둘 줄 수. 빨리 굴려도 빈 칸이 덜 보이고, 이만큼 굴리기 전에는 다시 그리지 않는다. */
+const OVERSCAN = 24;
+/** 화면에 붙기 전(크기를 모를 때) 먼저 그려 둘 줄 수. */
+const FIRST_ROWS = 80;
+
+/** 화면에 붙은 목록들. 바깥 칸이 굴러가거나 창 크기가 바뀌면 보이는 줄을 다시 고른다. */
+const liveLists = new Set();
+const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver((records) => { for (const r of records) r.target.paintRows?.(); }) : null;
+function pruneLists() {
+  for (const list of liveLists) {
+    if (list.isConnected) continue;
+    liveLists.delete(list);
+    resizeObserver?.unobserve(list);
+  }
+}
+if (globalThis.window) {
+  // 목록 밖의 칸(바깥 스크롤)이 굴러갈 때. 목록 자신의 스크롤은 목록이 직접 받는다.
+  window.addEventListener('scroll', (event) => {
+    const target = event.target;
+    if (target?.nodeType !== Node.ELEMENT_NODE && target !== document) return;
+    for (const list of liveLists) if (target !== list && (target === document || target.contains(list))) list.paintRows();
+  }, { capture: true, passive: true });
+  window.addEventListener('resize', () => {
+    pruneLists();
+    for (const list of liveLists) list.paintRows();
+  });
 }
 
 /**
  * 파일 목록. opts:
  *  entries: [{path, originalPath, state, note}], view: 'path'|'tree',
  *  state: {selected: Set<path>, folders: Set<folderPath>, anchor, cursor} (그리기 사이에 남는 선택. anchor·cursor 는 줄 키 'f:경로'|'d:폴더'),
- *  activeKey, keyOf(entry), collapsed: Set<folderPath>, onToggleFolder(path), onSetCollapsed(paths[]),
+ *  activeKey (값, 또는 지금 값을 돌려주는 함수 — 나중에 굴러 들어와 그려지는 줄도 맞게), keyOf(entry), collapsed: Set<folderPath>, onToggleFolder(path), onSetCollapsed(paths[]),
  *  onSelect(entries), onOpen(entry, { toggle }?), onActivate(entries), onMenu(event, entries, clicked), onFolderMenu(event, folder, entries, {expandAll, collapseAll}),
  *  onDelete(entries), rowAction: {label, kind, run(entry), labelOf(entry)} | null, expandToggle: 트리 위 [모두 펼치기/접기], empty: '…',
  *  eye: {isHidden(path), toggle(paths[], {solo})} | null — 줄 맨 왼쪽의 눈 버튼(마우스를 올린 줄에만 보인다). 누르면 그 줄을 숨기고,
  *       Alt(Option) 로 누르면 그 줄만 남긴다. 숨긴 줄(isHidden)은 흐리게 그리고 꺼진 눈을 늘 보인다. H 키는 고른 줄 전부에.
+ *  decorateRow(row, item): 줄을 그릴 때마다 덧붙일 것(체크 상자 등). item 은 {entry} 또는 {folder}.
+ * 보이는 줄만 그린다. 돌려주는 .file-list 요소의 revealPath(path, block) 는 그 파일 줄로 굴리고, folderPaths() 는 트리의 폴더 전부.
  */
 export function fileList(opts) {
   const { entries, view = 'path', eye = null } = opts;
@@ -115,18 +161,46 @@ export function fileList(opts) {
     'aria-label': hidden ? t('다시 보이기') : t('숨기기'),
     onclick: (event) => eye.toggle([path], { solo: event.altKey && !hidden }),
   }, icon(hidden ? 'eyeOff' : 'eye', 14)) : null);
+  const activeKey = () => (typeof opts.activeKey === 'function' ? opts.activeKey() : opts.activeKey);
   const st = opts.state ?? { selected: new Set(), anchor: null };
   st.folders ??= new Set();
   const selected = st.selected;
-  // 목록에서 사라진 파일은 선택에서 뺀다.
-  for (const path of [...selected]) if (!entries.some((e) => e.path === path)) selected.delete(path);
-  for (const folder of [...st.folders]) if (view !== 'tree' || !entries.some((e) => e.path.startsWith(`${folder}/`))) st.folders.delete(folder);
+  // 목록에서 사라진 파일·폴더는 선택에서 뺀다.
+  if (selected.size) {
+    const present = new Set(entries.map((e) => e.path));
+    for (const path of [...selected]) if (!present.has(path)) selected.delete(path);
+  }
+  if (st.folders.size) {
+    if (view !== 'tree') st.folders.clear();
+    else {
+      const dirs = new Set();
+      for (const e of entries) for (let i = e.path.indexOf('/'); i > 0; i = e.path.indexOf('/', i + 1)) dirs.add(e.path.slice(0, i));
+      for (const folder of [...st.folders]) if (!dirs.has(folder)) st.folders.delete(folder);
+    }
+  }
+
   // 보이는 줄 순서(폴더 줄 포함). Shift 범위·화살표 이동이 이 순서를 따른다(원본 TreeView SelectionType.Multiple).
-  // 줄: {key, entry} 또는 {key, folder}. anchor 는 Shift 범위의 시작, cursor 는 마지막으로 누른(옮겨 간) 줄.
+  // 줄: {key, entry, depth, showDir} 또는 {key, folder, depth, collapsed}. anchor 는 Shift 범위의 시작, cursor 는 마지막으로 누른(옮겨 간) 줄.
   const order = [];
   const fileKey = (path) => `f:${path}`;
   const folderKey = (path) => `d:${path}`;
-  const itemOf = (key) => order.find((item) => item.key === key);
+  let tree = null;
+  if (view === 'tree' && entries.length) {
+    tree = buildTree(entries);
+    const emit = (node, depth) => {
+      for (const folder of [...node.folders.values()].sort((a, b) => byName(a.name, b.name))) {
+        const isCollapsed = !!opts.collapsed?.has(folder.path);
+        order.push({ key: folderKey(folder.path), folder, depth, collapsed: isCollapsed });
+        if (!isCollapsed) emit(folder, depth + 1);
+      }
+      for (const entry of [...node.files].sort((a, b) => byName(a.path, b.path))) order.push({ key: fileKey(entry.path), entry, depth: depth + 1, showDir: false });
+    };
+    emit(tree, 0);
+  } else {
+    for (const entry of entries) order.push({ key: fileKey(entry.path), entry, depth: 0, showDir: true });
+  }
+  const indexOf = new Map(order.map((item, i) => [item.key, i]));
+  const itemOf = (key) => order[indexOf.get(key)];
   const isOn = (item) => (item.entry ? selected.has(item.entry.path) : st.folders.has(item.folder.path));
   const setOn = (item, on) => {
     const set = item.entry ? selected : st.folders;
@@ -139,9 +213,13 @@ export function fileList(opts) {
     st.folders.clear();
   };
   const list = el('div', { class: 'file-list', tabindex: '0', role: 'listbox' });
+  // 전체 높이만 잡는 칸과, 그 안에서 보이는 줄들만 담아 제자리로 내려 두는 칸.
+  const space = el('div', { class: 'file-list-space' });
+  const rows = el('div', { class: 'file-list-rows' });
+  space.append(rows);
 
   const paintSelection = () => {
-    for (const row of list.querySelectorAll('.file-row')) {
+    for (const row of rows.children) {
       row.classList.toggle('selected', row.dataset.folder != null ? st.folders.has(row.dataset.folder) : selected.has(row.dataset.path));
       row.classList.toggle('cursor', row.dataset.key === st.cursor);
     }
@@ -157,8 +235,8 @@ export function fileList(opts) {
     const toggle = !!(event?.metaKey || event?.ctrlKey);
     const anchor = shift ? itemOf(st.anchor) : null;
     if (anchor) {
-      const a = order.indexOf(anchor);
-      const b = order.indexOf(item);
+      const a = indexOf.get(anchor.key);
+      const b = indexOf.get(item.key);
       if (!toggle) clearAll();
       for (let i = Math.min(a, b); i <= Math.max(a, b); i++) setOn(order[i], true);
     } else if (toggle) {
@@ -184,13 +262,12 @@ export function fileList(opts) {
     return all.length > 1 && all.includes(entry) ? all : [entry];
   };
 
-  const row = (entry, depth, showDir) => {
+  const fileRow = ({ entry, depth, showDir }) => {
     const key = opts.keyOf?.(entry);
     const action = opts.rowAction?.labelOf ? opts.rowAction.labelOf(entry) : opts.rowAction;
     const hidden = !!eye?.isHidden(entry.path);
-    order.push({ key: fileKey(entry.path), entry });
     return el('div', {
-      class: `file-row${selected.has(entry.path) ? ' selected' : ''}${key && key === opts.activeKey ? ' active' : ''}${st.cursor === fileKey(entry.path) ? ' cursor' : ''}${hidden ? ' is-hidden' : ''}`,
+      class: `file-row${selected.has(entry.path) ? ' selected' : ''}${key && key === activeKey() ? ' active' : ''}${st.cursor === fileKey(entry.path) ? ' cursor' : ''}${hidden ? ' is-hidden' : ''}`,
       'data-path': entry.path,
       'data-key': fileKey(entry.path),
       'data-diff-key': key ?? null,
@@ -225,60 +302,117 @@ export function fileList(opts) {
     action ? el('button', { class: `row-action ${action.kind}`, text: action.label, onclick: () => (action.run ?? opts.rowAction.run)(entry) }) : null);
   };
 
-  const children = [];
-  let tree = null;
-  if (!entries.length) {
-    children.push(el('div', { class: 'empty muted small', text: opts.empty ?? t('파일이 없습니다.') }));
-  } else if (view === 'tree') {
-    tree = buildTree(entries);
-    const emit = (node, depth) => {
-      for (const folder of [...node.folders.values()].sort((a, b) => a.name.localeCompare(b.name))) {
-        const isCollapsed = opts.collapsed?.has(folder.path);
-        const hidden = !!eye?.isHidden(folder.path);
-        order.push({ key: folderKey(folder.path), folder, collapsed: isCollapsed });
-        children.push(el('div', {
-          class: `file-row folder${st.folders.has(folder.path) ? ' selected' : ''}${st.cursor === folderKey(folder.path) ? ' cursor' : ''}${hidden ? ' is-hidden' : ''}`,
-          style: { paddingLeft: pad(depth) }, 'data-folder': folder.path, 'data-key': folderKey(folder.path),
-          onmousedown: (event) => {
-            if (event.shiftKey) event.preventDefault();
-          },
-          onclick: (event) => {
-            // 눈 버튼은 제 일만 한다. 화살표는 펼치고 접고, 줄은 고른다(원본 TreeView).
-            if (event.target.closest('button')) return;
-            if (event.target.closest('.side-chev')) opts.onToggleFolder?.(folder.path);
-            else selectFolder(folder, event);
-          },
-          ondblclick: (event) => {
-            if (!event.target.closest('.side-chev, button')) opts.onToggleFolder?.(folder.path);
-          },
-          oncontextmenu: opts.onFolderMenu && ((event) => {
-            event.preventDefault();
-            if (!st.folders.has(folder.path)) selectFolder(folder);
-            // 이 폴더 말고도 고른 것이 있으면 고른 것 전부에 대한 파일 메뉴(여럿)를 띄운다.
-            const all = selectedEntries(st, entries);
-            const mine = folderFiles(folder);
-            if (opts.onMenu && (st.folders.size > 1 || all.length > mine.length)) opts.onMenu(event, all, mine[0]);
-            else opts.onFolderMenu(event, folder, mine, { expandAll: () => opts.onSetCollapsed?.([]), collapseAll: () => opts.onSetCollapsed?.(allFolders(tree)) });
-          }),
-        }, eyeButton(folder.path, hidden), el('span', { class: `side-chev${isCollapsed ? '' : ' open'}` }, icon('chevronRight', 12)), icon('folder', 16, 'folder-icon'),
-        // 폴더는 파일 수를 보이지 않는다. 접힌 폴더만 아래 파일의 상태별 수를 보인다(펼치면 아래 파일이 다 보인다).
-        el('span', { class: 'file-name', text: folder.name }),
-        isCollapsed ? el('span', { class: 'file-summary' }, stateSummary(folderFiles(folder)).flatMap(([state, n]) => [stateIcon(state), el('span', { class: 'file-summary-count', text: n })])) : null));
-        if (!isCollapsed) emit(folder, depth + 1);
-      }
-      for (const entry of [...node.files].sort((a, b) => a.path.localeCompare(b.path))) children.push(row(entry, depth + 1, false));
-    };
-    emit(tree, 0);
-  } else {
-    for (const entry of entries) children.push(row(entry, 0, true));
-  }
-  list.replaceChildren(...children);
+  const folderRow = ({ folder, depth, collapsed: isCollapsed }) => {
+    const hidden = !!eye?.isHidden(folder.path);
+    return el('div', {
+      class: `file-row folder${st.folders.has(folder.path) ? ' selected' : ''}${st.cursor === folderKey(folder.path) ? ' cursor' : ''}${hidden ? ' is-hidden' : ''}`,
+      style: { paddingLeft: pad(depth) }, 'data-folder': folder.path, 'data-key': folderKey(folder.path),
+      onmousedown: (event) => {
+        if (event.shiftKey) event.preventDefault();
+      },
+      onclick: (event) => {
+        // 눈 버튼은 제 일만 한다. 화살표는 펼치고 접고, 줄은 고른다(원본 TreeView).
+        if (event.target.closest('button')) return;
+        if (event.target.closest('.side-chev')) opts.onToggleFolder?.(folder.path);
+        else selectFolder(folder, event);
+      },
+      ondblclick: (event) => {
+        if (!event.target.closest('.side-chev, button')) opts.onToggleFolder?.(folder.path);
+      },
+      oncontextmenu: opts.onFolderMenu && ((event) => {
+        event.preventDefault();
+        if (!st.folders.has(folder.path)) selectFolder(folder);
+        // 이 폴더 말고도 고른 것이 있으면 고른 것 전부에 대한 파일 메뉴(여럿)를 띄운다.
+        const all = selectedEntries(st, entries);
+        const mine = folderFiles(folder);
+        if (opts.onMenu && (st.folders.size > 1 || all.length > mine.length)) opts.onMenu(event, all, mine[0]);
+        else opts.onFolderMenu(event, folder, mine, { expandAll: () => opts.onSetCollapsed?.([]), collapseAll: () => opts.onSetCollapsed?.(allFolders(tree)) });
+      }),
+    }, eyeButton(folder.path, hidden), el('span', { class: `side-chev${isCollapsed ? '' : ' open'}` }, icon('chevronRight', 12)), icon('folder', 16, 'folder-icon'),
+    // 폴더는 파일 수를 보이지 않는다. 접힌 폴더만 아래 파일의 상태별 수를 보인다(펼치면 아래 파일이 다 보인다).
+    el('span', { class: 'file-name', text: folder.name }),
+    isCollapsed ? el('span', { class: 'file-summary' }, stateSummary(folderFiles(folder)).flatMap(([state, n]) => [stateIcon(state), el('span', { class: 'file-summary-count', text: n })])) : null);
+  };
 
-  const reveal = (item) => list.querySelector(`.file-row[data-key="${CSS.escape(item.key)}"]`)?.scrollIntoView({ block: 'nearest' });
+  const drawRow = (item) => {
+    const node = item.entry ? fileRow(item) : folderRow(item);
+    opts.decorateRow?.(node, item);
+    return node;
+  };
+
+  // 그려 둔 줄의 범위 [first, last).
+  let first = 0;
+  let last = 0;
+  const drawRange = (from, to) => {
+    first = from;
+    last = to;
+    rows.style.transform = from ? `translateY(${from * rowHeight}px)` : '';
+    rows.replaceChildren(...order.slice(from, to).map(drawRow));
+  };
+  /** 화면에 보이는 줄을 고른다. 이미 그려 둔 범위 안이면 그대로 둔다(force 면 다시 그린다). */
+  const paintRows = (force = false) => {
+    if (!order.length) return;
+    if (!list.isConnected) {
+      if (force || last === 0) drawRange(0, Math.min(order.length, FIRST_ROWS));
+      return;
+    }
+    const box = list.getBoundingClientRect();
+    // 숨겨진 칸(display: none)이면 크기가 없다 — 다시 보일 때 크기 감시가 다시 부른다.
+    if (!box.width && !box.height) return;
+    const origin = space.getBoundingClientRect().top;
+    const top = Math.max(box.top, 0) - origin;
+    const bottom = Math.min(box.bottom, window.innerHeight) - origin;
+    const from = Math.max(0, Math.min(order.length - 1, Math.floor(top / rowHeight)));
+    const to = Math.min(order.length, Math.max(from + 1, Math.ceil(bottom / rowHeight)));
+    if (!force && from >= first && to <= last) return;
+    drawRange(Math.max(0, from - OVERSCAN), Math.min(order.length, to + OVERSCAN));
+    // 줄 높이가 CSS 와 다르면(글자 크기 설정 등) 잰 값으로 다시 맞춘다.
+    const measured = rows.firstElementChild?.getBoundingClientRect().height;
+    if (measured && Math.abs(measured - rowHeight) > 0.5) {
+      rowHeight = measured;
+      space.style.height = `${order.length * rowHeight}px`;
+      paintRows(true);
+    }
+  };
+  list.paintRows = () => paintRows();
+  list.addEventListener('scroll', () => paintRows(), { passive: true });
+
+  /** 그 줄로 굴린다. 아직 그리지 않은 줄이면 먼저 그 둘레를 그린다. */
+  const reveal = (item, block = 'nearest') => {
+    const index = indexOf.get(item?.key);
+    if (index == null) return;
+    if (index < first || index >= last) drawRange(Math.max(0, index - OVERSCAN), Math.min(order.length, index + OVERSCAN + 1));
+    rows.children[index - first]?.scrollIntoView({ block });
+    paintRows();
+  };
+  list.revealPath = (path, block) => reveal(itemOf(fileKey(path)), block);
+  list.folderPaths = () => (tree ? allFolders(tree) : []);
+
+  if (!entries.length) {
+    list.append(el('div', { class: 'empty muted small', text: opts.empty ?? t('파일이 없습니다.') }));
+  } else {
+    space.style.height = `${order.length * rowHeight}px`;
+    list.append(space);
+    paintRows();
+    // 화면에 붙으면 크기를 재어 보이는 줄을 맞추고, 그 뒤로는 크기가 바뀔 때(칸 경계 끌기 등)마다 다시 고른다.
+    let tries = 0;
+    const attach = () => {
+      if (!list.isConnected) {
+        if (++tries < 30) requestAnimationFrame(attach);
+        return;
+      }
+      pruneLists();
+      liveLists.add(list);
+      resizeObserver?.observe(list);
+      paintRows(true);
+    };
+    if (list.isConnected) attach();
+    else requestAnimationFrame(attach);
+  }
 
   list.addEventListener('keydown', (event) => {
     if (event.target !== list) return;
-    const current = order.findIndex((item) => item.key === st.cursor);
+    const current = indexOf.get(st.cursor) ?? -1;
     const cursorItem = order[current];
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
@@ -342,4 +476,10 @@ export function fileList(opts) {
     }
   }
   return list;
+}
+
+/** 그 안의 파일 목록에서 그 파일 줄로 굴린다(보이는 줄만 그리므로 아직 없는 줄도 그려서). */
+export function revealFile(container, path, block = 'nearest') {
+  const list = container?.querySelector('.file-list');
+  list?.revealPath?.(path, block);
 }

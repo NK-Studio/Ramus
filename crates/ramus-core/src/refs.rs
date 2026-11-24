@@ -187,6 +187,8 @@ impl Repository {
     }
 
     /// 로컬 브랜치로 바꾼다. 원격 브랜치를 고르면 같은 이름의 로컬 브랜치를 만들어 추적한다(이미 있으면 그리로).
+    /// `--progress`: 파일이 많거나 LFS 파일을 받을 때 작업 목록에 "파일 갱신 n%" · "LFS 파일 받기" 가 보이게 한다
+    /// (git 은 터미널이 아니면 진행 줄을 쓰지 않는다. 진행 줄은 runner 가 알림으로 돌리고 오류 글에는 남기지 않는다).
     pub fn checkout(&self, name: &str, remote: bool) -> Result<()> {
         if remote {
             let refs = self.refs()?;
@@ -194,16 +196,16 @@ impl Repository {
             let prefix = format!("{}/", branch.remote.clone().unwrap_or_default());
             let local = name.strip_prefix(&prefix).unwrap_or(name);
             if refs.local.iter().any(|b| b.name == local) {
-                return self.git_run(&["switch", local]).map(|_| ()).map_err(Self::explain_checkout);
+                return self.git_run(&["switch", "--progress", local]).map(|_| ()).map_err(Self::explain_checkout);
             }
-            return self.git_run(&["switch", "-c", local, "--track", name]).map(|_| ()).map_err(Self::explain_checkout);
+            return self.git_run(&["switch", "--progress", "-c", local, "--track", name]).map(|_| ()).map_err(Self::explain_checkout);
         }
-        self.git_run(&["switch", name]).map(|_| ()).map_err(Self::explain_checkout)
+        self.git_run(&["switch", "--progress", name]).map(|_| ()).map_err(Self::explain_checkout)
     }
 
     /// 커밋을 브랜치 없이 본다(detached HEAD).
     pub fn checkout_detached(&self, hash: &str) -> Result<()> {
-        self.git_run(&["switch", "--detach", hash]).map(|_| ()).map_err(Self::explain_checkout)
+        self.git_run(&["switch", "--progress", "--detach", hash]).map(|_| ()).map_err(Self::explain_checkout)
     }
 
     /// 새 브랜치는 시작점이 원격 브랜치여도 그것을 추적하지 않는다(`--no-track`). git 기본값은 `origin/x` 에서 만든 `y` 가

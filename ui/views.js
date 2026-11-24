@@ -8,7 +8,7 @@ import { el, formatDate, initials, isComposing, autoHorizontalScroll } from './u
 import { scoped, isEn, locale } from './i18n.js';
 import { icon } from './icons.js';
 import { createGraph, authorRgb } from './graph.js';
-import { fileList, selectedEntries, viewSwitch, CHANGE_STATE, STATE_LABEL, stateIcon, fileIcon } from './files.js';
+import { fileList, selectedEntries, viewSwitch, revealFile, CHANGE_STATE, STATE_LABEL, stateIcon, fileIcon } from './files.js';
 import { createDiffView } from './diff.js';
 import { renderCommit, stripComments } from './changes.js';
 import { menuBelow, showMenu } from './dialogs.js';
@@ -314,7 +314,7 @@ export function createViews(ctx) {
       modeHost.replaceChildren(viewSwitch(view, (v) => { view = v; ctx.prefs.set('pending.view', v); draw(); }));
       const list = fileList({
         entries: visible, view, state: st, collapsed,
-        keyOf: (e) => e.path, activeKey: selectedPath,
+        keyOf: (e) => e.path, activeKey: () => selectedPath,
         onToggleFolder: (p) => { if (collapsed.has(p)) collapsed.delete(p); else collapsed.add(p); draw(); },
         onOpen: (e) => {
           selectedPath = e.path;
@@ -325,50 +325,50 @@ export function createViews(ctx) {
         onMenu: (event, files) => ctx.actions.fileMenu(event, files, modeOf(files[0])),
         onFolderMenu: (event, folder, files) => ctx.actions.folderMenu?.(event, folder, files, 'unstaged', {
           expandAll: () => { collapsed.clear(); draw(); },
-          collapseAll: () => { for (const row of list.querySelectorAll('.file-row.folder')) collapsed.add(row.dataset.folder); draw(); },
+          collapseAll: () => { for (const p of list.folderPaths()) collapsed.add(p); draw(); },
         }),
         empty: filter ? t('찾는 변경이 없습니다.') : t('바뀐 파일이 없습니다.'),
+        // 줄마다 커밋에 넣을지 체크(원본 FileBrowser.IsChecked). 폴더 체크는 그 안의 파일 전부.
+        // 목록은 보이는 줄만 그리므로, 줄을 그릴 때마다 체크 상자를 붙인다.
+        decorateRow: (row, item) => {
+          const box = el('input', { type: 'checkbox', class: 'row-check' });
+          box.addEventListener('click', (event) => event.stopPropagation());
+          if (item.entry) {
+            const path = item.entry.path;
+            box.checked = !unchecked.has(path);
+            box.addEventListener('change', () => {
+              // 고른 줄이 여럿이면 함께 바꾼다(원본 SpaceAction). 고른 폴더는 그 아래 파일 전부로 센다.
+              const picked = selectedEntries(st, visible).map((e) => e.path);
+              const targets = picked.includes(path) && picked.length > 1 ? picked : [path];
+              for (const p of targets) {
+                if (box.checked) unchecked.delete(p);
+                else unchecked.add(p);
+              }
+              saveChecks();
+              draw();
+            });
+          } else {
+            const folder = item.folder.path;
+            const prefix = `${folder}/`;
+            const inside = visible.filter((e) => e.path.startsWith(prefix));
+            const count = inside.filter((e) => !unchecked.has(e.path)).length;
+            box.checked = inside.length > 0 && count === inside.length;
+            box.indeterminate = count > 0 && count < inside.length;
+            box.addEventListener('change', () => {
+              // 이 폴더가 여럿 고른 것 중 하나면 고른 것 전부를 함께 바꾼다.
+              const picked = selectedEntries(st, visible);
+              const group = st.folders?.has(folder) && picked.length > inside.length ? picked : inside;
+              for (const e of group) {
+                if (box.checked) unchecked.delete(e.path);
+                else unchecked.add(e.path);
+              }
+              saveChecks();
+              draw();
+            });
+          }
+          row.prepend(box);
+        },
       });
-      // 줄마다 커밋에 넣을지 체크(원본 FileBrowser.IsChecked). 폴더 체크는 그 안의 파일 전부.
-      for (const row of list.querySelectorAll('.file-row[data-path]')) {
-        const path = row.dataset.path;
-        const box = el('input', { type: 'checkbox', class: 'row-check' });
-        box.checked = !unchecked.has(path);
-        box.addEventListener('click', (event) => event.stopPropagation());
-        box.addEventListener('change', () => {
-          // 고른 줄이 여럿이면 함께 바꾼다(원본 SpaceAction). 고른 폴더는 그 아래 파일 전부로 센다.
-          const picked = selectedEntries(st, visible).map((e) => e.path);
-          const targets = picked.includes(path) && picked.length > 1 ? picked : [path];
-          for (const p of targets) {
-            if (box.checked) unchecked.delete(p);
-            else unchecked.add(p);
-          }
-          saveChecks();
-          draw();
-        });
-        row.prepend(box);
-      }
-      for (const row of list.querySelectorAll('.file-row.folder')) {
-        const prefix = `${row.dataset.folder}/`;
-        const inside = visible.filter((e) => e.path.startsWith(prefix));
-        const count = inside.filter((e) => !unchecked.has(e.path)).length;
-        const box = el('input', { type: 'checkbox', class: 'row-check' });
-        box.checked = inside.length > 0 && count === inside.length;
-        box.indeterminate = count > 0 && count < inside.length;
-        box.addEventListener('click', (event) => event.stopPropagation());
-        box.addEventListener('change', () => {
-          // 이 폴더가 여럿 고른 것 중 하나면 고른 것 전부를 함께 바꾼다.
-          const picked = selectedEntries(st, visible);
-          const group = st.folders?.has(row.dataset.folder) && picked.length > inside.length ? picked : inside;
-          for (const e of group) {
-            if (box.checked) unchecked.delete(e.path);
-            else unchecked.add(e.path);
-          }
-          saveChecks();
-          draw();
-        });
-        row.prepend(box);
-      }
       list.addEventListener('keydown', (event) => {
         // Space: 고른 줄들을 한꺼번에 체크·해제한다.
         if (event.key !== ' ' || !st.selected.size) return;
@@ -947,7 +947,7 @@ export function createViews(ctx) {
       for (let i = f.path.indexOf('/'); i > 0; i = f.path.indexOf('/', i + 1)) changesCollapsed.delete(f.path.slice(0, i));
       drawChanges();
       openDiff(f);
-      requestAnimationFrame(() => changesFiles.querySelector(`.file-row[data-path="${CSS.escape(f.path)}"]`)?.scrollIntoView({ block: 'nearest' }));
+      requestAnimationFrame(() => revealFile(changesFiles, f.path, 'nearest'));
     }
 
     function bindHeaderLine(node, c) {
@@ -1013,7 +1013,7 @@ export function createViews(ctx) {
       treeState.selected = new Set([path]);
       treeState.anchor = path;
       drawTree();
-      treeFiles.querySelector(`.file-row[data-path="${CSS.escape(path)}"]`)?.scrollIntoView({ block: 'center' });
+      revealFile(treeFiles, path, 'center');
       showFile(path);
     }
 

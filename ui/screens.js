@@ -323,6 +323,29 @@ export function loginDialog({ call, target, reason }) {
   });
 }
 
+/**
+ * 설정 > 로그인 에서 마지막으로 읽은 GitHub 계정·SSH 키. 설정을 다시 열면 이것을 먼저 그리고 뒤에서 새로 읽는다
+ * (계정은 GitHub API 를 불러 1~2초 걸린다 — 열 때마다 빈 자리에서 기다리지 않게). 레포지토리마다 "사용 중" 이 달라 경로를 함께 둔다.
+ */
+const loginCache = { accounts: null, accountsFor: null, keys: null };
+
+/** 계정 카드와 같은 크기의 자리 표시(아바타 원 · 이름 · 아이디 · 버튼 자리). 밝은 띠가 지나간다. */
+function accountSkeleton() {
+  return el('div', { class: 'gh-card gh-skeleton', 'aria-busy': 'true', 'aria-label': t('GitHub 계정을 읽는 중…') },
+    el('span', { class: 'sk-dot gh-sk-avatar' }),
+    el('div', { class: 'gh-card-who' }, el('span', { class: 'sk-bar', style: { width: '120px', height: '12px' } }), el('span', { class: 'sk-bar', style: { width: '84px' } })),
+    el('span', { class: 'sk-bar gh-sk-button' }));
+}
+
+/** SSH 키 줄과 같은 크기의 자리 표시. */
+function keysSkeleton() {
+  return el('div', { class: 'gh-skeleton-block', 'aria-busy': 'true', 'aria-label': t('SSH 키를 읽는 중…') },
+    el('span', { class: 'sk-bar', style: { width: '62%' } }),
+    el('div', { class: 'ssh-key gh-skeleton' },
+      el('span', { class: 'sk-dot', style: { width: '16px', height: '16px' } }),
+      el('div', { class: 'ssh-key-who' }, el('span', { class: 'sk-bar', style: { width: '140px' } }), el('span', { class: 'sk-bar', style: { width: '220px', height: '8px' } }))));
+}
+
 const PULL_MODES = [
   { value: 'ffOnly', label: t('앞으로 감기만 (기본)') },
   { value: 'merge', label: t('병합') },
@@ -456,34 +479,51 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     };
     renderSsh();
     const SOURCES = { app: t('앱 로그인'), credential: t('자격 증명') };
+    // 로그인·로그아웃하면 기억한 계정·키는 낡았다 — 예전 계정이 잠깐 보이지 않게 지우고 새로 읽는다.
+    const forgetLogin = () => { loginCache.accounts = null; loginCache.keys = null; };
     const signIn = async () => {
       if (!githubLogin) return;
       await githubLogin.dialog();
+      forgetLogin();
       renderGithub();
       renderKeys();
     };
     const githubAccounts = el('div', { class: 'gh-accounts' });
+    const repoKey = s.lastRepo ?? '';
     const renderGithub = async () => {
-      githubAccounts.replaceChildren(el('div', { class: 'gh-card loading' }, el('span', { class: 'muted small', text: t('GitHub 계정을 읽는 중…') })));
+      // 전에 읽은 것이 있으면 그것을 그대로 두고 새로 읽는다. 처음이면 카드 모양의 자리 표시.
+      const cached = loginCache.accounts && loginCache.accountsFor === repoKey ? loginCache.accounts : null;
+      if (cached) drawAccounts(cached);
+      else githubAccounts.replaceChildren(accountSkeleton());
       const accounts = await call('githubAccounts').catch(() => null);
       if (!accounts) {
-        githubAccounts.replaceChildren(el('span', { class: 'muted small', text: t('GitHub 계정 정보를 읽지 못했습니다.') }));
+        if (!cached) githubAccounts.replaceChildren(el('span', { class: 'muted small', text: t('GitHub 계정 정보를 읽지 못했습니다.') }));
         return;
       }
-      const cards = accounts.map((a) => el('div', { class: 'gh-card' },
+      loginCache.accounts = accounts;
+      loginCache.accountsFor = repoKey;
+      drawAccounts(accounts);
+    };
+    const drawAccounts = (accounts) => {
+      // 카드가 보인다는 것이 곧 연결됐다는 뜻이라 "연결됨" 은 쓰지 않는다. 어느 쪽 계정인지·이 레포에서 쓰는지는
+      // 계정이 둘 이상일 때만 가를 필요가 있다. 이 레포를 읽을 수 없다는 경고는 늘 보인다(손볼 일이 있다).
+      const several = accounts.length > 1;
+      const cards = accounts.map((a) => {
+        const badges = [
+          several ? el('span', { class: 'gh-badge', text: SOURCES[a.source] ?? a.source }) : null,
+          several && a.inUse ? el('span', { class: 'gh-badge accent', text: t('이 레포에서 사용 중') }) : null,
+          a.canAccess === false ? el('span', { class: 'gh-badge warn', text: t('이 레포를 읽을 수 없음') }) : null,
+        ].filter(Boolean);
+        return el('div', { class: 'gh-card' },
         githubAvatar(a.login, { url: a.avatarUrl, size: 'large' }),
         el('div', { class: 'gh-card-who' },
           el('div', { class: 'gh-card-name', text: a.name || a.login }),
           el('div', { class: 'gh-card-login muted small', text: `@${a.login}` })),
-        el('div', { class: 'gh-card-state' },
-          el('span', { class: 'gh-status ok' }, icon('check', 12), el('span', { text: t('연결됨') })),
-          el('div', { class: 'gh-badges' },
-            el('span', { class: 'gh-badge', text: SOURCES[a.source] ?? a.source }),
-            a.inUse ? el('span', { class: 'gh-badge accent', text: t('이 레포에서 사용 중') }) : null,
-            a.canAccess === false ? el('span', { class: 'gh-badge warn', text: t('이 레포를 읽을 수 없음') }) : null)),
+        badges.length ? el('div', { class: 'gh-card-state' }, el('div', { class: 'gh-badges' }, ...badges)) : null,
         a.source === 'app'
-          ? el('button', { class: 'btn danger', text: t('로그아웃'), onclick: async () => { await call('githubLogout', { login: a.login }); renderGithub(); renderKeys(); } })
-          : el('span', { class: 'muted small gh-card-note', text: t('자격 증명 저장소에서 지웁니다') })));
+          ? el('button', { class: 'btn danger', text: t('로그아웃'), onclick: async () => { await call('githubLogout', { login: a.login }); forgetLogin(); renderGithub(); renderKeys(); } })
+          : el('span', { class: 'muted small gh-card-note', text: t('자격 증명 저장소에서 지웁니다') }));
+      });
       const hasApp = accounts.some((a) => a.source === 'app');
       githubAccounts.replaceChildren(...[
         ...(cards.length ? cards : [el('div', { class: 'gh-card empty' },
@@ -500,7 +540,8 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     const keyTitle = input('', { placeholder: t('(선택) 새 SSH 키의 이름 — 비우면 Ramus (사용자 이름)') });
     const keyMessage = el('div', { class: 'small', hidden: true });
     const note = (text, kind = 'muted') => { keyMessage.hidden = !text; keyMessage.className = `small ${kind}`; keyMessage.textContent = text ?? ''; };
-    const generate = el('button', { class: 'btn success' });
+    // 글은 키를 읽은 뒤 정한다(GitHub 에 올릴 수 있으면 "만들어서 GitHub 에 올리기"). 읽기 전에는 꺼 둔 "만들기" — 빈 버튼이 보이지 않게.
+    const generate = el('button', { class: 'btn success', text: t('만들기'), disabled: true });
     const busy = async (button, work) => {
       button.disabled = true;
       try { await work(); } catch (e) { note(e.message ?? String(e), 'error-text'); } finally { button.disabled = false; }
@@ -531,12 +572,19 @@ export function settingsDialog({ call, settings, onTheme, showError, toast, sect
     }) });
     let keyInfo = null;
     const renderKeys = async () => {
-      sshKeys.replaceChildren(el('span', { class: 'muted small', text: t('SSH 키를 읽는 중…') }));
-      keyInfo = await call('sshKeys').catch((e) => ({ error: e.message ?? String(e) }));
-      if (keyInfo.error) {
-        sshKeys.replaceChildren(el('span', { class: 'muted small', text: t('SSH 키를 읽지 못했습니다: {error}', { error: keyInfo.error }) }));
+      // 전에 읽은 키가 있으면 그것을 먼저 그리고 새로 읽는다. 처음이면 키 줄 모양의 자리 표시.
+      if (loginCache.keys) drawKeys(loginCache.keys);
+      else sshKeys.replaceChildren(keysSkeleton());
+      const fresh = await call('sshKeys').catch((e) => ({ error: e.message ?? String(e) }));
+      if (fresh.error) {
+        if (!loginCache.keys) sshKeys.replaceChildren(el('span', { class: 'muted small', text: t('SSH 키를 읽지 못했습니다: {error}', { error: fresh.error }) }));
         return;
       }
+      loginCache.keys = fresh;
+      drawKeys(fresh);
+    };
+    const drawKeys = (info) => {
+      keyInfo = info;
       const canUpload = keyInfo.signedIn && !keyInfo.missingScopes.length;
       generate.textContent = canUpload ? t('만들어서 GitHub 에 올리기') : t('만들기');
       generate.disabled = !keyInfo.keygen;

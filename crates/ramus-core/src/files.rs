@@ -120,15 +120,20 @@ impl Repository {
         self.git_run(&["lfs", "pull", "--include", path, "--exclude", ""]).map(|_| ())
     }
 
-    /// 고른 파일만 stash 한다(새 파일 포함).
-    pub fn stash_paths(&self, paths: &[String], message: &str) -> Result<()> {
+    /// 고른 파일만 stash 한다(새 파일 포함). 바뀐 파일을 전부 골랐으면 경로 없이 통째로 stash 하고 true.
+    /// git stash 는 경로를 표준 입력으로 받아도 안에서 부르는 git 에 다시 명령줄로 넘겨, 파일이 수천 개면
+    /// Windows 명령줄 한계에 걸린다(cannot spawn git: Filename too long). 전부면 경로가 필요 없다.
+    pub fn stash_paths(&self, paths: &[String], message: &str) -> Result<bool> {
         let mut args = vec!["stash".to_string(), "push".into(), "--include-untracked".into()];
         if !message.trim().is_empty() {
             args.extend(["-m".into(), message.trim().to_string()]);
         }
-        args.push("--".into());
-        args.extend(paths.iter().cloned());
-        self.git_run(&args).map(|_| ())
+        let st = self.status()?;
+        let picked: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
+        if st.unstaged.iter().chain(&st.staged).all(|e| picked.contains(e.path.as_str())) {
+            return self.git_run(&args).map(|_| true);
+        }
+        self.run_paths(&args, paths).map(|_| false)
     }
 
     /// 고른 파일의 변경을 패치 글로. `staged` 면 Stage 한 것, 아니면 작업 트리(새 파일 포함).
@@ -137,9 +142,14 @@ impl Repository {
         if staged {
             args.push("--cached".into());
         }
-        args.push("--".into());
-        args.extend(paths.iter().cloned());
-        let mut patch = self.git_run(&args)?;
+        // git diff 는 경로를 표준 입력으로 받지 못한다 — 명령줄 한계(Windows 32,767자)를 넘지 않게 나눠 부르고 잇는다.
+        let mut patch = String::new();
+        for chunk in crate::repo::path_chunks(paths) {
+            let mut part = args.clone();
+            part.push("--".into());
+            part.extend(chunk.iter().cloned());
+            patch.push_str(&self.git_run(&part)?);
+        }
         if !staged {
             // 새 파일은 git diff 에 없다 — 하나씩 /dev/null 과 비교해 붙인다.
             let untracked = self.git_run(&["ls-files", "--others", "--exclude-standard", "-z", "--"]).unwrap_or_default();
