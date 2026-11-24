@@ -3,6 +3,28 @@
   "page": "https://ramus.a62201631.workers.dev/",
   "releases": [
     {
+      "version": "1.6.21",
+      "date": "2026-11-24",
+      "notes": "### 고침\n- Windows 에서 경로가 260자를 넘는 파일이 있는 브랜치로 바꾸면 git 이 \"Filename too long\" 으로 중간에 멈춰 작업 트리가 반쯤 바뀐 채 남던 문제를 고쳤습니다. 모든 git 호출에 `core.longpaths` 를 켜고, 그래도 걸리면 원문 대신 무슨 일인지 풀어 알립니다.\n- 커밋하지 않은 수정과 추적하지 않는 파일이 함께 전환·Pull 을 막으면, 덮어쓰기 안내 창이 수정까지 \"추적하지 않는 파일\" 로 세던 문제를 고쳤습니다. 이제 \"수정 N개와 추적하지 않는 파일 M개\" 로 나눠 세고, 목록에서 추적하지 않는 파일에 표시를 붙입니다.",
+      "assets": {
+        "macos-arm64": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.21/Ramus-v1.6.21-macos-arm64.dmg",
+          "sha256": "a8ca62123d1574a359dfddbb48550b9bf066363f229de3efec961ba1fffe4d60",
+          "size": 71232249
+        },
+        "windows-x64-setup": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.21/Ramus-v1.6.21-windows-x64-setup.exe",
+          "sha256": "8c900804516a375cdcd32e4938f346bea213de467ed0b4836059e0f059698955",
+          "size": 36572564
+        },
+        "windows-x64-zip": {
+          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.21/Ramus-v1.6.21-windows-x64.zip",
+          "sha256": "27108973fa0a64f72b8d70c38012f05739fe43381f188c6cc168b884e33a9cef",
+          "size": 55359495
+        }
+      }
+    },
+    {
       "version": "1.6.20",
       "date": "2026-11-21",
       "notes": "### 추가\n- JavaScript · TypeScript 파일도 C# 의 Unity 타입처럼 API 이름을 타입 색으로 칠합니다. JS 내장 객체(`Promise` · `Map` · `JSON`), 브라우저 API(`HTMLElement` · `URL` · `ResizeObserver` · `WebGL2RenderingContext`), TS 유틸리티 타입(`Partial` · `Record`), 전역 객체(`document` · `console`), TS 타입 자리의 기본 타입(`string` · `number`)이 해당합니다. JS·TS 키워드도 따로 두어 `value` · `event` 같은 C# 낱말을 더는 키워드로 칠하지 않습니다.",
@@ -43,28 +65,6 @@
           "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.19/Ramus-v1.6.19-windows-x64.zip",
           "sha256": "2e36f25a8e6e495259ff871f79b6c369f1027c88176a47ac84aa8644f400f46c",
           "size": 55351574
-        }
-      }
-    },
-    {
-      "version": "1.6.18",
-      "date": "2026-11-21",
-      "notes": "### 변경\n- 이름이 다른 upstream(예: `origin/main`)을 추적하는 브랜치를 Push 하면, 어디로 올릴지 묻지 않고 GitKraken 처럼 그 upstream 으로 바로 올립니다. 도구 막대·브랜치 메뉴 모두 같고, 배치(GitKraken·Fork·Unity VCS)와 상관없습니다. 어디로 올라가는지는 Push 버튼 풍선 도움말에 보입니다(예: \"origin/main 로 푸시합니다\").",
-      "assets": {
-        "macos-arm64": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.18/Ramus-v1.6.18-macos-arm64.dmg",
-          "sha256": "3b65881d8eb52cc2fff22fdd80907839016e0e919fb1733ef760e16ba35c6127",
-          "size": 71232244
-        },
-        "windows-x64-setup": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.18/Ramus-v1.6.18-windows-x64-setup.exe",
-          "sha256": "f3e8b2282cc1cc1dccda982f5182ba63cc79237129c7d382b8ff2d3b8c8934c8",
-          "size": 36564543
-        },
-        "windows-x64-zip": {
-          "url": "https://github.com/NK-Studio/Ramus/releases/download/v1.6.18/Ramus-v1.6.18-windows-x64.zip",
-          "sha256": "e4640929137c73c7e49d92d86b47aa776bfd9c19d92e17d5ed6a32e8a83c9cdf",
-          "size": 55352403
         }
       }
     }
