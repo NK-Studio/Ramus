@@ -151,3 +151,49 @@ fn cherry_pick_revert_reset_merge() {
     assert!(d.join("s.txt").exists());
     assert_eq!(git(d, &["log", "-1", "--format=%p"]).split_whitespace().count(), 2);
 }
+
+/// 수정과 추적하지 않는 파일이 함께 체크아웃을 막으면, 실제 git 출력에서 둘을 나눠 센다.
+#[test]
+fn checkout_blocked_by_changes_and_untracked_files_counts_each() {
+    let (dir, repo) = setup();
+    let d = dir.path();
+    git(d, &["switch", "-qc", "dev"]);
+    std::fs::write(d.join("a.txt"), "dev
+").unwrap();
+    std::fs::write(d.join("new.txt"), "dev
+").unwrap();
+    git(d, &["add", "-A"]);
+    git(d, &["commit", "-qm", "dev"]);
+    git(d, &["switch", "-q", "main"]);
+    std::fs::write(d.join("a.txt"), "local
+").unwrap();
+    std::fs::write(d.join("new.txt"), "local
+").unwrap();
+
+    let err = repo.checkout("dev", false).unwrap_err();
+    let advice = ramus_core::advice::explain(&err.message, Some("main"));
+    assert_eq!(advice.files, ["a.txt", "new.txt"]);
+    assert_eq!(advice.untracked_files, ["new.txt"]);
+}
+
+/// Windows 에서 경로가 260자를 넘는 파일이 있는 브랜치로도 바꿀 수 있다(레포지토리 설정이 꺼 두어도).
+#[cfg(windows)]
+#[test]
+fn checkout_creates_paths_longer_than_windows_limit() {
+    let (dir, repo) = setup();
+    let d = dir.path();
+    git(d, &["config", "core.longpaths", "false"]);
+    let deep: std::path::PathBuf = (0..6).map(|i| format!("{i}-{}", "d".repeat(48))).collect();
+    std::fs::create_dir_all(d.join(&deep)).unwrap();
+    let file = d.join(&deep).join("file.txt");
+    assert!(file.as_os_str().len() > 300);
+    std::fs::write(&file, "deep
+").unwrap();
+    git(d, &["switch", "-qc", "deep"]);
+    git(d, &["add", "-A"]);
+    git(d, &["commit", "-qm", "deep"]);
+    repo.checkout("main", false).unwrap();
+    assert!(!file.exists());
+    repo.checkout("deep", false).unwrap();
+    assert!(file.exists());
+}

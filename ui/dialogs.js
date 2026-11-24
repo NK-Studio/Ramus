@@ -191,18 +191,26 @@ export async function confirmDialog({ title, message, ok = t('확인'), cancel =
 /**
  * 로컬 변경이 덮어써질까 봐 git 이 멈췄을 때: 짧은 안내 한 줄 + 덮어써질 파일 목록(스크롤, 이름 굵게·폴더 흐리게) + [Stash 하고 다시 {작업}].
  * git 원문을 그대로 늘어놓지 않는다. 고르면 true.
+ * git 은 커밋하지 않은 수정과 추적하지 않는 파일이 함께 막으면 둘을 따로 늘어놓는다 — untrackedFiles 로 둘을 나눠 센다.
+ * untracked 는 목록 없이 막혔을 때 어느 쪽 글을 쓸지만 정한다.
  */
-export async function overwriteDialog({ title, op, files = [], untracked = false }) {
-  const n = files.length;
-  const message = untracked
-    ? (n ? t('추적하지 않는 파일 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.', { n }) : t('추적하지 않는 파일이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.'))
-    : (n ? t('커밋하지 않은 수정 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.', { n }) : t('커밋하지 않은 수정이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.'));
+export async function overwriteDialog({ title, op, files = [], untrackedFiles = [], untracked = false }) {
+  const isUntracked = new Set(untrackedFiles);
+  const fresh = files.filter((path) => isUntracked.has(path)).length;
+  const changed = files.length - fresh;
+  let message;
+  if (changed && fresh) message = t('커밋하지 않은 수정 {m}개와 추적하지 않는 파일 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.', { m: changed, n: fresh });
+  else if (fresh) message = t('추적하지 않는 파일 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.', { n: fresh });
+  else if (changed) message = t('커밋하지 않은 수정 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.', { n: changed });
+  else message = untracked ? t('추적하지 않는 파일이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.') : t('커밋하지 않은 수정이 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.');
   const list = files.length ? el('div', { class: 'overwrite-files' }, files.map((path) => {
     const at = path.lastIndexOf('/');
     const dir = at < 0 ? '' : path.slice(0, at + 1);
     const name = at < 0 ? path : path.slice(at + 1);
+    // 둘이 섞였을 때만 어느 쪽인지 표시한다.
+    const tag = changed && fresh && isUntracked.has(path) ? el('span', { class: 'overwrite-tag', text: t('추적 안 함') }) : null;
     return el('div', { class: 'overwrite-file', 'data-tip': path },
-      icon('file', 14), el('span', { class: 'overwrite-name', text: name }), dir ? el('span', { class: 'overwrite-dir', text: dir }) : null);
+      icon('file', 14), el('span', { class: 'overwrite-name', text: name }), dir ? el('span', { class: 'overwrite-dir', text: dir }) : null, tag);
   })) : null;
   return (await formDialog({ title, message, glyph: 'stash', ok: t('Stash 하고 다시 {op}', { op }), className: 'overwrite', extra: list })) !== null;
 }

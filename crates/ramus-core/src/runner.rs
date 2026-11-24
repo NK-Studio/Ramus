@@ -265,7 +265,7 @@ impl GitRunner {
         let globals = self.globals();
         let git = globals.git_path.clone().unwrap_or_else(|| PathBuf::from("git"));
         let mut cmd = Command::new(&git);
-        cmd.current_dir(dir).args(&globals.config_args).args(args.iter().map(|a| a.as_ref()));
+        cmd.current_dir(dir).args(PLATFORM_CONFIG_ARGS).args(&globals.config_args).args(args.iter().map(|a| a.as_ref()));
         apply_environment(&mut cmd);
         cmd.envs(&globals.env);
         hide_console(&mut cmd);
@@ -295,6 +295,7 @@ impl GitRunner {
         let git = globals.git_path.clone().unwrap_or_else(|| PathBuf::from("git"));
         let mut cmd = Command::new(&git);
         cmd.current_dir(dir);
+        cmd.args(PLATFORM_CONFIG_ARGS);
         cmd.args(&globals.config_args);
         cmd.args(args.iter().map(|a| a.as_ref()));
         apply_environment(&mut cmd);
@@ -356,6 +357,14 @@ impl GitRunner {
         }
     }
 }
+
+/// 모든 git 호출 맨 앞에 붙이는 플랫폼 `-c` 인자. 설정의 `config_args` 보다 앞이라 사용자가 고른 값이 이긴다.
+/// Windows: 경로가 260자를 넘는 파일도 만들게 한다(`core.longpaths`). 없으면 깊은 경로가 있는 브랜치로 바꿀 때
+/// git 이 "Filename too long" 으로 중간에 멈춰 작업 트리가 반쯤 바뀐 채 남는다. Git for Windows 의 기본값은 꺼져 있다.
+#[cfg(windows)]
+pub(crate) const PLATFORM_CONFIG_ARGS: &[&str] = &["-c", "core.longpaths=true"];
+#[cfg(not(windows))]
+pub(crate) const PLATFORM_CONFIG_ARGS: &[&str] = &[];
 
 fn apply_environment(cmd: &mut Command) {
     cmd.env("GIT_TERMINAL_PROMPT", "0");

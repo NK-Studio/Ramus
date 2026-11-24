@@ -1129,7 +1129,7 @@ async function withStash(label, work) {
     const kind = error?.advice?.kind;
     if (kind !== 'localChanges' && kind !== 'untrackedFiles') throw error;
     const op = (isEn ? String(label ?? '').replace(/…/g, '').replace(/\s+/g, ' ') : String(label ?? '').replace(/(하는)? 중…$/, '')).trim() || t('작업');
-    if (!(await overwriteDialog({ title: failedTitle(label) ?? t('작업 실패'), op, files: error.advice.files ?? [], untracked: kind === 'untrackedFiles' }))) throw { cancelled: true };
+    if (!(await overwriteDialog({ title: failedTitle(label) ?? t('작업 실패'), op, files: error.advice.files ?? [], untrackedFiles: error.advice.untrackedFiles ?? [], untracked: kind === 'untrackedFiles' }))) throw { cancelled: true };
     try {
       await call('stashPush', { message: '', includeUntracked: false });
     } catch (stashError) {

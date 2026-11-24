@@ -3,6 +3,9 @@ export default {
   '닫기': 'Close',
   '확인': 'OK',
   '취소': 'Cancel',
+  '커밋하지 않은 수정 {m}개와 추적하지 않는 파일 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.':
+    'Stopped because uncommitted changes ({m}) and untracked files ({n}) could be overwritten. Stash them and try again to carry on.',
+  '추적 안 함': 'Untracked',
   '추적하지 않는 파일 {n}개가 덮어써질 수 있어 멈췄습니다. Stash 해 두고 다시 하면 그대로 이어집니다.': {
     one: 'Stopped because {n} untracked file could be overwritten. Stash it and try again to carry on.',
     other: 'Stopped because {n} untracked files could be overwritten. Stash them and try again to carry on.',

@@ -24,6 +24,8 @@ pub enum ErrorKind {
     FileTooLarge,
     ProtectedBranch,
     LockFile,
+    /// Windows 경로 길이 제한(260자)에 걸려 파일을 만들지 못했다. 체크아웃이면 작업 트리가 반쯤 바뀐 채 멈춘다.
+    PathTooLong,
     Ssl,
     SshHostKey,
     SshHostChanged,
@@ -38,6 +40,9 @@ pub struct Advice {
     pub remote: Option<String>,
     pub branch: Option<String>,
     pub files: Vec<String>,
+    /// `files` 중 git 이 추적하지 않는 파일. git 은 덮어써질 수정과 추적하지 않는 파일을 따로 늘어놓는데,
+    /// 둘이 함께 막으면 `files` 에는 둘 다 들어가므로 화면이 둘을 나눠 세도록 따로 준다.
+    pub untracked_files: Vec<String>,
 }
 
 const MAX_FILES: usize = 5;
@@ -105,6 +110,8 @@ pub fn classify(message: &str) -> ErrorKind {
         ErrorKind::LocalChanges
     } else if lower.contains(".lock': file exists") {
         ErrorKind::LockFile
+    } else if lower.contains("filename too long") {
+        ErrorKind::PathTooLong
     } else if lower.contains("conflict (") || lower.contains("automatic merge failed") || lower.contains("could not apply") {
         ErrorKind::Conflict
     } else if is_app_message(message) {
@@ -151,28 +158,41 @@ fn group(pattern: &str, message: &str, name: &str) -> Option<String> {
 
 /// "would be overwritten by" 아래 들여 쓴 파일 목록.
 pub fn overwritten_paths(message: &str) -> Vec<String> {
-    let mut files = Vec::new();
-    let mut in_list = false;
+    let (mut changed, untracked) = overwritten_lists(message);
+    changed.extend(untracked);
+    changed
+}
+
+/// "would be overwritten by" 목록을 (커밋하지 않은 수정, 추적하지 않는 파일) 로 나눈다.
+/// git 은 둘 다 막으면 "Your local changes …" 묶음과 "The following untracked working tree files …" 묶음을 차례로 쓴다.
+fn overwritten_lists(message: &str) -> (Vec<String>, Vec<String>) {
+    let (mut changed, mut untracked) = (Vec::new(), Vec::new());
+    let mut list: Option<&mut Vec<String>> = None;
     for line in message.lines() {
         let line = line.trim_end_matches('\r');
         if line.contains("would be overwritten by") {
-            in_list = true;
+            list = Some(if line.contains("untracked working tree files") { &mut untracked } else { &mut changed });
             continue;
         }
-        if in_list {
+        if let Some(files) = list.as_deref_mut() {
             if line.starts_with('\t') || line.starts_with("    ") {
                 files.push(line.trim().to_string());
                 continue;
             }
-            in_list = false;
+            list = None;
         }
     }
-    files
+    (changed, untracked)
 }
 
 fn find_files(message: &str) -> Vec<String> {
     let mut files = overwritten_paths(message);
-    for re in [r"(?m)Merge conflict in (?P<file>.+)$", r"(?i)File (?P<file>.+?) is [\d.]+ ?MB; this exceeds"] {
+    for re in [
+        r"(?m)Merge conflict in (?P<file>.+)$",
+        r"(?i)File (?P<file>.+?) is [\d.]+ ?MB; this exceeds",
+        r"(?m)unable to create file (?P<file>.+?): Filename too long",
+        r"(?m)cannot create directory at '(?P<file>.+?)': Filename too long",
+    ] {
         let re = Regex::new(re).unwrap();
         files.extend(re.captures_iter(message).map(|c| c["file"].trim().to_string()));
     }
@@ -189,6 +209,7 @@ fn file_list(files: &[String]) -> String {
 pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
     let kind = classify(message);
     let files = find_files(message);
+    let (changed, untracked_files) = overwritten_lists(message);
     let mut remote = None;
     let mut branch = None;
     let (cause, fix): (String, &str) = match kind {
@@ -280,6 +301,15 @@ pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
             crate::trf!("커밋하지 않은 수정이 덮어써질 수 있어 멈췄습니다: {}", "Stopped so uncommitted changes aren't overwritten: {}", file_list(&files)),
             tr("커밋하거나 Stash 한 뒤 다시 하세요.", "Commit or Stash them, then try again."),
         ),
+        ErrorKind::UntrackedFiles if !changed.is_empty() => (
+            crate::trf!(
+                "커밋하지 않은 수정({})과 git 에 없는 같은 이름의 파일({})이 덮어써질 수 있어 멈췄습니다.",
+                "Stopped so uncommitted changes ({}) and untracked files with the same names ({}) aren't overwritten.",
+                file_list(&changed),
+                file_list(&untracked_files)
+            ),
+            tr("커밋하거나 Stash 한 뒤 다시 하세요.", "Commit or Stash them, then try again."),
+        ),
         ErrorKind::UntrackedFiles => (
             crate::trf!("git 에 없는 같은 이름의 파일이 있습니다: {}", "Untracked files with the same names are in the way: {}", file_list(&files)),
             tr("그 파일을 옮기거나 지운 뒤 다시 하세요.", "Move or delete them, then try again."),
@@ -304,6 +334,21 @@ pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
             crate::trf!("잠금 파일({})이 남아 있습니다.", "A lock file ({}) is left behind.", group(r"'(?P<path>[^']*\.lock)'", message, "path").unwrap_or_else(|| "index.lock".into())),
             tr("다른 git 작업이 끝났는지 확인하고 잠금 파일을 지우세요.", "Make sure no other git process is running, then delete the lock file."),
         ),
+        ErrorKind::PathTooLong => (
+            if files.is_empty() {
+                tr("경로가 Windows 길이 제한(260자)을 넘는 파일이 있어 만들지 못했습니다.", "Some paths exceed the Windows length limit (260 characters), so git couldn't create them.").to_string()
+            } else {
+                crate::trf!(
+                    "경로가 Windows 길이 제한(260자)을 넘는 파일이 있어 만들지 못했습니다: {}",
+                    "Some paths exceed the Windows length limit (260 characters), so git couldn't create them: {}",
+                    file_list(&files)
+                )
+            },
+            tr(
+                "작업이 중간에 멈춰 일부 파일만 바뀌었을 수 있습니다. 레포지토리를 더 짧은 경로로 옮긴 뒤 다시 하세요.",
+                "The operation may have stopped partway with only some files changed. Move the repository to a shorter path and try again.",
+            ),
+        ),
         ErrorKind::Ssl => (
             tr(
                 "원격 서버의 SSL 인증서를 확인하지 못했습니다. 회사망처럼 보안 프록시가 SSL 을 검사하는 환경일 수 있습니다.",
@@ -313,7 +358,7 @@ pub fn explain(message: &str, current_branch: Option<&str>) -> Advice {
             tr("설정 > SSL 인증서에서 회사 루트 인증서 파일을 지정하거나, Windows 는 'Windows 인증서 저장소 쓰기' 를 켜세요.", "In Settings > SSL Certificate, set your company's root certificate file, or on Windows turn on 'Use Windows Certificate Store'."),
         ),
     };
-    Advice { kind, cause, fix: fix.to_string(), remote, branch, files }
+    Advice { kind, cause, fix: fix.to_string(), remote, branch, files, untracked_files }
 }
 
 #[cfg(test)]
@@ -358,6 +403,32 @@ mod tests {
         assert!(a.fix.contains("비밀번호"));
         let many = (0..7).map(|i| format!("CONFLICT (content): Merge conflict in f{i}")).collect::<Vec<_>>().join("\n");
         assert!(explain(&many, None).cause.ends_with("외 2개"));
+    }
+
+    /// git 은 수정과 추적하지 않는 파일이 함께 막으면 두 묶음을 차례로 쓴다. 둘을 나눠 세야 한다.
+    #[test]
+    fn separates_changes_from_untracked_files() {
+        let message = "error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\n\tb.txt\nPlease commit your changes or stash them before you switch branches.\nerror: The following untracked working tree files would be overwritten by checkout:\n\tnew.txt\nPlease move or remove them before you switch branches.\nAborting";
+        let a = explain(message, None);
+        assert_eq!(a.kind, ErrorKind::UntrackedFiles);
+        assert_eq!(a.files, ["a.txt", "b.txt", "new.txt"]);
+        assert_eq!(a.untracked_files, ["new.txt"]);
+        assert!(a.cause.contains("a.txt, b.txt") && a.cause.contains("new.txt"), "{}", a.cause);
+        assert!(a.fix.contains("Stash"));
+
+        let only_untracked = explain("error: The following untracked working tree files would be overwritten by checkout:\n\tnew.txt\nPlease move or remove them", None);
+        assert_eq!(only_untracked.untracked_files, ["new.txt"]);
+        let only_changed = explain("error: Your local changes to the following files would be overwritten by merge:\n\ta.txt\nPlease commit", None);
+        assert!(only_changed.untracked_files.is_empty());
+    }
+
+    #[test]
+    fn explains_path_too_long() {
+        let message = "error: unable to create file docs/very/long/a.json: Filename too long\nfatal: cannot create directory at 'docs/very/long/dir': Filename too long";
+        let a = explain(message, None);
+        assert_eq!(a.kind, ErrorKind::PathTooLong);
+        assert_eq!(a.files, ["docs/very/long/a.json", "docs/very/long/dir"]);
+        assert!(a.cause.contains("260"), "{}", a.cause);
     }
 
     #[test]
